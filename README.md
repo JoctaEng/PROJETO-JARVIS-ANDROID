@@ -9,6 +9,7 @@ Um personagem 3D fofo — uma caricatura original do Joctã — que flutua sobre
 | Documento | Conteúdo |
 |---|---|
 | [`docs/ROTEIRO.md`](docs/ROTEIRO.md) | Roteiro técnico: limitações reais do Android, orçamento de hardware, stack, arquitetura, fases (0 → 4) com critérios de saída e fontes verificadas |
+| [`docs/FASE-1.md`](docs/FASE-1.md) | O que o APK da Fase 1 faz e como configurar o cérebro |
 | [`docs/FASE-0.md`](docs/FASE-0.md) | Como instalar o APK da Fase 0 e rodar as provas de conceito no celular |
 | [`docs/benchmarks.md`](docs/benchmarks.md) | Medições reais no aparelho (preenchidas após os testes) |
 | [`docs/ADR/`](docs/ADR/) | Registro das decisões técnicas |
@@ -16,7 +17,7 @@ Um personagem 3D fofo — uma caricatura original do Joctã — que flutua sobre
 
 ## Status
 
-**Fase 0 (fundação e provas de conceito) — em andamento.**
+**Fase 1 (MVP 1) — em andamento.** Fase 0 testada no aparelho: personagem flutua, ouve e fala.
 
 - ✅ Projeto Android multi-módulo, contratos centrais e regras puras com testes
 - ✅ APK de testes com as PoCs 0.1 a 0.5 (compilado pelo GitHub Actions)
