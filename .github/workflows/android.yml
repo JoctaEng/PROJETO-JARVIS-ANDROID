@@ -30,10 +30,19 @@ jobs:
       - name: Compilar APK de debug
         run: ./gradlew :app:assembleDebug --stacktrace
 
+      - name: Nomear APK com app, fase e versão
+        id: nome
+        run: |
+          prop() { grep "^$1=" gradle.properties | cut -d= -f2; }
+          NOME="$(prop euno.appName)-fase$(prop euno.phase)-v$(prop euno.version)-build${GITHUB_RUN_NUMBER}"
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/${NOME}.apk"
+          echo "nome=${NOME}" >> "$GITHUB_OUTPUT"
+
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: jarvis-fase0-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: ${{ steps.nome.outputs.nome }}
+          path: dist/*.apk
           if-no-files-found: error
           retention-days: 30

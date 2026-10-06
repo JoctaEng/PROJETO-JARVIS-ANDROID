@@ -1,5 +1,8 @@
 # Fase 1 — MVP 1: "Ele mora no meu celular" (app Euno)
 
+## Baixar
+GitHub → **Actions → Android** → execução mais recente → artefato **`Euno-fase1-v0.2.0-build<N>`** (o número do build cresce a cada versão; instale por cima da anterior).
+
 ## O que este APK faz
 
 | Função | Como usar |

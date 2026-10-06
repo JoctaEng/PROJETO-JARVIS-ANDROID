@@ -79,7 +79,9 @@ class MainActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             CharacterView(renderer, Modifier.size(150.dp))
+            val version = remember { packageManager.getPackageInfo(packageName, 0).versionName.orEmpty() }
             Text("Euno · Seu segundo eu digital", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Versão $version", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(app.settings.displayName, style = MaterialTheme.typography.headlineMedium)
             Text(profile.trait, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Text(

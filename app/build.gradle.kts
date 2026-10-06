@@ -13,8 +13,9 @@ android {
         applicationId = "com.joctaeng.jarvis"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.0.1-fase0"
+        // versionCode cresce a cada build do CI, para o APK novo sempre atualizar o anterior.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = "${providers.gradleProperty("euno.version").get()} (Fase ${providers.gradleProperty("euno.phase").get()})"
     }
 
     buildTypes {
