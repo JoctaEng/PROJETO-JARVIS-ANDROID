@@ -47,7 +47,7 @@ enum class CloudPreset(
     CUSTOM("Outro compatível com OpenAI", "", ProviderLocation.EXTERNAL_CLOUD, false, "Informe o endereço base (termina em /v1)."),
 }
 
-/** Configurações do usuário ("Meu JARVIS"). Segredos ficam no [SecretStore]. */
+/** Configurações do usuário ("Meu Euno"). Segredos ficam no [SecretStore]. */
 class AppSettings(context: Context) {
     val character get() = CharacterCatalog.byId(characterId)
     val displayName get() = characterName.ifBlank { character.defaultName }

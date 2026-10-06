@@ -200,7 +200,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         followSettings()
     }
 
-    /** Tamanho alterado em "Meu JARVIS" é aplicado na hora. */
+    /** Tamanho alterado em "Meu Euno" é aplicado na hora. */
     private fun followSettings() = lifecycleScope.launch {
         app.settings.version.collect {
             renderer.applyColor(app.settings.character.color)

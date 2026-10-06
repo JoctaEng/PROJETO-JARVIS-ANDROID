@@ -72,7 +72,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** "Meu JARVIS" (item 46 da especificação): tudo que o usuário configura. */
+/** "Meu Euno" (item 46 da especificação): tudo que o usuário configura. */
 class SettingsActivity : ComponentActivity() {
     private val app get() = JarvisApp.from(this)
     private val settings get() = app.settings
@@ -86,7 +86,7 @@ class SettingsActivity : ComponentActivity() {
                         Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text("Meu JARVIS", style = MaterialTheme.typography.headlineSmall)
+                        Text("Meu Euno", style = MaterialTheme.typography.headlineSmall)
                         CharacterSection()
                         BrainSection()
                         PersonalitySection()

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">JARVIS</string>
+    <string name="app_name">Euno</string>
     <string name="overlay_channel_name">Personagem flutuante</string>
-    <string name="overlay_notification_title">JARVIS está no seu celular</string>
+    <string name="overlay_notification_title">Euno está no seu celular</string>
     <string name="overlay_notification_text">Toque no personagem para conversar.</string>
     <string name="overlay_stop">Esconder</string>
 </resources>

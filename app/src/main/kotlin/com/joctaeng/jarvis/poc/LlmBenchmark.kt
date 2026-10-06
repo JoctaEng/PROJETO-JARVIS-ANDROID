@@ -44,7 +44,7 @@ data class BenchmarkResult(
  */
 class LlmBenchmark(private val context: Context, private val diagnostics: Diagnostics) {
 
-    private val systemPrompt = "Você é o JARVIS, um personagem assistente amigável. Responda sempre em português do Brasil."
+    private val systemPrompt = "Você é um personagem assistente amigável. Responda sempre em português do Brasil."
     private val prompt = "Em até três frases, explique por que o céu é azul."
 
     suspend fun runOnce(model: File, backend: LocalBackend, onProgress: (String) -> Unit): BenchmarkResult =

@@ -126,7 +126,7 @@ class ConversationController(private val app: JarvisApp) {
         val providers = configuredProviders()
         if (providers.isEmpty()) {
             say(
-                "Ainda não tenho um cérebro. Abra Meu JARVIS → Cérebro e configure uma API (por exemplo, Gemini) " +
+                "Ainda não tenho um cérebro. Abra Meu Euno → Cérebro e configure uma API (por exemplo, Gemini) " +
                     "ou escolha um modelo local.",
                 Emotion.CONFUSED, speak,
             )

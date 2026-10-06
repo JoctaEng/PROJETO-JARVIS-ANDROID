@@ -1,4 +1,6 @@
-# PROJETO JARVIS — Personal AI Character para Android
+# Euno — Seu segundo eu digital
+
+*Projeto JARVIS (nome interno) · Personal AI Character para Android*
 
 > *"Não é uma IA dentro do celular. É um personagem que vive dentro dele."*
 
@@ -12,7 +14,7 @@ Um personagem 3D fofo — uma caricatura original do Joctã — que flutua sobre
 | [`docs/FASE-1.md`](docs/FASE-1.md) | O que o APK da Fase 1 faz e como configurar o cérebro |
 | [`docs/FASE-0.md`](docs/FASE-0.md) | Como instalar o APK da Fase 0 e rodar as provas de conceito no celular |
 | [`docs/benchmarks.md`](docs/benchmarks.md) | Medições reais no aparelho (preenchidas após os testes) |
-| [`docs/ADR/`](docs/ADR/) | Registro das decisões técnicas |
+| [`docs/ADR/`](docs/ADR/) | Registro das decisões técnicas (nome do produto: ADR 0008) |
 | `docs/ESPECIFICACAO.md` | Especificação conceitual (66 itens) — a adicionar |
 
 ## Status

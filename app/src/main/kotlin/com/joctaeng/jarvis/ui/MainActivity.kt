@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             CharacterView(renderer, Modifier.size(150.dp))
+            Text("Euno · Seu segundo eu digital", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(app.settings.displayName, style = MaterialTheme.typography.headlineMedium)
             Text(profile.trait, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Text(
@@ -90,7 +91,7 @@ class MainActivity : ComponentActivity() {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Cérebro", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        if (brains.isEmpty()) "Nenhum configurado. Abra Meu JARVIS → Cérebro." else brains.joinToString("\n"),
+                        if (brains.isEmpty()) "Nenhum configurado. Abra Meu Euno → Cérebro." else brains.joinToString("\n"),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     if (app.settings.privateMode) Text("Modo Privado ativo", color = MaterialTheme.colorScheme.secondary)
@@ -125,7 +126,7 @@ class MainActivity : ComponentActivity() {
             OutlinedButton(
                 onClick = { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Meu JARVIS") }
+            ) { Text("Meu Euno") }
             OutlinedButton(
                 onClick = { startActivity(Intent(this@MainActivity, DiagnosticsActivity::class.java)) },
                 modifier = Modifier.fillMaxWidth(),

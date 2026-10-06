@@ -20,7 +20,7 @@ data class EngineOption(val packageName: String, val label: String)
 data class VoiceOption(val name: String, val label: String, val needsNetwork: Boolean, val quality: Int)
 
 /**
- * Voz do JARVIS. Fala frase a frase (fila), prefere o motor de voz do Google
+ * Voz do personagem. Fala frase a frase (fila), prefere o motor de voz do Google
  * quando instalado — no HyperOS o padrão costuma ser um motor mais robótico — e
  * escolhe a voz pt-BR de maior qualidade, salvo escolha do usuário.
  */

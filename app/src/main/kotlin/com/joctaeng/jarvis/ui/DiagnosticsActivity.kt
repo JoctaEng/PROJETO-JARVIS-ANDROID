@@ -316,7 +316,7 @@ class DiagnosticsActivity : ComponentActivity() {
                 OutlinedButton(enabled = !busy, onClick = {
                     busy = true
                     status = "Falando…"
-                    TtsProbe(this@DiagnosticsActivity).speak("Oi, Joca! Eu sou o JARVIS e estou testando a minha voz.") { r ->
+                    TtsProbe(this@DiagnosticsActivity).speak("Oi, Joca! Eu sou o Euno e estou testando a minha voz.") { r ->
                         app.diagnostics.append(
                             Poc.SPEECH, "kind" to "tts", "lang" to r.languageStatus, "offline_voices" to r.offlineVoices,
                             "init_ms" to r.initMillis, "start_ms" to r.startLatencyMillis, "engine" to r.engine, "error" to r.error,
