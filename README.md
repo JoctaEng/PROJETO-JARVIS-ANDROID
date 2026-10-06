@@ -9,10 +9,25 @@ Um personagem 3D fofo — uma caricatura original do Joctã — que flutua sobre
 | Documento | Conteúdo |
 |---|---|
 | [`docs/ROTEIRO.md`](docs/ROTEIRO.md) | Roteiro técnico: limitações reais do Android, orçamento de hardware, stack, arquitetura, fases (0 → 4) com critérios de saída e fontes verificadas |
+| [`docs/FASE-0.md`](docs/FASE-0.md) | Como instalar o APK da Fase 0 e rodar as provas de conceito no celular |
+| [`docs/benchmarks.md`](docs/benchmarks.md) | Medições reais no aparelho (preenchidas após os testes) |
+| [`docs/ADR/`](docs/ADR/) | Registro das decisões técnicas |
 | `docs/ESPECIFICACAO.md` | Especificação conceitual (66 itens) — a adicionar |
 
 ## Status
 
-Fase 0 (fundação e provas de conceito) — não iniciada.
+**Fase 0 (fundação e provas de conceito) — em andamento.**
+
+- ✅ Projeto Android multi-módulo, contratos centrais e regras puras com testes
+- ✅ APK de testes com as PoCs 0.1 a 0.5 (compilado pelo GitHub Actions)
+- ⏳ Medições no aparelho real (ver `docs/FASE-0.md`)
+- ⏳ PoC 0.4b (sherpa-onnx) e personagem Rive
+
+## Compilar
+
+```bash
+./gradlew test :app:assembleDebug          # tudo (requer acesso ao Google Maven)
+./gradlew -Pjarvis.jvmOnly=true test       # só a lógica pura, sem Android SDK
+```
 
 Dispositivo de referência: Redmi Note 13 Pro+ (12 GB RAM / 512 GB). Meta mínima: aparelhos com 8 GB de RAM.

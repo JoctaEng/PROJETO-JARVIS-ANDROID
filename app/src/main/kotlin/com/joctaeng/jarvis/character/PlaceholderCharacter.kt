@@ -39,7 +39,7 @@ class ComposeCharacterRenderer : CharacterRenderer {
         private set
     var look by mutableStateOf(Offset.Zero)
         private set
-    var mouthOpen by mutableFloatStateOf(0f)
+    var mouthLevel by mutableFloatStateOf(0f)
         private set
 
     override fun setEmotion(emotion: Emotion, intensity: Float) {
@@ -56,7 +56,7 @@ class ComposeCharacterRenderer : CharacterRenderer {
     }
 
     override fun setMouthOpen(level: Float) {
-        mouthOpen = level.coerceIn(0f, 1f)
+        mouthLevel = level.coerceIn(0f, 1f)
     }
 }
 
@@ -184,7 +184,7 @@ private fun DrawScope.drawMouth(r: ComposeCharacterRenderer, state: AnimState, c
             strokeWidth = stroke.width, cap = StrokeCap.Round,
         )
         state == AnimState.SPEAKING -> {
-            val h = radius * (0.06f + 0.22f * r.mouthOpen)
+            val h = radius * (0.06f + 0.22f * r.mouthLevel)
             drawOval(Ink, topLeft = mouthCenter - Offset(w * 0.3f, h / 2f), size = Size(w * 0.6f, h))
         }
         r.emotion == Emotion.SURPRISED || state == AnimState.SURPRISED ->
