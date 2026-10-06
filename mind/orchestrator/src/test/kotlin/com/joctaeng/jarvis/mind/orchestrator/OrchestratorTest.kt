@@ -75,6 +75,15 @@ class RoutingPolicyTest {
         assertTrue(plan.isEmpty)
     }
 
+    @Test fun brainPreferenceOverridesComplexityOrder() {
+        val online = policy.plan(all, healthy, RoutingHints(preference = BrainPreference.ONLINE_FIRST))
+        assertEquals(listOf("own", "cloud", "local"), online.orderedProviderIds)
+        val local = policy.plan(all, healthy, RoutingHints(complexity = TaskComplexity.COMPLEX, preference = BrainPreference.LOCAL_FIRST))
+        assertEquals(listOf("local", "own", "cloud"), local.orderedProviderIds)
+        val only = policy.plan(all, healthy, RoutingHints(preference = BrainPreference.LOCAL_ONLY))
+        assertEquals(listOf("local"), only.orderedProviderIds)
+    }
+
     @Test fun userPreferenceBreaksTiesWithinSameLocation() {
         val cloudB = info("cloudB", ProviderLocation.EXTERNAL_CLOUD)
         val plan = RoutingPolicy(userPreference = listOf("cloudB", "cloud"))

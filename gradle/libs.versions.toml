@@ -12,6 +12,7 @@ composeBom = "2026.02.00"
 cameraX = "1.4.2"
 litertlm = "0.17.1"
 junit = "4.13.2"
+serializationJson = "1.7.3"
 
 [libraries]
 plugin-android = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }
@@ -20,6 +21,7 @@ plugin-compose-compiler = { group = "org.jetbrains.kotlin", name = "compose-comp
 
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serializationJson" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

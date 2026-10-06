@@ -7,6 +7,9 @@ import com.joctaeng.jarvis.core.model.Sensitivity
 import com.joctaeng.jarvis.core.model.TaskComplexity
 import com.joctaeng.jarvis.core.model.ThermalLevel
 
+/** Preferência do usuário entre cérebros (configurável em "Meu JARVIS"). */
+enum class BrainPreference { AUTO, ONLINE_FIRST, LOCAL_FIRST, LOCAL_ONLY }
+
 /** O que o orquestrador sabe sobre um pedido antes de escolher o cérebro. */
 data class RoutingHints(
     val sensitivity: Sensitivity = Sensitivity.NORMAL,
@@ -14,6 +17,7 @@ data class RoutingHints(
     val needsVision: Boolean = false,
     /** Permissão explícita do usuário para mandar dado sensível à nuvem externa. */
     val allowExternalCloudForSensitive: Boolean = false,
+    val preference: BrainPreference = BrainPreference.AUTO,
 )
 
 /** Resumo de um provedor para a decisão (sem depender da implementação). */
@@ -63,6 +67,10 @@ class RoutingPolicy(
             notices += "Estou offline: usando a IA do aparelho, que é mais limitada."
         }
 
+        if (hints.preference == BrainPreference.LOCAL_ONLY) {
+            candidates = candidates.filter { it.location == ProviderLocation.ON_DEVICE }
+        }
+
         // Visão exige provedor com capacidade de visão.
         if (hints.needsVision) {
             candidates = candidates.filter { Capability.VISION in it.capabilities }
@@ -71,10 +79,14 @@ class RoutingPolicy(
         // Regras 4, 5 e 6 — ordem de preferência por local de execução.
         val deviceStressed = device.thermal >= ThermalLevel.HOT ||
             (device.batteryPercent < lowBatteryPercent && !device.charging)
+        val offDeviceFirst = listOf(ProviderLocation.OWN_SERVER, ProviderLocation.EXTERNAL_CLOUD, ProviderLocation.ON_DEVICE)
+        val onDeviceFirst = listOf(ProviderLocation.ON_DEVICE, ProviderLocation.OWN_SERVER, ProviderLocation.EXTERNAL_CLOUD)
         val locationOrder = when {
-            deviceStressed -> listOf(ProviderLocation.OWN_SERVER, ProviderLocation.EXTERNAL_CLOUD, ProviderLocation.ON_DEVICE)
-            hints.complexity == TaskComplexity.SIMPLE -> listOf(ProviderLocation.ON_DEVICE, ProviderLocation.OWN_SERVER, ProviderLocation.EXTERNAL_CLOUD)
-            else -> listOf(ProviderLocation.OWN_SERVER, ProviderLocation.EXTERNAL_CLOUD, ProviderLocation.ON_DEVICE)
+            deviceStressed -> offDeviceFirst
+            hints.preference == BrainPreference.ONLINE_FIRST -> offDeviceFirst
+            hints.preference == BrainPreference.LOCAL_FIRST -> onDeviceFirst
+            hints.complexity == TaskComplexity.SIMPLE -> onDeviceFirst
+            else -> offDeviceFirst
         }
         if (deviceStressed && device.online) {
             notices += "Bateria baixa ou aparelho quente: priorizando processamento fora do celular."
