@@ -82,7 +82,7 @@ class PersonaEngineTest {
     private val ctx = PromptContext("terça-feira, 10:30", offline = false, privateMode = false, speakingAloud = true)
 
     @Test fun promptCarriesModeMemoriesAndRules() {
-        val prompt = PersonaEngine.systemPrompt("Joctã", PersonaMode.TEACHER, listOf("Prefere fontes confiáveis"), ctx)
+        val prompt = PersonaEngine.systemPrompt("Joctã", CharacterCatalog.byId("nina"), "", PersonaMode.TEACHER, listOf("Prefere fontes confiáveis"), ctx)
         assertTrue(PersonaMode.TEACHER.instruction in prompt)
         assertTrue("Prefere fontes confiáveis" in prompt)
         assertTrue("Nunca diga que executou" in prompt)
@@ -92,9 +92,36 @@ class PersonaEngineTest {
 
     @Test fun compactPromptDropsLongRulesAndLimitsMemories() {
         val memories = (1..30).map { "memória $it" }
-        val prompt = PersonaEngine.systemPrompt("Joctã", PersonaMode.FRIENDLY, memories, ctx, compact = true)
+        val prompt = PersonaEngine.systemPrompt("Joctã", CharacterCatalog.default, "", PersonaMode.FRIENDLY, memories, ctx, compact = true)
         assertFalse("Regras de caráter" in prompt)
         assertFalse("memória 20\n" in prompt)
         assertTrue("memória 30" in prompt)
+    }
+}
+
+class CharacterCatalogTest {
+    @Test fun twelveCharactersWithoutTheRobot() {
+        assertEquals(
+            listOf(
+                "Joca", "Luna", "Thor", "Nina", "Selene", "Rex", "Maya", "Kiko", "Astra",
+                "Joctã Estrategista", "Joctã Casual", "Joctã Jovem",
+            ),
+            CharacterCatalog.all.map { it.defaultName },
+        )
+        assertEquals(CharacterCatalog.all.size, CharacterCatalog.all.map { it.id }.toSet().size)
+    }
+
+    @Test fun unknownIdFallsBackToDefault() {
+        assertEquals("joca", CharacterCatalog.byId("zig").id)
+        assertEquals("joca", CharacterCatalog.byId(null).id)
+    }
+
+    @Test fun promptUsesCustomNameAndGrammaticalGender() {
+        val ctx = PromptContext("agora", offline = false, privateMode = false, speakingAloud = false)
+        val luna = PersonaEngine.systemPrompt("Joctã", CharacterCatalog.byId("luna"), "", PersonaMode.FRIENDLY, emptyList(), ctx)
+        assertTrue("Você é a Luna" in luna)
+        val renamed = PersonaEngine.systemPrompt("Joctã", CharacterCatalog.byId("thor"), "Trovão", PersonaMode.FRIENDLY, emptyList(), ctx)
+        assertTrue("Você é o Trovão" in renamed)
+        assertTrue(CharacterCatalog.byId("thor").instruction in renamed)
     }
 }

@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Estado da rede para o orquestrador (online/offline) -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Fase 1: cérebro online (APIs e servidor próprio) -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- PoC 0.2 e 0.4: microfone e câmera, só durante a sessão iniciada pelo toque -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -31,7 +33,9 @@
         android:icon="@drawable/ic_jarvis"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Jarvis">
+        android:theme="@style/Theme.Jarvis"
+        android:usesCleartextTraffic="true">
+        <!-- Cleartext: permite o servidor próprio na rede local (http://IP:11434). APIs públicas usam HTTPS. -->
 
         <!-- Necessário para o backend GPU do LiteRT-LM (OpenCL) -->
         <uses-native-library android:name="libvndksupport.so" android:required="false" />
@@ -46,7 +50,26 @@
             </intent-filter>
         </activity>
 
-        <!-- PoC 0.2: aberta pelo toque no personagem; garante o app em primeiro plano -->
+        <!-- Conversa: abre pelo toque no personagem, por cima do app atual -->
+        <activity
+            android:name=".chat.ChatActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.joctaeng.jarvis.chat"
+            android:theme="@style/Theme.Jarvis.Translucent"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ui.DiagnosticsActivity"
+            android:exported="false" />
+
+        <!-- PoC 0.2: sessão de teste de microfone e câmera (aberta pelo Diagnóstico) -->
         <activity
             android:name=".session.TouchSessionActivity"
             android:excludeFromRecents="true"

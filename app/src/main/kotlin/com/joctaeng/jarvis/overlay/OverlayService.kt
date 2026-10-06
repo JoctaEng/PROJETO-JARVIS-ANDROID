@@ -43,7 +43,9 @@ import com.joctaeng.jarvis.presence.placement.NormalizedPosition
 import com.joctaeng.jarvis.presence.placement.Placement
 import com.joctaeng.jarvis.presence.placement.Point
 import com.joctaeng.jarvis.presence.placement.Size
-import com.joctaeng.jarvis.session.TouchSessionActivity
+import com.joctaeng.jarvis.character.CharacterSync
+import com.joctaeng.jarvis.chat.ChatActivity
+import com.joctaeng.jarvis.settings.PlacementMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -51,6 +53,7 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
@@ -72,7 +75,9 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     private val framesThisSecond = AtomicInteger(0)
     private var reactionStartNanos = 0L
     private val runId = UUID.randomUUID().toString().take(8)
-    private val diagnostics get() = JarvisApp.from(this).diagnostics
+    private val app get() = JarvisApp.from(this)
+    private val diagnostics get() = app.diagnostics
+    private var dragging = false
     private val prefs by lazy { getSharedPreferences("overlay", Context.MODE_PRIVATE) }
 
     override fun onCreate() {
@@ -125,7 +130,11 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         val v = view ?: return
-        val pos = Placement.snapToEdge(Point(params.x, params.y), windowSize(), screenSize(), insets())
+        val pos = if (app.settings.placementMode == PlacementMode.EDGES) {
+            Placement.snapToEdge(Point(params.x, params.y), windowSize(), screenSize(), insets())
+        } else {
+            Placement.clamp(Point(params.x, params.y), windowSize(), screenSize(), insets())
+        }
         params.x = pos.x
         params.y = pos.y
         windowManager.updateViewLayout(v, params)
@@ -156,7 +165,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     }
 
     private fun showOverlay() {
-        val sizePx = (CHARACTER_SIZE_DP * resources.displayMetrics.density).roundToInt()
+        val sizePx = dpToPx(app.settings.characterSizeDp)
         params = WindowManager.LayoutParams(
             sizePx, sizePx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -187,20 +196,33 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         view = composeView
         renderer.play(AnimState.IDLE)
         startFpsMeter()
-        followSession()
+        CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking) { dragging }
+        followSettings()
     }
 
-    /** Durante a sessão de toque o personagem escuta; ao terminar, volta ao repouso. */
-    private fun followSession() = lifecycleScope.launch {
-        OverlayBus.sessionActive.collect { active ->
-            if (active) {
-                renderer.play(AnimState.LISTENING)
-            } else if (renderer.state == AnimState.LISTENING || renderer.state == AnimState.WAKING) {
-                renderer.play(AnimState.IDLE)
-                renderer.setEmotion(Emotion.NEUTRAL, 0.5f)
-            }
+    /** Tamanho alterado em "Meu JARVIS" é aplicado na hora. */
+    private fun followSettings() = lifecycleScope.launch {
+        app.settings.version.collect {
+            renderer.applyColor(app.settings.character.color)
+            resize(dpToPx(app.settings.characterSizeDp))
         }
     }
+
+    private fun resize(sizePx: Int) {
+        val v = view ?: return
+        if (sizePx == params.width) return
+        // Mantém o centro do personagem no mesmo lugar ao crescer ou encolher.
+        val cx = params.x + params.width / 2
+        val cy = params.y + params.height / 2
+        params.width = sizePx
+        params.height = sizePx
+        val p = Placement.clamp(Point(cx - sizePx / 2, cy - sizePx / 2), windowSize(), screenSize(), insets())
+        params.x = p.x
+        params.y = p.y
+        windowManager.updateViewLayout(v, params)
+    }
+
+    private fun dpToPx(dp: Int) = (dp * resources.displayMetrics.density).roundToInt()
 
     private fun onFrameDrawn() {
         framesThisSecond.incrementAndGet()
@@ -246,10 +268,9 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         reactionStartNanos = System.nanoTime()
         renderer.play(AnimState.WAKING)
         renderer.setEmotion(Emotion.HAPPY, 0.8f)
-        val intent = Intent(this, TouchSessionActivity::class.java)
+        val intent = Intent(this, ChatActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            .putExtra(TouchSessionActivity.EXTRA_TAP_ELAPSED, SystemClock.elapsedRealtime())
-            .putExtra(TouchSessionActivity.EXTRA_DASHBOARD_WAS_VISIBLE, OverlayBus.dashboardVisible.value)
+            .putExtra(ChatActivity.EXTRA_FROM_TAP, true)
         try {
             startActivity(intent)
         } catch (e: Exception) {
@@ -260,13 +281,17 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         // O HyperOS pode bloquear a abertura em silêncio (permissão "abrir janelas em
         // segundo plano"). Se a sessão não começar em 3 s, conta como falha.
         lifecycleScope.launch {
-            delay(3_000)
+            delay(700)
+            if (OverlayBus.sessionActive.value) {
+                renderer.play(CharacterSync.currentState(app.voice.speaking.value))
+                return@launch
+            }
+            delay(2_300)
             if (!OverlayBus.sessionActive.value && renderer.state == AnimState.WAKING) {
                 diagnostics.append(Poc.TOUCH_SESSION, "event" to "launch_timeout")
                 renderer.play(AnimState.CONFUSED)
                 delay(1_500)
-                renderer.play(AnimState.IDLE)
-                renderer.setEmotion(Emotion.NEUTRAL, 0.5f)
+                renderer.play(CharacterSync.currentState(app.voice.speaking.value))
             }
         }
     }
@@ -278,13 +303,18 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     }
 
     private fun onDragEnd() {
-        val snapped = Placement.snapToEdge(Point(params.x, params.y), windowSize(), screenSize(), insets())
+        dragging = false
+        val dropped = Point(params.x, params.y)
+        val snapped = when (app.settings.placementMode) {
+            PlacementMode.EDGES -> Placement.snapToEdge(dropped, windowSize(), screenSize(), insets())
+            PlacementMode.FREE -> Placement.clamp(dropped, windowSize(), screenSize(), insets())
+        }
         params.x = snapped.x
         params.y = snapped.y
         view?.let { windowManager.updateViewLayout(it, params) }
         val normalized = Placement.normalize(snapped, windowSize(), screenSize())
         prefs.edit().putFloat("x", normalized.x).putFloat("y", normalized.y).apply()
-        renderer.play(AnimState.IDLE)
+        renderer.play(CharacterSync.currentState(app.voice.speaking.value))
     }
 
     private fun windowSize() = Size(params.width, params.height)
@@ -302,7 +332,8 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
 
     /**
      * Arrastar usa coordenadas absolutas da tela (rawX/rawY): como a própria janela
-     * se move com o dedo, coordenadas locais oscilariam.
+     * se move com o dedo, coordenadas locais oscilariam. Dois dedos = pinça para
+     * redimensionar (item 25 da especificação).
      */
     private inner class DragAndTapListener : android.view.View.OnTouchListener {
         private val slop = ViewConfiguration.get(this@OverlayService).scaledTouchSlop
@@ -312,7 +343,9 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         private var startX = 0
         private var startY = 0
         private var downTime = 0L
-        private var dragging = false
+        private var pinchStartDistance = 0f
+        private var pinchStartSize = 0
+        private var pinched = false
 
         override fun onTouch(v: android.view.View, event: MotionEvent): Boolean {
             when (event.actionMasked) {
@@ -323,8 +356,22 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
                     startY = params.y
                     downTime = event.eventTime
                     dragging = false
+                    pinched = false
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> if (event.pointerCount == 2) {
+                    pinched = true
+                    dragging = false
+                    pinchStartDistance = distance(event)
+                    pinchStartSize = params.width
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    if (pinched) {
+                        if (event.pointerCount >= 2 && pinchStartDistance > 0f) {
+                            val target = (pinchStartSize * distance(event) / pinchStartDistance).roundToInt()
+                            resize(target.coerceIn(dpToPx(MIN_SIZE_DP), dpToPx(MAX_SIZE_DP)))
+                        }
+                        return true
+                    }
                     val dx = event.rawX - downX
                     val dy = event.rawY - downY
                     if (!dragging && (abs(dx) > slop || abs(dy) > slop)) {
@@ -340,27 +387,33 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
                         windowManager.updateViewLayout(v, params)
                     }
                 }
-                MotionEvent.ACTION_UP -> {
-                    when {
-                        dragging -> onDragEnd()
-                        event.eventTime - downTime >= longPressMillis -> onLongPress()
-                        else -> {
-                            v.performClick()
-                            onTap()
-                        }
+                MotionEvent.ACTION_UP -> when {
+                    pinched -> {
+                        app.settings.characterSizeDp = (params.width / resources.displayMetrics.density).roundToInt()
+                        onDragEnd()
+                    }
+                    dragging -> onDragEnd()
+                    event.eventTime - downTime >= longPressMillis -> onLongPress()
+                    else -> {
+                        v.performClick()
+                        onTap()
                     }
                 }
-                MotionEvent.ACTION_CANCEL -> if (dragging) onDragEnd()
+                MotionEvent.ACTION_CANCEL -> if (dragging || pinched) onDragEnd()
             }
             return true
         }
+
+        private fun distance(event: MotionEvent): Float =
+            hypot(event.getX(0) - event.getX(1), event.getY(0) - event.getY(1))
     }
 
     companion object {
         const val ACTION_STOP = "com.joctaeng.jarvis.overlay.STOP"
         private const val CHANNEL_ID = "overlay"
         private const val NOTIFICATION_ID = 1
-        private const val CHARACTER_SIZE_DP = 88
+        const val MIN_SIZE_DP = 56
+        const val MAX_SIZE_DP = 180
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, OverlayService::class.java))

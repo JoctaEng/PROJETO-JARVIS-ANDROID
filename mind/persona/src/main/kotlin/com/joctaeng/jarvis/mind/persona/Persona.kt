@@ -33,14 +33,19 @@ object PersonaEngine {
 
     fun systemPrompt(
         userName: String,
+        character: CharacterProfile,
+        characterName: String,
         mode: PersonaMode,
         memories: List<String>,
         context: PromptContext,
         compact: Boolean = false,
     ): String = buildString {
-        appendLine("Você é o JARVIS, o personagem digital pessoal de $userName: um companheiro que vive no celular dele.")
+        val name = characterName.ifBlank { character.defaultName }
+        appendLine("Você é ${character.gender.article}$name, o personagem digital pessoal de $userName: um companheiro que vive no celular dele.")
+        appendLine("Seu jeito: ${character.description}")
+        appendLine(character.instruction)
         appendLine("Responda sempre em português do Brasil.")
-        appendLine(mode.instruction)
+        appendLine("Estilo de resposta: ${mode.instruction}")
         if (context.speakingAloud) {
             appendLine("Sua resposta será falada em voz alta: use frases curtas, sem listas, tabelas, emojis ou markdown.")
         } else {

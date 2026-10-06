@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.lerp
 import com.joctaeng.jarvis.core.contracts.CharacterRenderer
 import com.joctaeng.jarvis.core.model.AnimState
 import com.joctaeng.jarvis.core.model.Emotion
@@ -41,6 +42,13 @@ class ComposeCharacterRenderer : CharacterRenderer {
         private set
     var mouthLevel by mutableFloatStateOf(0f)
         private set
+
+    /** Cor do personagem escolhido (provisório até a arte final de cada um). */
+    var bodyColor by mutableStateOf(BodyBase)
+
+    fun applyColor(argb: Long) {
+        bodyColor = Color(argb.toInt())
+    }
 
     override fun setEmotion(emotion: Emotion, intensity: Float) {
         this.emotion = emotion
@@ -89,7 +97,6 @@ fun CharacterView(
     }
 }
 
-private val BodyLight = Color(0xFF9DBBFF)
 private val BodyBase = Color(0xFF5B8DEF)
 private val BodyError = Color(0xFFE57373)
 private val Ink = Color(0xFF1E2340)
@@ -112,17 +119,17 @@ private fun DrawScope.drawCharacter(r: ComposeCharacterRenderer, t: Float) {
     if (state == AnimState.LISTENING) {
         val pulse = (t % 1.2f) / 1.2f
         drawCircle(
-            color = BodyBase.copy(alpha = 0.35f * (1f - pulse)),
+            color = r.bodyColor.copy(alpha = 0.35f * (1f - pulse)),
             radius = radius * (1.02f + 0.18f * pulse),
             center = center,
             style = Stroke(width = radius * 0.06f),
         )
     }
 
-    val base = if (state == AnimState.ERROR) BodyError else BodyBase
+    val base = if (state == AnimState.ERROR) BodyError else r.bodyColor
     drawCircle(
         brush = Brush.radialGradient(
-            colors = listOf(BodyLight, base),
+            colors = listOf(lerp(base, Color.White, 0.45f), base),
             center = center + Offset(-radius * 0.3f, -radius * 0.35f),
             radius = radius * 1.4f,
         ),

@@ -1,0 +1,286 @@
+package com.joctaeng.jarvis.conversation
+
+import com.joctaeng.jarvis.JarvisApp
+import com.joctaeng.jarvis.core.contracts.LlmChunk
+import com.joctaeng.jarvis.core.contracts.LlmProvider
+import com.joctaeng.jarvis.core.contracts.LlmRequest
+import com.joctaeng.jarvis.core.model.AnimState
+import com.joctaeng.jarvis.core.model.ChatMessage
+import com.joctaeng.jarvis.core.model.Emotion
+import com.joctaeng.jarvis.core.model.Role
+import com.joctaeng.jarvis.device.DeviceState
+import com.joctaeng.jarvis.mind.cloud.CloudConfig
+import com.joctaeng.jarvis.mind.cloud.OpenAiCompatibleProvider
+import com.joctaeng.jarvis.mind.local.LiteRtLmProvider
+import com.joctaeng.jarvis.mind.orchestrator.BrainPreference
+import com.joctaeng.jarvis.mind.orchestrator.Orchestrator
+import com.joctaeng.jarvis.mind.orchestrator.OrchestratorEvent
+import com.joctaeng.jarvis.mind.orchestrator.RoutingHints
+import com.joctaeng.jarvis.mind.persona.MemoryCommand
+import com.joctaeng.jarvis.mind.persona.MemoryCommands
+import com.joctaeng.jarvis.mind.persona.PersonaEngine
+import com.joctaeng.jarvis.mind.persona.PromptContext
+import com.joctaeng.jarvis.mind.persona.SentenceChunker
+import com.joctaeng.jarvis.mind.persona.StreamingEmotionParser
+import com.joctaeng.jarvis.overlay.OverlayBus
+import com.joctaeng.jarvis.settings.CloudPreset
+import com.joctaeng.jarvis.settings.SecretStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/** Uma linha da conversa na tela. [note] = aviso do sistema (offline, troca de cérebro...). */
+data class ChatEntry(
+    val id: Long,
+    val role: Role,
+    val text: String,
+    val brain: String? = null,
+    val streaming: Boolean = false,
+    val note: Boolean = false,
+)
+
+/**
+ * Coração da Fase 1: recebe o que o usuário disse/escreveu, trata comandos de
+ * memória, monta o prompt pela personalidade, pede ao orquestrador o melhor
+ * cérebro disponível, mostra a resposta em streaming, fala frase a frase e
+ * dirige as expressões do personagem.
+ */
+class ConversationController(private val app: JarvisApp) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val settings get() = app.settings
+    private val voice get() = app.voice
+    private var nextId = 1L
+    private var job: Job? = null
+    private var calmDown: Job? = null
+    private var local: LiteRtLmProvider? = null
+    private var localKey: String? = null
+
+    private val _entries = MutableStateFlow<List<ChatEntry>>(emptyList())
+    val entries: StateFlow<List<ChatEntry>> = _entries.asStateFlow()
+
+    private val _busy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    private val _turnFinished = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+
+    /** Resposta terminou e a voz terminou de falar — hora de ouvir de novo (modo voz). */
+    val turnFinished: SharedFlow<Unit> = _turnFinished.asSharedFlow()
+
+    fun send(text: String, speak: Boolean) {
+        val clean = text.trim()
+        if (clean.isEmpty() || _busy.value) return
+        voice.stop()
+        job = scope.launch {
+            _busy.value = true
+            add(ChatEntry(nextId++, Role.USER, clean))
+            try {
+                val command = MemoryCommands.parse(clean)
+                if (command != null) handleMemory(command, speak) else respond(speak)
+                if (speak) voice.awaitIdle()
+            } finally {
+                _busy.value = false
+                relax()
+                _turnFinished.tryEmit(Unit)
+            }
+        }
+    }
+
+    /** Interrompe a resposta e a fala. */
+    fun cancel() {
+        job?.cancel()
+        voice.stop()
+        _entries.update { list -> list.map { if (it.streaming) it.copy(streaming = false) else it } }
+        OverlayBus.anim.value = AnimState.IDLE
+    }
+
+    fun clearConversation() {
+        cancel()
+        _entries.value = emptyList()
+    }
+
+    /** Libera o modelo local da memória (onTrimMemory). */
+    fun releaseLocalModel() {
+        val provider = local ?: return
+        scope.launch { provider.unload() }
+    }
+
+    fun configuredProviders(): List<LlmProvider> = listOfNotNull(cloudProvider(), localProvider())
+
+    private suspend fun respond(speak: Boolean) {
+        val device = DeviceState.snapshot(app, privateMode = settings.privateMode)
+        val providers = configuredProviders()
+        if (providers.isEmpty()) {
+            say(
+                "Ainda não tenho um cérebro. Abra Meu JARVIS → Cérebro e configure uma API (por exemplo, Gemini) " +
+                    "ou escolha um modelo local.",
+                Emotion.CONFUSED, speak,
+            )
+            return
+        }
+        val onlyLocal = providers.all { it is LiteRtLmProvider } || settings.brainPreference == BrainPreference.LOCAL_ONLY
+        val memories = app.memory.all().map { it.text }
+        val prompt = PersonaEngine.systemPrompt(
+            userName = settings.userName,
+            character = settings.character,
+            characterName = settings.characterName,
+            mode = settings.personaMode,
+            memories = memories,
+            context = PromptContext(
+                nowDescription = SimpleDateFormat("EEEE, d 'de' MMMM 'de' yyyy, HH:mm", Locale.forLanguageTag("pt-BR")).format(Date()),
+                offline = !device.online,
+                privateMode = settings.privateMode,
+                speakingAloud = speak,
+            ),
+            compact = onlyLocal,
+        )
+        val history = _entries.value.filter { !it.note && !it.streaming }.takeLast(HISTORY).map { ChatMessage(it.role, it.text) }
+        val request = LlmRequest(prompt, history, maxOutputTokens = if (onlyLocal) 512 else null)
+
+        OverlayBus.anim.value = AnimState.THINKING
+        OverlayBus.emotion.value = Emotion.THINKING
+        val replyId = nextId++
+        add(ChatEntry(replyId, Role.ASSISTANT, "", streaming = true))
+        val parser = StreamingEmotionParser()
+        val chunker = SentenceChunker()
+        val names = providers.associate { it.id to it.displayName }
+        var lastNote: String? = null
+        var failure: String? = null
+
+        Orchestrator(providers).respond(request, device, RoutingHints(preference = settings.brainPreference)).collect { event ->
+            when (event) {
+                is OrchestratorEvent.Notice -> if (event.text != lastNote) {
+                    lastNote = event.text
+                    addNoteBefore(replyId, event.text)
+                }
+                is OrchestratorEvent.RoutedTo -> edit(replyId) { it.copy(brain = names[event.providerId]) }
+                is OrchestratorEvent.FellBack -> addNoteBefore(replyId, "${names[event.fromProviderId]} falhou (${event.reason}). Tentando outro cérebro…")
+                is OrchestratorEvent.Failed -> failure = event.reason
+                is OrchestratorEvent.Chunk -> when (val chunk = event.chunk) {
+                    is LlmChunk.Text -> {
+                        val visible = parser.feed(chunk.text)
+                        parser.emotion?.let { OverlayBus.emotion.value = it }
+                        if (visible.isNotEmpty()) {
+                            OverlayBus.anim.value = AnimState.IDLE
+                            edit(replyId) { it.copy(text = it.text + visible) }
+                            if (speak) chunker.feed(visible).forEach(voice::speak)
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+        val rest = parser.finish()
+        if (rest.isNotEmpty()) {
+            edit(replyId) { it.copy(text = it.text + rest) }
+            if (speak) chunker.feed(rest).forEach(voice::speak)
+        }
+        if (speak) chunker.flush()?.let(voice::speak)
+
+        val finalText = _entries.value.firstOrNull { it.id == replyId }?.text.orEmpty()
+        if (failure != null && finalText.isBlank()) {
+            edit(replyId) { it.copy(text = "Não consegui responder: $failure", streaming = false, brain = null) }
+            OverlayBus.emotion.value = Emotion.CONCERNED
+            if (speak) voice.speak("Não consegui responder agora.")
+        } else {
+            edit(replyId) { it.copy(streaming = false) }
+            if (failure != null) add(ChatEntry(nextId++, Role.SYSTEM, "Resposta interrompida: $failure", note = true))
+        }
+    }
+
+    private suspend fun handleMemory(command: MemoryCommand, speak: Boolean) {
+        if (settings.privateMode) {
+            say("Modo Privado ativo: não vou memorizar nem apagar memórias agora.", Emotion.NEUTRAL, speak)
+            return
+        }
+        when (command) {
+            is MemoryCommand.Remember -> {
+                withContext(Dispatchers.IO) { app.memory.add(command.fact, source = "conversa", reason = "Você pediu para eu lembrar") }
+                say("Pronto, vou lembrar: ${command.fact}", Emotion.HAPPY, speak)
+            }
+            is MemoryCommand.Forget -> {
+                val forgotten = withContext(Dispatchers.IO) { app.memory.forget(command.query) }
+                if (forgotten != null) {
+                    say("Esqueci: ${forgotten.text}", Emotion.NEUTRAL, speak)
+                } else {
+                    say("Não encontrei nada parecido na minha memória.", Emotion.CONFUSED, speak)
+                }
+            }
+        }
+    }
+
+    private fun say(text: String, emotion: Emotion, speak: Boolean) {
+        add(ChatEntry(nextId++, Role.ASSISTANT, text, brain = settings.displayName))
+        OverlayBus.emotion.value = emotion
+        if (speak) voice.speak(text)
+    }
+
+    /** Depois de alguns segundos, a expressão volta ao neutro (decaimento, seção 6.3). */
+    private fun relax() {
+        OverlayBus.anim.value = AnimState.IDLE
+        calmDown?.cancel()
+        calmDown = scope.launch {
+            delay(6_000)
+            OverlayBus.emotion.value = Emotion.NEUTRAL
+        }
+    }
+
+    private fun cloudProvider(): LlmProvider? {
+        val preset = settings.cloudPreset
+        if (preset == CloudPreset.NONE) return null
+        val key = app.secrets.get(SecretStore.CLOUD_API_KEY)
+        val base = settings.cloudBaseUrl.ifBlank { preset.baseUrl }
+        if (base.isBlank() || settings.cloudModel.isBlank()) return null
+        if (preset.keyRequired && key.isNullOrBlank()) return null
+        return OpenAiCompatibleProvider(
+            CloudConfig(
+                id = "cloud",
+                displayName = "${preset.label} · ${settings.cloudModel}",
+                baseUrl = base,
+                apiKey = key,
+                model = settings.cloudModel,
+                location = preset.location,
+            ),
+        )
+    }
+
+    private fun localProvider(): LiteRtLmProvider? {
+        val path = settings.localModelPath
+        if (path.isBlank() || !File(path).isFile) return null
+        val key = "$path|${settings.localBackend}"
+        if (key != localKey) {
+            local?.let { old -> scope.launch { old.unload() } }
+            local = LiteRtLmProvider(File(path), settings.localBackend, app.cacheDir)
+            localKey = key
+        }
+        return local
+    }
+
+    private fun add(entry: ChatEntry) = _entries.update { it + entry }
+
+    private fun addNoteBefore(id: Long, text: String) = _entries.update { list ->
+        val index = list.indexOfFirst { it.id == id }.let { if (it < 0) list.size else it }
+        list.toMutableList().apply { add(index, ChatEntry(nextId++, Role.SYSTEM, text, note = true)) }
+    }
+
+    private fun edit(id: Long, change: (ChatEntry) -> ChatEntry) =
+        _entries.update { list -> list.map { if (it.id == id) change(it) else it } }
+
+    private companion object {
+        const val HISTORY = 20
+    }
+}
