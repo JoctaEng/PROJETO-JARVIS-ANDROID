@@ -31,6 +31,7 @@ class Report(private val context: Context, private val diagnostics: Diagnostics)
         return buildString {
             appendLine("- Inícios: ${starts.size} (recriações automáticas pelo sistema: $stickyRestarts)")
             appendLine("- Mortes inesperadas detectadas: $unexpectedDeaths")
+            appendLine("- Recusas de primeiro plano pelo sistema: ${records.count { it["event"] == "foreground_denied" }}")
             appendLine("- Maior tempo contínuo vivo: ${"%.1f".format(longestRunHours)} h (meta: 24 h)")
             append("- Consumo de bateria do aparelho durante a execução atual: ${drain ?: "n/d"} (inclui todo o uso do celular)")
         }

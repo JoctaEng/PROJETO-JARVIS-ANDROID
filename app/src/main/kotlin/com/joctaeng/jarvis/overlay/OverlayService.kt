@@ -11,6 +11,7 @@ import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.SystemClock
+import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.ViewConfiguration
@@ -86,7 +87,11 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
             stopSelf()
             return START_NOT_STICKY
         }
-        startInForeground()
+        if (!Settings.canDrawOverlays(this)) {
+            diagnostics.append(Poc.OVERLAY, "event" to "no_overlay_permission", "run" to runId)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (view == null) {
             // intent nulo = o sistema recriou o serviço sozinho (START_STICKY).
             diagnostics.append(
@@ -94,8 +99,16 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
                 "reason" to if (intent == null) "sticky-restart" else "user",
                 "battery" to DeviceState.batteryPercent(this),
             )
+            // A janela vem antes do startForeground: no Android 15, um app em segundo
+            // plano só pode iniciar foreground service se já tiver um overlay visível.
             showOverlay()
             startHeartbeat()
+        }
+        try {
+            startInForeground()
+        } catch (e: Exception) {
+            // Registrado para a PoC 0.1: sem foreground, o sistema pode matar o serviço.
+            diagnostics.append(Poc.OVERLAY, "event" to "foreground_denied", "run" to runId, "error" to e.message)
         }
         OverlayBus.running.value = true
         return START_STICKY
