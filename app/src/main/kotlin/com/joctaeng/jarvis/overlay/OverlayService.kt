@@ -1,0 +1,360 @@
+package com.joctaeng.jarvis.overlay
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.content.res.Configuration
+import android.graphics.PixelFormat
+import android.os.Build
+import android.os.SystemClock
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.ViewConfiguration
+import android.view.WindowInsets
+import android.view.WindowManager
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleService
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.joctaeng.jarvis.JarvisApp
+import com.joctaeng.jarvis.R
+import com.joctaeng.jarvis.character.CharacterView
+import com.joctaeng.jarvis.character.ComposeCharacterRenderer
+import com.joctaeng.jarvis.core.model.AnimState
+import com.joctaeng.jarvis.core.model.Emotion
+import com.joctaeng.jarvis.device.DeviceState
+import com.joctaeng.jarvis.diagnostics.Poc
+import com.joctaeng.jarvis.presence.placement.Insets
+import com.joctaeng.jarvis.presence.placement.NormalizedPosition
+import com.joctaeng.jarvis.presence.placement.Placement
+import com.joctaeng.jarvis.presence.placement.Point
+import com.joctaeng.jarvis.presence.placement.Size
+import com.joctaeng.jarvis.session.TouchSessionActivity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+/**
+ * PoC 0.1 — personagem flutuante persistente sobre qualquer app.
+ *
+ * Foreground service do tipo `specialUse` (obrigatório declarar tipo no Android 14+)
+ * que mantém uma janela `TYPE_APPLICATION_OVERLAY` com o personagem. Registra
+ * início, batimentos a cada minuto e fim, para medir se o HyperOS mata o serviço.
+ */
+class OverlayService : LifecycleService(), SavedStateRegistryOwner {
+
+    private val savedStateController = SavedStateRegistryController.create(this)
+    override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
+
+    private lateinit var windowManager: WindowManager
+    private var view: ComposeView? = null
+    private lateinit var params: WindowManager.LayoutParams
+    private val renderer = ComposeCharacterRenderer()
+    private val framesThisSecond = AtomicInteger(0)
+    private var reactionStartNanos = 0L
+    private val runId = UUID.randomUUID().toString().take(8)
+    private val diagnostics get() = JarvisApp.from(this).diagnostics
+    private val prefs by lazy { getSharedPreferences("overlay", Context.MODE_PRIVATE) }
+
+    override fun onCreate() {
+        savedStateController.performRestore(null)
+        super.onCreate()
+        windowManager = getSystemService(WindowManager::class.java)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+        if (intent?.action == ACTION_STOP) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        startInForeground()
+        if (view == null) {
+            // intent nulo = o sistema recriou o serviço sozinho (START_STICKY).
+            diagnostics.append(
+                Poc.OVERLAY, "event" to "start", "run" to runId,
+                "reason" to if (intent == null) "sticky-restart" else "user",
+                "battery" to DeviceState.batteryPercent(this),
+            )
+            showOverlay()
+            startHeartbeat()
+        }
+        OverlayBus.running.value = true
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        diagnostics.append(Poc.OVERLAY, "event" to "stop", "run" to runId, "battery" to DeviceState.batteryPercent(this))
+        view?.let { windowManager.removeView(it) }
+        view = null
+        OverlayBus.running.value = false
+        super.onDestroy()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val v = view ?: return
+        val pos = Placement.snapToEdge(Point(params.x, params.y), windowSize(), screenSize(), insets())
+        params.x = pos.x
+        params.y = pos.y
+        windowManager.updateViewLayout(v, params)
+    }
+
+    private fun startInForeground() {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, getString(R.string.overlay_channel_name), NotificationManager.IMPORTANCE_MIN),
+        )
+        val stopIntent = PendingIntent.getService(
+            this, 0, Intent(this, OverlayService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_jarvis)
+            .setContentTitle(getString(R.string.overlay_notification_title))
+            .setContentText(getString(R.string.overlay_notification_text))
+            .setOngoing(true)
+            .addAction(0, getString(R.string.overlay_stop), stopIntent)
+            .build()
+        // O tipo specialUse só existe a partir do Android 14; antes disso, sem tipo.
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        } else {
+            0
+        }
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+    }
+
+    private fun showOverlay() {
+        val sizePx = (CHARACTER_SIZE_DP * resources.displayMetrics.density).roundToInt()
+        params = WindowManager.LayoutParams(
+            sizePx, sizePx,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply { gravity = Gravity.TOP or Gravity.START }
+
+        val saved = NormalizedPosition(prefs.getFloat("x", 1f), prefs.getFloat("y", 0.6f))
+        val start = Placement.clamp(Placement.denormalize(saved, windowSize(), screenSize()), windowSize(), screenSize(), insets())
+        params.x = start.x
+        params.y = start.y
+
+        val composeView = ComposeView(this).apply {
+            setViewTreeLifecycleOwner(this@OverlayService)
+            setViewTreeSavedStateRegistryOwner(this@OverlayService)
+            setContent {
+                CharacterView(
+                    renderer = renderer,
+                    modifier = Modifier.fillMaxSize(),
+                    maxFps = 30,
+                    animate = true,
+                    onFrame = ::onFrameDrawn,
+                )
+            }
+            setOnTouchListener(DragAndTapListener())
+        }
+        windowManager.addView(composeView, params)
+        view = composeView
+        renderer.play(AnimState.IDLE)
+        startFpsMeter()
+        followSession()
+    }
+
+    /** Durante a sessão de toque o personagem escuta; ao terminar, volta ao repouso. */
+    private fun followSession() = lifecycleScope.launch {
+        OverlayBus.sessionActive.collect { active ->
+            if (active) {
+                renderer.play(AnimState.LISTENING)
+            } else if (renderer.state == AnimState.LISTENING || renderer.state == AnimState.WAKING) {
+                renderer.play(AnimState.IDLE)
+                renderer.setEmotion(Emotion.NEUTRAL, 0.5f)
+            }
+        }
+    }
+
+    private fun onFrameDrawn() {
+        framesThisSecond.incrementAndGet()
+        if (reactionStartNanos != 0L && renderer.state != AnimState.IDLE && renderer.state != AnimState.SLEEPING) {
+            val reaction = (System.nanoTime() - reactionStartNanos) / 1_000_000
+            reactionStartNanos = 0L
+            OverlayBus.lastReactionMillis.value = reaction
+            lifecycleScope.launch(Dispatchers.IO) {
+                diagnostics.append(Poc.RENDERER, "event" to "tap_reaction", "reaction_ms" to reaction)
+            }
+        }
+    }
+
+    private fun startFpsMeter() = lifecycleScope.launch {
+        var fpsSum = 0L
+        var seconds = 0
+        while (isActive) {
+            delay(1_000)
+            val fps = framesThisSecond.getAndSet(0)
+            OverlayBus.fps.value = fps
+            fpsSum += fps
+            seconds++
+            if (seconds == 60) {
+                diagnostics.append(Poc.RENDERER, "event" to "fps_avg_60s", "fps" to fpsSum / 60f)
+                fpsSum = 0
+                seconds = 0
+            }
+        }
+    }
+
+    private fun startHeartbeat() = lifecycleScope.launch {
+        while (isActive) {
+            delay(60_000)
+            diagnostics.append(
+                Poc.OVERLAY, "event" to "heartbeat", "run" to runId,
+                "battery" to DeviceState.batteryPercent(this@OverlayService),
+                "uptime_ms" to SystemClock.elapsedRealtime(),
+            )
+        }
+    }
+
+    private fun onTap() {
+        reactionStartNanos = System.nanoTime()
+        renderer.play(AnimState.WAKING)
+        renderer.setEmotion(Emotion.HAPPY, 0.8f)
+        val intent = Intent(this, TouchSessionActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(TouchSessionActivity.EXTRA_TAP_ELAPSED, SystemClock.elapsedRealtime())
+            .putExtra(TouchSessionActivity.EXTRA_DASHBOARD_WAS_VISIBLE, OverlayBus.dashboardVisible.value)
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            renderer.play(AnimState.ERROR)
+            diagnostics.append(Poc.TOUCH_SESSION, "event" to "launch_failed", "error" to e.message)
+            return
+        }
+        // O HyperOS pode bloquear a abertura em silêncio (permissão "abrir janelas em
+        // segundo plano"). Se a sessão não começar em 3 s, conta como falha.
+        lifecycleScope.launch {
+            delay(3_000)
+            if (!OverlayBus.sessionActive.value && renderer.state == AnimState.WAKING) {
+                diagnostics.append(Poc.TOUCH_SESSION, "event" to "launch_timeout")
+                renderer.play(AnimState.CONFUSED)
+                delay(1_500)
+                renderer.play(AnimState.IDLE)
+                renderer.setEmotion(Emotion.NEUTRAL, 0.5f)
+            }
+        }
+    }
+
+    private fun onLongPress() {
+        startActivity(
+            packageManager.getLaunchIntentForPackage(packageName)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: return,
+        )
+    }
+
+    private fun onDragEnd() {
+        val snapped = Placement.snapToEdge(Point(params.x, params.y), windowSize(), screenSize(), insets())
+        params.x = snapped.x
+        params.y = snapped.y
+        view?.let { windowManager.updateViewLayout(it, params) }
+        val normalized = Placement.normalize(snapped, windowSize(), screenSize())
+        prefs.edit().putFloat("x", normalized.x).putFloat("y", normalized.y).apply()
+        renderer.play(AnimState.IDLE)
+    }
+
+    private fun windowSize() = Size(params.width, params.height)
+
+    private fun screenSize(): Size {
+        val bounds = windowManager.currentWindowMetrics.bounds
+        return Size(bounds.width(), bounds.height())
+    }
+
+    private fun insets(): Insets {
+        val i = windowManager.currentWindowMetrics.windowInsets
+            .getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+        return Insets(left = 0, top = i.top, right = 0, bottom = i.bottom)
+    }
+
+    /**
+     * Arrastar usa coordenadas absolutas da tela (rawX/rawY): como a própria janela
+     * se move com o dedo, coordenadas locais oscilariam.
+     */
+    private inner class DragAndTapListener : android.view.View.OnTouchListener {
+        private val slop = ViewConfiguration.get(this@OverlayService).scaledTouchSlop
+        private val longPressMillis = ViewConfiguration.getLongPressTimeout().toLong()
+        private var downX = 0f
+        private var downY = 0f
+        private var startX = 0
+        private var startY = 0
+        private var downTime = 0L
+        private var dragging = false
+
+        override fun onTouch(v: android.view.View, event: MotionEvent): Boolean {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    startX = params.x
+                    startY = params.y
+                    downTime = event.eventTime
+                    dragging = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downX
+                    val dy = event.rawY - downY
+                    if (!dragging && (abs(dx) > slop || abs(dy) > slop)) {
+                        dragging = true
+                        renderer.play(AnimState.DRAGGED)
+                    }
+                    if (dragging) {
+                        val p = Placement.clamp(
+                            Point(startX + dx.roundToInt(), startY + dy.roundToInt()), windowSize(), screenSize(), insets(),
+                        )
+                        params.x = p.x
+                        params.y = p.y
+                        windowManager.updateViewLayout(v, params)
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    when {
+                        dragging -> onDragEnd()
+                        event.eventTime - downTime >= longPressMillis -> onLongPress()
+                        else -> {
+                            v.performClick()
+                            onTap()
+                        }
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> if (dragging) onDragEnd()
+            }
+            return true
+        }
+    }
+
+    companion object {
+        const val ACTION_STOP = "com.joctaeng.jarvis.overlay.STOP"
+        private const val CHANNEL_ID = "overlay"
+        private const val NOTIFICATION_ID = 1
+        private const val CHARACTER_SIZE_DP = 88
+
+        fun start(context: Context) {
+            ContextCompat.startForegroundService(context, Intent(context, OverlayService::class.java))
+        }
+
+        fun stop(context: Context) {
+            context.startService(Intent(context, OverlayService::class.java).setAction(ACTION_STOP))
+        }
+    }
+}

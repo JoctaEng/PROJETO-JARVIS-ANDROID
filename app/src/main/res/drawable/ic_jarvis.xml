@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ícone provisório: rostinho do personagem placeholder -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#5B8DEF" android:pathData="M54,54m-44,0a44,44 0,1 1,88 0a44,44 0,1 1,-88 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M40,48m-9,0a9,10 0,1 1,18 0a9,10 0,1 1,-18 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M68,48m-9,0a9,10 0,1 1,18 0a9,10 0,1 1,-18 0" />
+    <path android:fillColor="#1E2340" android:pathData="M41,50m-4.5,0a4.5,4.5 0,1 1,9 0a4.5,4.5 0,1 1,-9 0" />
+    <path android:fillColor="#1E2340" android:pathData="M69,50m-4.5,0a4.5,4.5 0,1 1,9 0a4.5,4.5 0,1 1,-9 0" />
+    <path android:strokeColor="#1E2340" android:strokeWidth="4" android:strokeLineCap="round"
+        android:pathData="M44,68 Q54,77 64,68" />
+</vector>
