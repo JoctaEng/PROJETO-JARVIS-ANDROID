@@ -12,7 +12,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -171,14 +170,50 @@ private class ArtFade {
     var changedAt = 0f
 }
 
-/** Estado recolhido: apenas um risquinho discreto, sem animação. */
+/**
+ * Estado recolhido: uma galáxia em disco vista de lado, com inclinação leve (~14° acima do horizonte)
+ * para dar perspectiva 3D. Disco achatado, núcleo brilhante, braços espirais em pontos de luz; a metade
+ * da frente (mais perto de quem olha) é mais clara e a de trás mais fraca. Estática (0 fps).
+ */
 private fun DrawScope.drawRisquinho() {
-    val w = size.width * 0.72f
-    val h = (size.height * 0.2f).coerceAtLeast(3f)
-    val topLeft = Offset((size.width - w) / 2f, (size.height - h) / 2f)
-    val radius = CornerRadius(h / 2f, h / 2f)
-    drawRoundRect(Color(0xFF00E5FF).copy(alpha = 0.18f), topLeft - Offset(h, h), Size(w + 2 * h, h * 3f), CornerRadius(h * 1.5f, h * 1.5f))
-    drawRoundRect(Color(0xFF00E5FF).copy(alpha = 0.7f), topLeft, Size(w, h), radius)
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+    val rx = size.width * 0.46f
+    val tilt = 0.24f // sen(14°): achatamento vertical do disco
+    val cyan = Color(0xFF00E5FF)
+    val violet = Color(0xFF7C4DFF)
+
+    // Halo do disco, achatado pela inclinação.
+    withTransform({ scale(1f, tilt, Offset(cx, cy)) }) {
+        drawCircle(
+            brush = Brush.radialGradient(listOf(cyan.copy(alpha = 0.40f), violet.copy(alpha = 0.22f), Color.Transparent), Offset(cx, cy), rx),
+            radius = rx, center = Offset(cx, cy),
+        )
+    }
+    // Pontos de luz nos braços espirais (determinístico: sempre o mesmo desenho).
+    val arms = 2
+    val perArm = 26
+    for (a in 0 until arms) {
+        for (k in 0 until perArm) {
+            val f = (k + 1f) / perArm
+            val radius = rx * (0.12f + 0.88f * f)
+            val ang = a * PI.toFloat() + f * 3.6f + (k % 3) * 0.06f
+            val x = cx + radius * kotlin.math.cos(ang)
+            val ySin = sin(ang)
+            val y = cy + radius * ySin * tilt
+            val front = ySin > 0f // metade de baixo na tela = mais perto do observador
+            val alpha = (if (front) 0.95f else 0.45f) * (1f - 0.55f * f)
+            val dot = (if (front) 1.5f else 1.1f) * (1.2f - 0.6f * f)
+            drawCircle(Color.White.copy(alpha = alpha), radius = dot, center = Offset(x, y))
+        }
+    }
+    // Núcleo (bojo) brilhante, levemente alongado.
+    withTransform({ scale(1f, 0.55f, Offset(cx, cy)) }) {
+        drawCircle(
+            brush = Brush.radialGradient(listOf(Color.White, cyan.copy(alpha = 0.8f), Color.Transparent), Offset(cx, cy), rx * 0.28f),
+            radius = rx * 0.28f, center = Offset(cx, cy),
+        )
+    }
 }
 
 private val BodyBase = Color(0xFF5B8DEF)

@@ -522,8 +522,8 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         private const val NOTIFICATION_ID = 1
         const val MIN_SIZE_DP = 56
         const val MAX_SIZE_DP = 180
-        private const val RISK_WIDTH_DP = 44
-        private const val RISK_HEIGHT_DP = 22
+        private const val RISK_WIDTH_DP = 64
+        private const val RISK_HEIGHT_DP = 28
         private const val IDLE_HIDE_MILLIS = 40_000L
         private const val ENGAGE_MILLIS = 6_000L
 
