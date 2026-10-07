@@ -254,21 +254,33 @@ class ChatActivity : ComponentActivity() {
             return
         }
         val mine = entry.role == Role.USER
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
-            Text(
-                text = entry.text.ifEmpty { "…" },
-                modifier = Modifier.widthIn(max = 300.dp)
-                    .background(
-                        if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                        RoundedCornerShape(16.dp),
-                    )
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                color = if (mine) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        val bubble = Modifier.widthIn(max = 300.dp)
+            .background(
+                if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                RoundedCornerShape(16.dp),
             )
-            if (!mine && entry.brain != null && !entry.streaming) {
-                Text(entry.brain, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+        val textColor = if (mine) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+            if (!mine && needsFormatting(entry.text)) {
+                Box(bubble) {
+                    FormattedText(entry.text, textColor, MaterialTheme.colorScheme.primary, Modifier.fillMaxWidth())
+                }
+            } else {
+                Text(text = entry.text.ifEmpty { "…" }, modifier = bubble, color = textColor)
+            }
+            if (!mine && !entry.streaming && entry.text.isNotBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    entry.brain?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    TextButton(onClick = { copyToClipboard(entry.text) }) { Text("Copiar", style = MaterialTheme.typography.labelSmall) }
+                }
             }
         }
+    }
+
+    private fun copyToClipboard(text: String) {
+        val clipboard = getSystemService(android.content.ClipboardManager::class.java) ?: return
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Resposta do Euno", text))
     }
 
     companion object {

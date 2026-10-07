@@ -30,6 +30,11 @@ data class PromptContext(
  * a versão compacta.
  */
 object PersonaEngine {
+    /** A tela desenha LaTeX e a voz o lê em português; um único padrão evita fórmulas soltas em texto puro. */
+    const val MATH_RULE =
+        "Toda fórmula, equação ou expressão matemática vai em LaTeX: \$...\$ dentro da frase e \$\$...\$\$ em linha própria " +
+            "(ex.: \$\\Delta = b^2 - 4ac\$). Não use \\( \\), \\[ \\] nem escreva fórmulas com caracteres soltos como x^2 fora do LaTeX."
+
 
     fun systemPrompt(
         userName: String,
@@ -50,7 +55,9 @@ object PersonaEngine {
             appendLine("Sua resposta será falada em voz alta: use frases curtas, sem listas, tabelas, emojis ou markdown.")
         } else {
             appendLine("Prefira respostas curtas; aprofunde só se pedirem.")
+            appendLine("Formatação: Markdown simples (negrito, listas, títulos curtos, tabelas pequenas).")
         }
+        appendLine(MATH_RULE)
         if (!compact) {
             appendLine("Regras de caráter:")
             appendLine("- Nunca diga que executou uma ação que não executou. Hoje você ainda não tem acesso a agenda, arquivos ou outros apps; se pedirem, diga com honestidade que isso chega nas próximas versões.")

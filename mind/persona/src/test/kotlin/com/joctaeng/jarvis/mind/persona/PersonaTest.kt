@@ -62,6 +62,20 @@ class MemoryCommandsTest {
 }
 
 class SentenceChunkerTest {
+    @Test fun neverSplitsInsideFormulas() {
+        val c = SentenceChunker()
+        val out = c.feed("Use a fórmula \$x = \\frac{-b \\pm \\sqrt{\\Delta}}{2a}. Ok\$ para achar as raízes. Depois ")
+        assertEquals(listOf("Use a fórmula \$x = \\frac{-b \\pm \\sqrt{\\Delta}}{2a}. Ok\$ para achar as raízes."), out)
+        val display = SentenceChunker().feed("Veja:\n\$\$a: b. c\$\$\nFim da explicação. Mais ")
+        assertEquals(listOf("Veja:\n\$\$a: b. c\$\$", "Fim da explicação."), display)
+    }
+
+    @Test fun moneyAndStrayDollarDoNotBlockSpeech() {
+        assertEquals(listOf("Custa R\$ 10.", "Muito barato!"), SentenceChunker().feed("Custa R\$ 10. Muito barato! "))
+        val out = SentenceChunker().feed("Um cifrão \$ solto aqui\nE a frase seguinte termina. Fim ")
+        assertEquals("E a frase seguinte termina.", out.last())
+    }
+
     @Test fun releasesCompleteSentencesOnly() {
         val c = SentenceChunker()
         assertEquals(emptyList(), c.feed("Bom dia, Joca"))
@@ -79,6 +93,17 @@ class SentenceChunkerTest {
 }
 
 class PersonaEngineTest {
+    @Test fun asksForLatexMathInEveryMode() {
+        for (speaking in listOf(true, false)) for (compact in listOf(true, false)) {
+            val prompt = PersonaEngine.systemPrompt(
+                userName = "Joctã", character = CharacterCatalog.default, characterName = "", mode = PersonaMode.entries.first(),
+                memories = emptyList(), context = PromptContext("hoje", offline = false, privateMode = false, speakingAloud = speaking),
+                compact = compact,
+            )
+            assertTrue("LaTeX" in prompt && "\$\\Delta = b^2 - 4ac\$" in prompt, prompt)
+        }
+    }
+
     private val ctx = PromptContext("terça-feira, 10:30", offline = false, privateMode = false, speakingAloud = true)
 
     @Test fun promptCarriesModeMemoriesAndRules() {

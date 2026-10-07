@@ -1,5 +1,6 @@
 package com.joctaeng.jarvis.voice
 
+import com.joctaeng.jarvis.mind.persona.SpokenText
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
@@ -155,9 +156,8 @@ class VoiceOutput(context: Context, private val settings: AppSettings) {
 
     private fun preferredEngine(): String? = engines().firstOrNull { it.packageName == GOOGLE_TTS }?.packageName
 
-    /** Remove marcações que a voz leria em voz alta ("asterisco"). */
-    private fun clean(text: String): String =
-        text.replace(Regex("[*_#`~>|]"), " ").replace(Regex("\\s+"), " ").trim()
+    /** Markdown sai e fórmula vira fala ("b ao quadrado menos 4 a c"), em vez de "asterisco" e "barra frac". */
+    private fun clean(text: String): String = SpokenText.forSpeech(text)
 
     private fun qualityLabel(q: Int) = when {
         q >= Voice.QUALITY_VERY_HIGH -> "muito alta"

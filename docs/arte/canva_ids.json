@@ -1,0 +1,50 @@
+{
+  "joca": {
+    "neutro": "MAHXTNwURk0",
+    "feliz": "MAHXTMWpy5g",
+    "pensativo": "MAHXTJe1h7Q",
+    "falando": "MAHXTBZ5iB0",
+    "ouvindo": "MAHXTDqtbtw",
+    "surpreso": "MAHXTM8heM8",
+    "preocupado": "MAHXTLZTLzE",
+    "dormindo": "MAHXTH9JdPk"
+  },
+  "luna": {
+    "neutro": "MAHXTBUdGA8",
+    "feliz": "MAHXTOUoH8o",
+    "pensativo": "MAHXTM2bDfc",
+    "falando": "MAHXTN68dmY",
+    "ouvindo": "MAHXTFhxFf4",
+    "surpreso": "MAHXTGueu8w",
+    "preocupado": "MAHXTMlZQ-I",
+    "dormindo": "MAHXTLSBj6U"
+  },
+  "thor": {
+    "neutro": "MAHXTObcyw4",
+    "feliz": "MAHXTNHe0m8",
+    "pensativo": "MAHXTOqpB8s",
+    "falando": "MAHXTOiVZQA",
+    "ouvindo": "MAHXTNQWql4",
+    "surpreso": "MAHXTOixFxY",
+    "preocupado": "MAHXTAPg8tA",
+    "dormindo": "MAHXTO-kbIY"
+  },
+  "nina": {
+    "neutro": "MAHXTE932s0"
+  },
+  "selene": {
+    "neutro": "MAHXTHd5eaY"
+  },
+  "rex": {
+    "neutro": "MAHXTLCsHcw"
+  },
+  "maya": {
+    "neutro": "MAHXTFX0cWQ"
+  },
+  "kiko": {
+    "neutro": "MAHXTEuH-Mc"
+  },
+  "astra": {
+    "neutro": "MAHXTOMSUG8"
+  }
+}
