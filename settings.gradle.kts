@@ -39,6 +39,7 @@ include(
     ":action:gateway",
     ":system:resources",
     ":presence:placement",
+    ":presence:expression",
 )
 
 // Módulos Android: dependem do Android Gradle Plugin (Google Maven).

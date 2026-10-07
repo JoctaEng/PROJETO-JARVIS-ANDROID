@@ -16,7 +16,23 @@ Uma pasta por personagem. O nome de cada pasta é o identificador usado no app (
 | `preocupado.png` | Preocupado / erro |
 | `dormindo.png` | Olhos fechados, em repouso longo |
 
-**Formato:** PNG com fundo transparente, quadrado (512×512 ou maior), mesmo enquadramento (busto, centralizado), mesma roupa e mesmas cores em todas as expressões. Se só houver `referencia.png`, ela já é usada como imagem fixa do personagem.
+**Formato:** PNG ou JPG, quadrado (512×512 ou maior), **mesmo tamanho e mesmo enquadramento** (busto, centralizado), mesma roupa e mesmas cores em todas as expressões. O fundo não precisa ser transparente de verdade: o xadrez "falso" que o Gemini desenha, ou um fundo branco liso, é removido automaticamente.
+
+**Expressões que faltarem** usam uma substituta: `ouvindo` → `neutro`; `preocupado` → `pensativo` → `neutro`; as demais → `neutro`. Só `neutro` é indispensável.
+
+## Como a arte chega ao app
+
+```bash
+pip install "rembg[cpu]" pillow scipy
+python tools/arte/preparar_arte.py <personagem>
+```
+
+O script recorta o fundo, aplica o mesmo enquadramento a todas as expressões e grava `app/src/main/res/drawable-nodpi/arte_<personagem>_<expressao>.webp` (512×512, ~35 KB). Depois, registre o personagem em `app/.../character/CharacterArt.kt`. No app: boca alterna `falando`/expressão base enquanto fala; `dormindo` também serve de piscada a cada ~4 s em repouso.
+
+| Personagem | Arte no app |
+|---|---|
+| jocta_casual | ✅ neutro, feliz, pensativo, falando, surpreso, dormindo (faltam ouvindo, preocupado) |
+| demais | ⏳ boneco provisório colorido |
 
 **Prompt sugerido** (troque só a palavra entre colchetes):
 

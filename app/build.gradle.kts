@@ -51,6 +51,7 @@ dependencies {
     implementation(project(":action:gateway"))
     implementation(project(":system:resources"))
     implementation(project(":presence:placement"))
+    implementation(project(":presence:expression"))
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)

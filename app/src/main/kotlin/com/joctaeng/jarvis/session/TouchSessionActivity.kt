@@ -62,6 +62,7 @@ class TouchSessionActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         OverlayBus.sessionActive.value = true
+        renderer.applyProfile(JarvisApp.from(this).settings.character)
         renderer.play(AnimState.LISTENING)
         renderer.setEmotion(Emotion.HAPPY, 0.7f)
         setContent { MaterialTheme { SessionCard() } }

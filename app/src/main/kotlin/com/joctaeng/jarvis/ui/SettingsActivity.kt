@@ -178,7 +178,7 @@ class SettingsActivity : ComponentActivity() {
     private fun CharacterRow(profile: CharacterProfile, selected: Boolean, onClick: () -> Unit) {
         val renderer = remember(profile.id) {
             ComposeCharacterRenderer().apply {
-                applyColor(profile.color)
+                applyProfile(profile)
                 setEmotion(Emotion.HAPPY, 0.6f)
             }
         }

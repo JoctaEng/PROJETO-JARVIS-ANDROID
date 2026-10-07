@@ -203,7 +203,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     /** Tamanho alterado em "Meu Euno" é aplicado na hora. */
     private fun followSettings() = lifecycleScope.launch {
         app.settings.version.collect {
-            renderer.applyColor(app.settings.character.color)
+            renderer.applyProfile(app.settings.character)
             resize(dpToPx(app.settings.characterSizeDp))
         }
     }

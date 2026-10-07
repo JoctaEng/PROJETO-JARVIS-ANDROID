@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
         val version by app.settings.version.collectAsState()
         val profile = app.settings.character
         val renderer = remember { ComposeCharacterRenderer().apply { play(AnimState.IDLE) } }
-        renderer.applyColor(profile.color)
+        renderer.applyProfile(profile)
         renderer.setEmotion(Emotion.HAPPY, 0.6f)
         val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh++ }
         val canOverlay = refreshKey >= 0 && SystemSettings.canDrawOverlays(this)

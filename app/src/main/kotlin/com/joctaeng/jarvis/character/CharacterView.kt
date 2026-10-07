@@ -16,10 +16,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import com.joctaeng.jarvis.core.contracts.CharacterRenderer
 import com.joctaeng.jarvis.core.model.AnimState
 import com.joctaeng.jarvis.core.model.Emotion
+import com.joctaeng.jarvis.mind.persona.CharacterProfile
+import com.joctaeng.jarvis.presence.expression.Expression
+import com.joctaeng.jarvis.presence.expression.ExpressionPicker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
@@ -27,9 +36,8 @@ import kotlin.math.abs
 import kotlin.math.sin
 
 /**
- * Personagem provisório da Fase 0, desenhado em Compose (sem arquivos de arte).
- * Serve para validar overlay, toque, estados e custo de renderização (PoC 0.5).
- * Será substituído pelo renderer Rive (MVP 1) sem mudar quem usa [CharacterRenderer].
+ * Personagem em Compose: usa a arte 2D do personagem quando existe ([CharacterArt])
+ * e, sem arte, o boneco provisório colorido desenhado em código.
  */
 class ComposeCharacterRenderer : CharacterRenderer {
     var emotion by mutableStateOf(Emotion.NEUTRAL)
@@ -43,11 +51,15 @@ class ComposeCharacterRenderer : CharacterRenderer {
     var mouthLevel by mutableFloatStateOf(0f)
         private set
 
-    /** Cor do personagem escolhido (provisório até a arte final de cada um). */
+    /** Cor do personagem escolhido: corpo do boneco provisório e anel de "ouvindo". */
     var bodyColor by mutableStateOf(BodyBase)
+        private set
+    var characterId by mutableStateOf("")
+        private set
 
-    fun applyColor(argb: Long) {
-        bodyColor = Color(argb.toInt())
+    fun applyProfile(profile: CharacterProfile) {
+        bodyColor = Color(profile.color.toInt())
+        characterId = profile.id
     }
 
     override fun setEmotion(emotion: Emotion, intensity: Float) {
@@ -91,9 +103,11 @@ fun CharacterView(
             delay(frameMillis)
         }
     }
+    val resources = LocalContext.current.resources
+    val art = remember(renderer.characterId) { CharacterArt.load(resources, renderer.characterId) }
     Canvas(modifier) {
         onFrame?.invoke()
-        drawCharacter(renderer, time)
+        if (art != null) drawArt(renderer, art, time, blink = animate) else drawCharacter(renderer, time)
     }
 }
 
@@ -102,29 +116,63 @@ private val BodyError = Color(0xFFE57373)
 private val Ink = Color(0xFF1E2340)
 private val Cheek = Color(0x66FF8FA3)
 
+private fun breathing(state: AnimState, t: Float): Float {
+    val period = if (state == AnimState.SLEEPING) 4.5f else 3.2f
+    return sin(2f * PI.toFloat() * t / period)
+}
+
+private fun bobbing(state: AnimState, t: Float): Float = when (state) {
+    AnimState.LISTENING -> 0.03f * sin(2f * PI.toFloat() * t / 0.9f)
+    AnimState.CELEBRATING, AnimState.WAKING -> 0.06f * abs(sin(2f * PI.toFloat() * t / 0.5f))
+    else -> 0f
+}
+
+private fun DrawScope.drawListeningRing(r: ComposeCharacterRenderer, t: Float, center: Offset, radius: Float) {
+    if (r.state != AnimState.LISTENING) return
+    val pulse = (t % 1.2f) / 1.2f
+    drawCircle(
+        color = r.bodyColor.copy(alpha = 0.35f * (1f - pulse)),
+        radius = radius * (1.02f + 0.18f * pulse),
+        center = center,
+        style = Stroke(width = radius * 0.06f),
+    )
+}
+
+/** Piscada: troca rápida para a arte de olhos fechados enquanto está em repouso. */
+private fun isBlinking(t: Float): Boolean = (t + 2f) % 4.2f < 0.14f
+
+private fun DrawScope.drawArt(r: ComposeCharacterRenderer, art: Map<Expression, ImageBitmap>, t: Float, blink: Boolean) {
+    var wanted = ExpressionPicker.pick(r.state, r.emotion, r.mouthLevel)
+    if (blink && wanted == Expression.NEUTRO && Expression.DORMINDO in art && isBlinking(t)) wanted = Expression.DORMINDO
+    val image = ExpressionPicker.resolve(wanted, art) ?: return
+
+    val side = size.minDimension
+    drawListeningRing(r, t, Offset(size.width / 2f, size.height / 2f), side * 0.42f)
+    val breath = 1f + 0.012f * breathing(r.state, t)
+    val lift = bobbing(r.state, t) * side
+    val pivot = Offset(size.width / 2f, size.height)
+    withTransform({
+        translate(top = -lift)
+        scale(breath, breath, pivot)
+    }) {
+        drawImage(
+            image,
+            dstOffset = IntOffset(((size.width - side) / 2f).toInt(), ((size.height - side) / 2f).toInt()),
+            dstSize = IntSize(side.toInt(), side.toInt()),
+            filterQuality = FilterQuality.Medium,
+        )
+    }
+}
+
 private fun DrawScope.drawCharacter(r: ComposeCharacterRenderer, t: Float) {
     val state = r.state
     val sleeping = state == AnimState.SLEEPING
-    val breathPeriod = if (sleeping) 4.5f else 3.2f
-    val breath = 1f + 0.025f * sin(2f * PI.toFloat() * t / breathPeriod)
-    val bob = when (state) {
-        AnimState.LISTENING -> 0.03f * sin(2f * PI.toFloat() * t / 0.9f)
-        AnimState.CELEBRATING, AnimState.WAKING -> 0.06f * abs(sin(2f * PI.toFloat() * t / 0.5f))
-        else -> 0f
-    }
+    val breath = 1f + 0.025f * breathing(state, t)
+    val bob = bobbing(state, t)
     val radius = size.minDimension * 0.40f * breath
     val center = Offset(size.width / 2f, size.height / 2f - bob * size.minDimension)
 
-    // Anel de "estou ouvindo".
-    if (state == AnimState.LISTENING) {
-        val pulse = (t % 1.2f) / 1.2f
-        drawCircle(
-            color = r.bodyColor.copy(alpha = 0.35f * (1f - pulse)),
-            radius = radius * (1.02f + 0.18f * pulse),
-            center = center,
-            style = Stroke(width = radius * 0.06f),
-        )
-    }
+    drawListeningRing(r, t, center, radius)
 
     val base = if (state == AnimState.ERROR) BodyError else r.bodyColor
     drawCircle(

@@ -85,7 +85,7 @@ class ChatActivity : ComponentActivity() {
         listener = SpeechListener(this)
         OverlayBus.sessionActive.value = true
         CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking)
-        lifecycleScope.launch { app.settings.version.collect { renderer.applyColor(app.settings.character.color) } }
+        lifecycleScope.launch { app.settings.version.collect { renderer.applyProfile(app.settings.character) } }
         voiceMode = app.settings.listenOnOpen && intent.getBooleanExtra(EXTRA_FROM_TAP, false)
 
         lifecycleScope.launch {
