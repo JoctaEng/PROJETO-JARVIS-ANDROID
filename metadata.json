@@ -1,0 +1,8 @@
+{
+  "name": "PROJETO JARVIS",
+  "description": "Personal AI Character para Android — Mascote 3D flutuante e assistente personificado com IA híbrida.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
