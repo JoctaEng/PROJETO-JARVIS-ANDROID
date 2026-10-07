@@ -7,6 +7,7 @@ import com.joctaeng.jarvis.conversation.ConversationController
 import com.joctaeng.jarvis.diagnostics.Diagnostics
 import com.joctaeng.jarvis.mind.memory.MemoryStore
 import com.joctaeng.jarvis.poc.ModelDownload
+import com.joctaeng.jarvis.tools.Toolbox
 import com.joctaeng.jarvis.poc.ModelStore
 import com.joctaeng.jarvis.settings.AppSettings
 import com.joctaeng.jarvis.settings.SecretStore
@@ -29,6 +30,7 @@ class JarvisApp : Application() {
     val memory: MemoryStore by lazy { MemoryStore(File(filesDir, "memory/memory.json")) }
     val voice: VoiceOutput by lazy { VoiceOutput(this, settings).also { it.start() } }
     val conversation: ConversationController by lazy { ConversationController(this) }
+    val toolbox: Toolbox by lazy { Toolbox(this) }
 
     override fun onCreate() {
         super.onCreate()

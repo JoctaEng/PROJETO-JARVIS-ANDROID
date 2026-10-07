@@ -30,21 +30,63 @@
     "dormindo": "MAHXTO-kbIY"
   },
   "nina": {
-    "neutro": "MAHXTE932s0"
+    "neutro": "MAHXTE932s0",
+    "feliz": "MAHXTFJWW8k",
+    "pensativo": "MAHXTGCvoW8",
+    "falando": "MAHXTGh99Yk",
+    "ouvindo": "MAHXTNSp8uE",
+    "surpreso": "MAHXTMEnNYs",
+    "preocupado": "MAHXTEa8gqk",
+    "dormindo": "MAHXTFKMX8M"
   },
   "selene": {
-    "neutro": "MAHXTHd5eaY"
+    "neutro": "MAHXTHd5eaY",
+    "feliz": "MAHXTIIsKRE",
+    "pensativo": "MAHXTFMSGJs",
+    "falando": "MAHXTL2fhyU",
+    "ouvindo": "MAHXTL2-vFE",
+    "surpreso": "MAHXTA9UJOs",
+    "preocupado": "MAHXTJkXDZI",
+    "dormindo": "MAHXTEGZloE"
   },
   "rex": {
-    "neutro": "MAHXTLCsHcw"
+    "neutro": "MAHXTLCsHcw",
+    "feliz": "MAHXTC5O4ic",
+    "pensativo": "MAHXTETmGQM",
+    "falando": "MAHXTHo2hQg",
+    "ouvindo": "MAHXTKJkXoc",
+    "surpreso": "MAHXTBOKnWg",
+    "preocupado": "MAHXTCwB8z4",
+    "dormindo": "MAHXTPWOH6w"
   },
   "maya": {
-    "neutro": "MAHXTFX0cWQ"
+    "neutro": "MAHXTFX0cWQ",
+    "feliz": "MAHXTOsK0Ik",
+    "pensativo": "MAHXTFSpARQ",
+    "falando": "MAHXTFtL4dw",
+    "ouvindo": "MAHXTKMDd3k",
+    "surpreso": "MAHXTDxbrH4",
+    "preocupado": "MAHXTMzXWcs",
+    "dormindo": "MAHXTB66y5M"
   },
   "kiko": {
-    "neutro": "MAHXTEuH-Mc"
+    "neutro": "MAHXTEuH-Mc",
+    "feliz": "MAHXTKTF8Ds",
+    "pensativo": "MAHXTAspAho",
+    "falando": "MAHXTLrcZms",
+    "ouvindo": "MAHXTEXQsvU",
+    "surpreso": "MAHXTNzK-Yw",
+    "preocupado": "MAHXTFBLrok",
+    "dormindo": "MAHXTBXcIrU"
   },
   "astra": {
-    "neutro": "MAHXTOMSUG8"
+    "neutro": "MAHXTOMSUG8",
+    "feliz": "MAHXTFuijLc",
+    "pensativo": "MAHXTK0wfYc",
+    "falando": "MAHXTLiRu14",
+    "ouvindo": "MAHXTPH_Z5U",
+    "surpreso": "MAHXTDntnJQ",
+    "preocupado": "MAHXTPnyFkA",
+    "dormindo": "MAHXTBk5WvE"
   }
 }

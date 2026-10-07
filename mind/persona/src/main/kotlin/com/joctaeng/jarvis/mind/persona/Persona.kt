@@ -44,6 +44,8 @@ object PersonaEngine {
         memories: List<String>,
         context: PromptContext,
         compact: Boolean = false,
+        /** Seção de ferramentas (ToolProtocol); fica antes das partes que mudam, para o cache de prefixo valer. */
+        toolsSection: String = "",
     ): String = buildString {
         val name = characterName.ifBlank { character.defaultName }
         appendLine("Você é ${character.gender.article}$name, o personagem digital pessoal de $userName: um companheiro que vive no celular dele.")
@@ -66,6 +68,7 @@ object PersonaEngine {
             appendLine("- Suas emoções são simuladas para se comunicar; não finja sentir de verdade.")
         }
         appendLine(EmotionTag.INSTRUCTION)
+        if (toolsSection.isNotBlank()) appendLine(toolsSection)
         if (context.offline) appendLine("Você está offline, usando o cérebro do próprio celular.")
         if (context.privateMode) appendLine("Modo Privado ativo: nada desta conversa será memorizado.")
         val shown = if (compact) memories.takeLast(10) else memories.takeLast(40)

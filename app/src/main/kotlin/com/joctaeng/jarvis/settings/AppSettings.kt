@@ -6,6 +6,7 @@ import com.joctaeng.jarvis.core.model.ProviderLocation
 import com.joctaeng.jarvis.mind.local.LocalBackend
 import com.joctaeng.jarvis.mind.orchestrator.BrainPreference
 import com.joctaeng.jarvis.character.CharacterArt
+import com.joctaeng.jarvis.core.model.AutonomyLevel
 import com.joctaeng.jarvis.mind.persona.CharacterCatalog
 import com.joctaeng.jarvis.mind.persona.PersonaMode
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -81,6 +82,28 @@ class AppSettings(context: Context) {
     var continuousVoice by boolean("continuousVoice", true)
     var speakReplies by boolean("speakReplies", true)
     var privateMode by boolean("privateMode", false)
+
+    /** Nível de autonomia (seção 10.2). Operador: consultas livres, ações pedem confirmação. */
+    var autonomy by enum("autonomy", AutonomyLevel.OPERATOR)
+    private var disabledToolsRaw by string("disabledTools", "")
+    private var disabledMcpRaw by string("disabledMcpServers", "")
+
+    /** Servidores MCP na rede, uma linha "nome|url" cada (PC, Tailscale...). */
+    var networkMcpServersRaw by string("networkMcpServers", "")
+
+    fun toolEnabled(name: String): Boolean = name !in disabledToolsRaw.split(',')
+    fun setToolEnabled(name: String, enabled: Boolean) {
+        val set = disabledToolsRaw.split(',').filter { it.isNotBlank() }.toMutableSet()
+        if (enabled) set -= name else set += name
+        disabledToolsRaw = set.joinToString(",")
+    }
+
+    fun mcpServerEnabled(id: String): Boolean = id !in disabledMcpRaw.split(',')
+    fun setMcpServerEnabled(id: String, enabled: Boolean) {
+        val set = disabledMcpRaw.split(',').filter { it.isNotBlank() }.toMutableSet()
+        if (enabled) set -= id else set += id
+        disabledMcpRaw = set.joinToString(",")
+    }
 
     private fun string(key: String, default: String) = pref({ prefs.getString(key, default) ?: default }) { putString(key, it) }
     private fun int(key: String, default: Int) = pref({ prefs.getInt(key, default) }) { putInt(key, it) }

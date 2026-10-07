@@ -37,6 +37,7 @@ include(
     ":mind:memory",
     ":mind:provider-cloud",
     ":action:gateway",
+    ":action:mcp",
     ":system:resources",
     ":presence:placement",
     ":presence:expression",

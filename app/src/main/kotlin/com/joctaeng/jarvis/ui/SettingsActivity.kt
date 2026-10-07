@@ -50,6 +50,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.joctaeng.jarvis.JarvisApp
+import androidx.compose.runtime.collectAsState
+import com.joctaeng.jarvis.tools.McpServerInfo
+import com.joctaeng.jarvis.core.model.AutonomyLevel
 import com.joctaeng.jarvis.character.CharacterView
 import com.joctaeng.jarvis.character.CharacterArt
 import com.joctaeng.jarvis.character.ComposeCharacterRenderer
@@ -98,6 +101,8 @@ class SettingsActivity : ComponentActivity() {
                         PersonalitySection()
                         ScreenSection()
                         VoiceSection()
+                        ActionsSection()
+                        HistorySection()
                         PrivacySection()
                         MemorySection()
                     }
@@ -598,7 +603,97 @@ class SettingsActivity : ComponentActivity() {
                 privateOn = it
                 settings.privateMode = it
             }
-            Hint("No Modo Privado só o cérebro do celular é usado e nada é memorizado. Autonomia atual: Assistente — ainda não executo ações em outros apps.")
+            Hint("No Modo Privado só o cérebro do celular é usado e nada é memorizado.")
+        }
+    }
+
+    @Composable
+    private fun ActionsSection() {
+        val scope = rememberCoroutineScope()
+        var autonomy by remember { mutableStateOf(settings.autonomy) }
+        var refresh by remember { mutableIntStateOf(0) }
+        var servers by remember { mutableStateOf(app.toolbox.mcp.discover()) }
+        var serverTools by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+        var network by remember { mutableStateOf(settings.networkMcpServersRaw) }
+        Section("O que ${settings.displayName} pode fazer") {
+            Text("Autonomia", style = MaterialTheme.typography.labelLarge)
+            Choice(
+                listOf(AutonomyLevel.OBSERVER, AutonomyLevel.ASSISTANT, AutonomyLevel.OPERATOR, AutonomyLevel.PERSONAL_AGENT),
+                autonomy,
+                {
+                    when (it) {
+                        AutonomyLevel.OBSERVER -> "Observador: só conversa, não age"
+                        AutonomyLevel.ASSISTANT -> "Assistente: pergunta antes de qualquer ação"
+                        AutonomyLevel.OPERATOR -> "Operador: consulta sozinho, pergunta antes de alterar (recomendado)"
+                        else -> "Agente: faz sozinho o que dá para desfazer; pergunta só o crítico"
+                    }
+                },
+            ) {
+                autonomy = it
+                settings.autonomy = it
+            }
+            Hint("Ações críticas (apagar, enviar em seu nome, pagar) sempre pedem confirmação. Tudo fica no Histórico de ações.")
+
+            Text("No celular", style = MaterialTheme.typography.labelLarge)
+            app.toolbox.native.forEach { tool ->
+                var on by remember(refresh) { mutableStateOf(settings.toolEnabled(tool.name)) }
+                Toggle(tool.description.substringBefore(" (").substringBefore(". "), on) {
+                    on = it
+                    settings.setToolEnabled(tool.name, it)
+                }
+            }
+
+            Text("Apps e servidores conectados (MCP)", style = MaterialTheme.typography.labelLarge)
+            if (servers.isEmpty()) Hint("Nenhum app do celular oferece ferramentas ao ${settings.displayName} ainda. O EduMath passa a aparecer aqui quando estiver atualizado.")
+            servers.forEach { server ->
+                var on by remember(server.id, refresh) { mutableStateOf(settings.mcpServerEnabled(server.id)) }
+                Toggle("${server.name} · ${if (server.kind == McpServerInfo.Kind.ON_DEVICE) "no celular" else "na rede"}", on) {
+                    on = it
+                    settings.setMcpServerEnabled(server.id, it)
+                }
+                serverTools[server.id]?.let { Hint(it) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    servers = app.toolbox.mcp.discover()
+                    scope.launch {
+                        serverTools = servers.associate { server ->
+                            server.id to runCatching { app.toolbox.mcp.listTools(server, refresh = true) }.fold(
+                                { tools -> "${tools.size} ferramentas: " + tools.joinToString { it.title ?: it.name } },
+                                { e -> "Não respondeu: ${e.message}. Se for um app, abra-o uma vez e tente de novo." },
+                            )
+                        }
+                    }
+                }) { Text("Procurar e testar") }
+            }
+            OutlinedTextField(
+                value = network,
+                onValueChange = {
+                    network = it
+                    settings.networkMcpServersRaw = it
+                },
+                label = { Text("Servidores MCP na rede (um por linha: nome|url)") },
+                placeholder = { Text("PC|http://192.168.0.10:5001/mcp") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+            )
+        }
+    }
+
+    @Composable
+    private fun HistorySection() {
+        val entries by app.toolbox.audit.entries.collectAsState()
+        var expanded by remember { mutableStateOf(false) }
+        val date = remember { SimpleDateFormat("dd/MM HH:mm", Locale.forLanguageTag("pt-BR")) }
+        Section("Histórico de ações") {
+            if (entries.isEmpty()) Hint("Nenhuma ação executada ainda.")
+            entries.reversed().take(if (expanded) 200 else 5).forEach { e ->
+                Column {
+                    Text("${e.toolName.replace('_', ' ')} — ${e.outcome}", style = MaterialTheme.typography.bodyMedium)
+                    Hint("${date.format(Date(e.timestampMillis))} · ${e.reason}")
+                }
+            }
+            if (entries.size > 5) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Mostrar menos" else "Mostrar tudo (${entries.size})") }
         }
     }
 

@@ -1,6 +1,14 @@
 package com.joctaeng.jarvis.conversation
 
 import com.joctaeng.jarvis.JarvisApp
+import com.joctaeng.jarvis.action.gateway.AgentEvent
+import com.joctaeng.jarvis.action.gateway.AgentRunner
+import com.joctaeng.jarvis.action.gateway.ToolProtocol
+import com.joctaeng.jarvis.core.contracts.ToolContext
+import com.joctaeng.jarvis.core.model.AutonomyLevel
+import com.joctaeng.jarvis.core.model.ToolResult
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import com.joctaeng.jarvis.core.contracts.LlmChunk
 import com.joctaeng.jarvis.core.contracts.LlmProvider
 import com.joctaeng.jarvis.core.contracts.LocalLlmProvider
@@ -73,6 +81,7 @@ class ConversationController(private val app: JarvisApp) {
     private var calmDown: Job? = null
     private var local: LocalLlmProvider? = null
     private var localKey: String? = null
+    private val sessionId = java.util.UUID.randomUUID().toString()
 
     private val _entries = MutableStateFlow<List<ChatEntry>>(emptyList())
     val entries: StateFlow<List<ChatEntry>> = _entries.asStateFlow()
@@ -138,6 +147,7 @@ class ConversationController(private val app: JarvisApp) {
         }
         val onlyLocal = providers.all { it.location == ProviderLocation.ON_DEVICE } || settings.brainPreference == BrainPreference.LOCAL_ONLY
         val memories = app.memory.all().map { it.text }
+        val tools = if (settings.autonomy == AutonomyLevel.OBSERVER) emptyList() else app.toolbox.enabledTools()
         val prompt = PersonaEngine.systemPrompt(
             userName = settings.userName,
             character = settings.character,
@@ -151,9 +161,10 @@ class ConversationController(private val app: JarvisApp) {
                 speakingAloud = speak,
             ),
             compact = onlyLocal,
+            toolsSection = if (tools.isEmpty()) "" else ToolProtocol.systemSection(tools),
         )
         val history = _entries.value.filter { !it.note && !it.streaming }.takeLast(HISTORY).map { ChatMessage(it.role, it.text) }
-        val request = LlmRequest(prompt, history, maxOutputTokens = if (onlyLocal) 512 else null)
+        val maxTokens = if (onlyLocal) 512 else null
 
         OverlayBus.anim.value = AnimState.THINKING
         OverlayBus.emotion.value = Emotion.THINKING
@@ -164,28 +175,53 @@ class ConversationController(private val app: JarvisApp) {
         val names = providers.associate { it.id to it.displayName }
         var lastNote: String? = null
         var failure: String? = null
+        var newRound = false
 
-        Orchestrator(providers).respond(request, device, RoutingHints(preference = settings.brainPreference)).collect { event ->
-            when (event) {
-                is OrchestratorEvent.Notice -> if (event.text != lastNote) {
-                    lastNote = event.text
-                    addNoteBefore(replyId, event.text)
-                }
-                is OrchestratorEvent.RoutedTo -> edit(replyId) { it.copy(brain = names[event.providerId]) }
-                is OrchestratorEvent.FellBack -> addNoteBefore(replyId, "${names[event.fromProviderId]} falhou (${event.reason}). Tentando outro cérebro…")
-                is OrchestratorEvent.Failed -> failure = event.reason
-                is OrchestratorEvent.Chunk -> when (val chunk = event.chunk) {
-                    is LlmChunk.Text -> {
-                        val visible = parser.feed(chunk.text)
-                        parser.emotion?.let { OverlayBus.emotion.value = it }
-                        if (visible.isNotEmpty()) {
-                            OverlayBus.anim.value = AnimState.IDLE
-                            edit(replyId) { it.copy(text = it.text + visible) }
-                            if (speak) chunker.feed(visible).forEach(voice::speak)
+        val generate: (List<ChatMessage>) -> Flow<LlmChunk> = { messages ->
+            flow {
+                Orchestrator(providers).respond(LlmRequest(prompt, messages, maxTokens), device, RoutingHints(preference = settings.brainPreference)).collect { event ->
+                    when (event) {
+                        is OrchestratorEvent.Notice -> if (event.text != lastNote) {
+                            lastNote = event.text
+                            addNoteBefore(replyId, event.text)
                         }
+                        is OrchestratorEvent.RoutedTo -> edit(replyId) { it.copy(brain = names[event.providerId]) }
+                        is OrchestratorEvent.FellBack -> addNoteBefore(replyId, "${names[event.fromProviderId]} falhou (${event.reason}). Tentando outro cérebro…")
+                        is OrchestratorEvent.Failed -> emit(LlmChunk.Error(event.reason))
+                        is OrchestratorEvent.Chunk -> emit(event.chunk)
                     }
-                    else -> Unit
                 }
+            }
+        }
+
+        val request = history.lastOrNull { it.role == Role.USER }?.text.orEmpty()
+        val runner = AgentRunner(app.toolbox.gateway(tools))
+        runner.run(history, generate, ToolContext(sessionId, "Pedido: ${request.take(120)}"), app.toolbox::confirm).collect { event ->
+            when (event) {
+                is AgentEvent.Text -> {
+                    var visible = parser.feed(event.text)
+                    parser.emotion?.let { OverlayBus.emotion.value = it }
+                    if (visible.isNotEmpty()) {
+                        if (newRound) {
+                            val current = _entries.value.firstOrNull { it.id == replyId }?.text.orEmpty()
+                            if (current.isNotEmpty() && !current.last().isWhitespace()) visible = " " + visible.trimStart()
+                            newRound = false
+                        }
+                        OverlayBus.anim.value = AnimState.IDLE
+                        edit(replyId) { it.copy(text = it.text + visible) }
+                        if (speak) chunker.feed(visible).forEach(voice::speak)
+                    }
+                }
+                is AgentEvent.ToolStarted -> {
+                    OverlayBus.anim.value = AnimState.THINKING
+                    addNoteBefore(replyId, "Executando: ${event.call.toolName.replace('_', ' ')}…")
+                }
+                is AgentEvent.ToolFinished -> {
+                    newRound = true
+                    addNoteBefore(replyId, "${event.call.toolName.replace('_', ' ')}: ${describe(event.result)}")
+                }
+                is AgentEvent.Error -> failure = event.message
+                AgentEvent.Done -> Unit
             }
         }
         val rest = parser.finish()
@@ -204,6 +240,13 @@ class ConversationController(private val app: JarvisApp) {
             edit(replyId) { it.copy(streaming = false) }
             if (failure != null) add(ChatEntry(nextId++, Role.SYSTEM, "Resposta interrompida: $failure", note = true))
         }
+    }
+
+    private fun describe(result: ToolResult): String = when (result) {
+        is ToolResult.Success -> "feito"
+        is ToolResult.Failure -> "falhou (${result.reason})"
+        is ToolResult.Denied -> "não permitido (${result.reason})"
+        ToolResult.Cancelled -> "cancelado"
     }
 
     private suspend fun handleMemory(command: MemoryCommand, speak: Boolean) {

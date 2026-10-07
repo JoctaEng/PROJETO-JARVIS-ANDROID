@@ -51,6 +51,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.joctaeng.jarvis.JarvisApp
+import com.joctaeng.jarvis.tools.ConfirmationCard
 import com.joctaeng.jarvis.character.CharacterSync
 import com.joctaeng.jarvis.character.CharacterView
 import com.joctaeng.jarvis.character.ComposeCharacterRenderer
@@ -152,6 +153,7 @@ class ChatActivity : ComponentActivity() {
         val busy by app.conversation.busy.collectAsState()
         val listening by OverlayBus.listening.collectAsState()
         val speaking by app.voice.speaking.collectAsState()
+        val pendingAction by app.toolbox.pending.collectAsState()
         var input by remember { mutableStateOf("") }
         val listState = rememberLazyListState()
         LaunchedEffect(entries.size, entries.lastOrNull()?.text?.length) {
@@ -207,6 +209,7 @@ class ChatActivity : ComponentActivity() {
                         }
                     }
 
+                    pendingAction?.let { ConfirmationCard(it) }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Conversa por voz", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                         Switch(checked = voiceMode, onCheckedChange = {

@@ -47,6 +47,7 @@ android {
     }
     buildFeatures {
         compose = true
+        aidl = true
     }
 }
 
@@ -66,6 +67,7 @@ dependencies {
     implementation(project(":mind:persona"))
     implementation(project(":mind:memory"))
     implementation(project(":action:gateway"))
+    implementation(project(":action:mcp"))
     implementation(project(":system:resources"))
     implementation(project(":presence:placement"))
     implementation(project(":presence:expression"))
