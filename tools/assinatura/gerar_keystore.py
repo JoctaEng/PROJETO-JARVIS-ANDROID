@@ -38,10 +38,11 @@ def main(out_path: str, password: str) -> None:
         .not_valid_before(datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc))
         .not_valid_after(datetime.datetime(2076, 1, 1, tzinfo=datetime.timezone.utc))
     )
+    # Sem fallback: um certificado não determinístico quebraria as atualizações no lugar.
     try:
         cert = builder.sign(key, hashes.SHA256(), ecdsa_deterministic=True)
     except TypeError:
-        cert = builder.sign(key, hashes.SHA256())
+        sys.exit("ERRO: a versão do 'cryptography' não suporta ECDSA determinístico (precisa >= 43). Abortando para não gerar outra assinatura.")
     data = pkcs12.serialize_key_and_certificates(
         b"euno", key, cert, None, serialization.BestAvailableEncryption(password.encode()),
     )

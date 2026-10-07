@@ -124,10 +124,16 @@ class PersonaEngineTest {
     }
 
     @Test fun promptCarriesUserBioDossier() {
-        val bio = "Prof. Joctã Lindoso Galvão — professor de Matemática Aplicada"
+        val bio = "Professora Ana Exemplo — professora de Matemática Aplicada"
         val prompt = PersonaEngine.systemPrompt("Joctã", CharacterCatalog.default, "", PersonaMode.FRIENDLY, emptyList(), ctx, userBio = bio)
         assertTrue("Dossiê e perfil de Joctã" in prompt)
         assertTrue(bio in prompt)
+    }
+
+    @Test fun userBioIsCapped() {
+        val bio = "x".repeat(PersonaEngine.MAX_BIO_CHARS + 500)
+        val prompt = PersonaEngine.systemPrompt("Joctã", CharacterCatalog.default, "", PersonaMode.FRIENDLY, emptyList(), ctx, userBio = bio)
+        assertFalse("x".repeat(PersonaEngine.MAX_BIO_CHARS + 1) in prompt)
     }
 }
 

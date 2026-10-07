@@ -30,6 +30,9 @@ data class PromptContext(
  * a versão compacta.
  */
 object PersonaEngine {
+    /** Teto do dossiê no prompt: protege o contexto do modelo local e limita o que vai à nuvem. */
+    const val MAX_BIO_CHARS = 4000
+
     /** A tela desenha LaTeX e a voz o lê em português; um único padrão evita fórmulas soltas em texto puro. */
     const val MATH_RULE =
         "Toda fórmula, equação ou expressão matemática vai em LaTeX: \$...\$ dentro da frase e \$\$...\$\$ em linha própria " +
@@ -71,7 +74,7 @@ object PersonaEngine {
         }
         if (userBio.isNotBlank()) {
             appendLine("Dossiê e perfil de $userName (informações pessoais, profissionais e preferências registradas por ele):")
-            appendLine(userBio.trim())
+            appendLine(userBio.trim().take(MAX_BIO_CHARS))
             appendLine("Considere e respeite sempre esse contexto no seu atendimento.")
         }
         appendLine(EmotionTag.INSTRUCTION)

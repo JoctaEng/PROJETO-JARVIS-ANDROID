@@ -86,6 +86,9 @@ import java.util.Date
 import java.util.Locale
 
 /** "Meu Euno" (item 46 da especificação): tudo que o usuário configura. */
+/** Limite do dossiê "Sobre Mim" (vai no prompt a cada conversa). */
+private const val MAX_BIO_CHARS = 4000
+
 class SettingsActivity : ComponentActivity() {
     private val app get() = JarvisApp.from(this)
     private val settings get() = app.settings
@@ -514,13 +517,17 @@ class SettingsActivity : ComponentActivity() {
             if (uri != null) {
                 runCatching {
                     contentResolver.openInputStream(uri)?.use { stream ->
-                        stream.bufferedReader().use { it.readText() }
+                        stream.bufferedReader().use { r ->
+                            val buf = CharArray(MAX_BIO_CHARS + 1)
+                            val n = r.read(buf)
+                            if (n <= 0) "" else String(buf, 0, minOf(n, MAX_BIO_CHARS))
+                        }
                     }
                 }.onSuccess { text ->
                     if (!text.isNullOrBlank()) {
                         bio = text
                         settings.userBio = text
-                        statusMsg = "Arquivo carregado com sucesso (${text.length} caracteres)."
+                        statusMsg = "Arquivo carregado (${text.length} caracteres; limite $MAX_BIO_CHARS)."
                     }
                 }.onFailure {
                     statusMsg = "Falha ao ler o arquivo: ${it.localizedMessage}"
@@ -529,17 +536,18 @@ class SettingsActivity : ComponentActivity() {
         }
 
         Section("Sobre Mim (Dossiê do Professor)") {
-            Hint("Ensine ao Euno tudo sobre você, suas disciplinas, rotina e métodos fora do chat. Esse dossiê é injetado como contexto permanente nas conversas.")
+            Hint("Ensine ao Euno tudo sobre você, suas disciplinas, rotina e métodos fora do chat. Esse dossiê é injetado como contexto permanente nas conversas e, se o cérebro for online (nuvem), é enviado ao provedor — não coloque dados sensíveis (documentos, endereço, senhas).")
             OutlinedTextField(
                 value = bio,
                 onValueChange = {
-                    bio = it
-                    settings.userBio = it
+                    val v = it.take(MAX_BIO_CHARS)
+                    bio = v
+                    settings.userBio = v
                     statusMsg = ""
                 },
                 label = { Text("Dossiê / Perfil Pessoal") },
                 placeholder = {
-                    Text("Ex: Prof. Joctã Lindoso Galvão — professor de Matemática Aplicada (11 Elo, INSET, Supremo Redentor), São Luís/MA...")
+                    Text("Ex: Professor de Matemática, prefere explicações passo a passo...")
                 },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 260.dp),
                 minLines = 4,
@@ -562,14 +570,13 @@ class SettingsActivity : ComponentActivity() {
                     OutlinedButton(
                         onClick = {
                             val template = """
-                                Prof. Joctã Lindoso Galvão — professor de Matemática Aplicada (11 Elo, INSET, Supremo Redentor), São Luís/MA.
-                                - Rigor matemático: sempre passo a passo explícito, sem pular contas.
-                                - Criador do sistema EduMath (assistente de correção e sincronização com AVA/Moodle e SAF) e do assistente virtual Jarvis/Euno.
-                                - Estilo de trabalho: direto, organizado, focado em resultados reais.
+                                Profissão e áreas de atuação: (preencha)
+                                Como prefiro ser atendido: direto, organizado, passo a passo.
+                                Projetos e ferramentas que uso: (preencha)
                             """.trimIndent()
                             bio = template
                             settings.userBio = template
-                            statusMsg = "Modelo oficial preenchido!"
+                            statusMsg = "Modelo preenchido: edite com os seus dados."
                         },
                         modifier = Modifier.weight(1f),
                     ) {
