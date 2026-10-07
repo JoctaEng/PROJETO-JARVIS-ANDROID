@@ -49,6 +49,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.joctaeng.jarvis.JarvisApp
 import com.joctaeng.jarvis.character.CharacterView
+import com.joctaeng.jarvis.character.CharacterArt
 import com.joctaeng.jarvis.character.ComposeCharacterRenderer
 import com.joctaeng.jarvis.core.contracts.LlmChunk
 import com.joctaeng.jarvis.core.contracts.LlmRequest
@@ -137,17 +138,20 @@ class SettingsActivity : ComponentActivity() {
 
     @Composable
     private fun CharacterSection() {
-        var selected by remember { mutableStateOf(settings.characterId) }
+        var selected by remember { mutableStateOf(settings.character.id) }
         var name by remember { mutableStateOf(settings.characterName) }
         Section("Personagem") {
-            Hint("A arte final de cada personagem ainda está em produção; por enquanto ele aparece com a cor dele.")
-            CharacterCatalog.all.forEach { profile ->
+            val (ready, coming) = CharacterCatalog.all.partition { CharacterArt.hasArt(it.id) }
+            ready.forEach { profile ->
                 CharacterRow(profile, selected == profile.id) {
                     selected = profile.id
                     settings.characterId = profile.id
                     name = ""
                     settings.characterName = ""
                 }
+            }
+            if (coming.isNotEmpty()) {
+                Hint("Arte em produção: " + coming.joinToString { it.defaultName } + ". Cada um aparece aqui assim que a arte chegar.")
             }
             OutlinedTextField(
                 value = name,

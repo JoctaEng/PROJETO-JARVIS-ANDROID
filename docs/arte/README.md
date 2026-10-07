@@ -32,7 +32,7 @@ O script recorta o fundo, aplica o mesmo enquadramento a todas as expressões e 
 | Personagem | Arte no app |
 |---|---|
 | jocta_casual | ✅ neutro, feliz, pensativo, falando, surpreso, dormindo (faltam ouvindo, preocupado) |
-| demais | ⏳ boneco provisório colorido |
+| demais | ⏳ ficam fora da lista de escolha até a arte chegar |
 
 **Prompt sugerido** (troque só a palavra entre colchetes):
 

@@ -9,9 +9,12 @@ import com.joctaeng.jarvis.presence.expression.Expression
 
 /**
  * Arte 2D de cada personagem, gerada por tools/arte/preparar_arte.py a partir de docs/arte/.
- * Personagem sem entrada aqui usa o boneco provisório colorido.
+ * Só personagens com arte aparecem para escolha no app.
  */
 object CharacterArt {
+    /** Personagem usado quando o escolhido ainda não tem arte. */
+    const val DEFAULT_ID = "jocta_casual"
+
     private val frames: Map<String, Map<Expression, Int>> = mapOf(
         "jocta_casual" to mapOf(
             Expression.NEUTRO to R.drawable.arte_jocta_casual_neutro,
@@ -24,6 +27,8 @@ object CharacterArt {
     )
 
     private val cache = HashMap<Int, ImageBitmap>()
+
+    fun hasArt(characterId: String): Boolean = characterId in frames
 
     /** Decodifica uma vez por processo; a troca de expressão (boca a cada ~110 ms) não volta a ler o arquivo. */
     @Synchronized

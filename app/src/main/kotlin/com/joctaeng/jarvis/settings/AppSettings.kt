@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import com.joctaeng.jarvis.core.model.ProviderLocation
 import com.joctaeng.jarvis.mind.local.LocalBackend
 import com.joctaeng.jarvis.mind.orchestrator.BrainPreference
+import com.joctaeng.jarvis.character.CharacterArt
 import com.joctaeng.jarvis.mind.persona.CharacterCatalog
 import com.joctaeng.jarvis.mind.persona.PersonaMode
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,7 +50,7 @@ enum class CloudPreset(
 
 /** Configurações do usuário ("Meu Euno"). Segredos ficam no [SecretStore]. */
 class AppSettings(context: Context) {
-    val character get() = CharacterCatalog.byId(characterId)
+    val character get() = CharacterCatalog.byId(characterId.takeIf(CharacterArt::hasArt) ?: CharacterArt.DEFAULT_ID)
     val displayName get() = characterName.ifBlank { character.defaultName }
 
     private val prefs: SharedPreferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -59,7 +60,7 @@ class AppSettings(context: Context) {
     val version: StateFlow<Int> = _version.asStateFlow()
 
     var userName by string("userName", "Joctã")
-    var characterId by string("characterId", "joca")
+    var characterId by string("characterId", CharacterArt.DEFAULT_ID)
 
     /** Nome escolhido pelo usuário; vazio = nome padrão do personagem. */
     var characterName by string("characterName", "")

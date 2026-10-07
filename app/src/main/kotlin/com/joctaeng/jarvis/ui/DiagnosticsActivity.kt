@@ -108,7 +108,7 @@ class DiagnosticsActivity : ComponentActivity() {
         val fps by OverlayBus.fps.collectAsState()
         val reaction by OverlayBus.lastReactionMillis.collectAsState()
         val overlayRunning by OverlayBus.running.collectAsState()
-        val preview = remember { ComposeCharacterRenderer().apply { play(AnimState.IDLE); setEmotion(Emotion.HAPPY, 0.6f) } }
+        val preview = remember { ComposeCharacterRenderer().apply { applyProfile(app.settings.character); play(AnimState.IDLE); setEmotion(Emotion.HAPPY, 0.6f) } }
 
         Column(
             Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(16.dp),
