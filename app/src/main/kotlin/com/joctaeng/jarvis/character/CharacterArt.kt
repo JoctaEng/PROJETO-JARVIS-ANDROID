@@ -24,6 +24,26 @@ object CharacterArt {
             Expression.SURPRESO to R.drawable.arte_jocta_casual_surpreso,
             Expression.DORMINDO to R.drawable.arte_jocta_casual_dormindo,
         ),
+        "luna" to mapOf(
+            Expression.NEUTRO to R.drawable.arte_luna_neutro,
+            Expression.FELIZ to R.drawable.arte_luna_feliz,
+            Expression.PENSATIVO to R.drawable.arte_luna_pensativo,
+            Expression.FALANDO to R.drawable.arte_luna_falando,
+            Expression.OUVINDO to R.drawable.arte_luna_ouvindo,
+            Expression.SURPRESO to R.drawable.arte_luna_surpreso,
+            Expression.PREOCUPADO to R.drawable.arte_luna_preocupado,
+            Expression.DORMINDO to R.drawable.arte_luna_dormindo,
+        ),
+        "thor" to mapOf(
+            Expression.NEUTRO to R.drawable.arte_thor_neutro,
+            Expression.FELIZ to R.drawable.arte_thor_feliz,
+            Expression.PENSATIVO to R.drawable.arte_thor_pensativo,
+            Expression.FALANDO to R.drawable.arte_thor_falando,
+            Expression.OUVINDO to R.drawable.arte_thor_ouvindo,
+            Expression.SURPRESO to R.drawable.arte_thor_surpreso,
+            Expression.PREOCUPADO to R.drawable.arte_thor_preocupado,
+            Expression.DORMINDO to R.drawable.arte_thor_dormindo,
+        ),
     )
 
     private val cache = HashMap<Int, ImageBitmap>()

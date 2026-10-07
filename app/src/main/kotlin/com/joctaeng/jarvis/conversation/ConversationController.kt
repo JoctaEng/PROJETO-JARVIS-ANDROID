@@ -162,6 +162,7 @@ class ConversationController(private val app: JarvisApp) {
             ),
             compact = onlyLocal,
             toolsSection = if (tools.isEmpty()) "" else ToolProtocol.systemSection(tools),
+            userBio = settings.userBio,
         )
         val history = _entries.value.filter { !it.note && !it.streaming }.takeLast(HISTORY).map { ChatMessage(it.role, it.text) }
         val maxTokens = if (onlyLocal) 512 else null

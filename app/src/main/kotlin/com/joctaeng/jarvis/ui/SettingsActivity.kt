@@ -101,6 +101,7 @@ class SettingsActivity : ComponentActivity() {
                     ) {
                         Text("Meu Euno", style = MaterialTheme.typography.headlineSmall)
                         CharacterSection()
+                        ProfileSection()
                         BrainSection()
                         PersonalitySection()
                         ScreenSection()
@@ -503,9 +504,87 @@ class SettingsActivity : ComponentActivity() {
     }
 
     @Composable
+    private fun ProfileSection() {
+        var bio by remember { mutableStateOf(settings.userBio) }
+        var statusMsg by remember { mutableStateOf("") }
+
+        val filePicker = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent(),
+        ) { uri: Uri? ->
+            if (uri != null) {
+                runCatching {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        stream.bufferedReader().use { it.readText() }
+                    }
+                }.onSuccess { text ->
+                    if (!text.isNullOrBlank()) {
+                        bio = text
+                        settings.userBio = text
+                        statusMsg = "Arquivo carregado com sucesso (${text.length} caracteres)."
+                    }
+                }.onFailure {
+                    statusMsg = "Falha ao ler o arquivo: ${it.localizedMessage}"
+                }
+            }
+        }
+
+        Section("Sobre Mim (Dossiê do Professor)") {
+            Hint("Ensine ao Euno tudo sobre você, suas disciplinas, rotina e métodos fora do chat. Esse dossiê é injetado como contexto permanente nas conversas.")
+            OutlinedTextField(
+                value = bio,
+                onValueChange = {
+                    bio = it
+                    settings.userBio = it
+                    statusMsg = ""
+                },
+                label = { Text("Dossiê / Perfil Pessoal") },
+                placeholder = {
+                    Text("Ex: Prof. Joctã Lindoso Galvão — professor de Matemática Aplicada (11 Elo, INSET, Supremo Redentor), São Luís/MA...")
+                },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 260.dp),
+                minLines = 4,
+                maxLines = 10,
+            )
+            if (statusMsg.isNotBlank()) {
+                Text(statusMsg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { filePicker.launch("*/*") },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Carregar arquivo (.md / .txt)")
+                }
+                if (bio.isBlank()) {
+                    OutlinedButton(
+                        onClick = {
+                            val template = """
+                                Prof. Joctã Lindoso Galvão — professor de Matemática Aplicada (11 Elo, INSET, Supremo Redentor), São Luís/MA.
+                                - Rigor matemático: sempre passo a passo explícito, sem pular contas.
+                                - Criador do sistema EduMath (assistente de correção e sincronização com AVA/Moodle e SAF) e do assistente virtual Jarvis/Euno.
+                                - Estilo de trabalho: direto, organizado, focado em resultados reais.
+                            """.trimIndent()
+                            bio = template
+                            settings.userBio = template
+                            statusMsg = "Modelo oficial preenchido!"
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Preencher modelo")
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
     private fun ScreenSection() {
         var placement by remember { mutableStateOf(settings.placementMode) }
         var size by remember { mutableFloatStateOf(settings.characterSizeDp.toFloat()) }
+        var autoDismiss by remember { mutableStateOf(settings.autoPortalDismiss) }
         Section("Na tela") {
             Choice(PlacementMode.entries, placement, { it.label }) {
                 placement = it
@@ -519,6 +598,11 @@ class SettingsActivity : ComponentActivity() {
                 valueRange = 56f..180f,
             )
             Hint("Também dá para redimensionar com dois dedos (pinça) sobre o personagem.")
+            Toggle("Auto-recolher para o portal dimensional após inatividade", autoDismiss) {
+                autoDismiss = it
+                settings.autoPortalDismiss = it
+            }
+            Hint("Quando inativo, o personagem desce para dentro do portal dimensional e fica flutuando apenas o círculo holográfico. Um toque ou duplo toque alterna.")
         }
     }
 

@@ -1,15 +1,112 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Ícone provisório: rostinho do personagem placeholder -->
+<!-- Ícone Oficial JARVIS / Euno: Reator Arc Quântico Holográfico -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#5B8DEF" android:pathData="M54,54m-44,0a44,44 0,1 1,88 0a44,44 0,1 1,-88 0" />
-    <path android:fillColor="#FFFFFF" android:pathData="M40,48m-9,0a9,10 0,1 1,18 0a9,10 0,1 1,-18 0" />
-    <path android:fillColor="#FFFFFF" android:pathData="M68,48m-9,0a9,10 0,1 1,18 0a9,10 0,1 1,-18 0" />
-    <path android:fillColor="#1E2340" android:pathData="M41,50m-4.5,0a4.5,4.5 0,1 1,9 0a4.5,4.5 0,1 1,-9 0" />
-    <path android:fillColor="#1E2340" android:pathData="M69,50m-4.5,0a4.5,4.5 0,1 1,9 0a4.5,4.5 0,1 1,-9 0" />
-    <path android:strokeColor="#1E2340" android:strokeWidth="4" android:strokeLineCap="round"
-        android:pathData="M44,68 Q54,77 64,68" />
+
+    <!-- Fundo profundo cibernético -->
+    <path
+        android:pathData="M54,54m-52,0a52,52 0,1,1 104,0a52,52 0,1,1 -104,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="54"
+                android:centerY="46"
+                android:gradientRadius="54"
+                android:type="radial"
+                android:startColor="#10192D"
+                android:endColor="#050811" />
+        </aapt:attr>
+    </path>
+
+    <!-- Anel exterior de contenção -->
+    <path
+        android:strokeWidth="1.5"
+        android:strokeColor="#00E5FF"
+        android:strokeAlpha="0.6"
+        android:fillColor="#00000000"
+        android:pathData="M54,54m-48,0a48,48 0,1,1 96,0a48,48 0,1,1 -96,0" />
+
+    <!-- Arcos orbitais segmented do reator ARC -->
+    <path
+        android:strokeWidth="3.2"
+        android:strokeColor="#00B0FF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M24,34 A40,40 0,0,1 84,34" />
+    <path
+        android:strokeWidth="3.2"
+        android:strokeColor="#00E5FF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M89,45 A40,40 0,0,1 78,86" />
+    <path
+        android:strokeWidth="3.2"
+        android:strokeColor="#7C4DFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M66,92 A40,40 0,0,1 21,70" />
+    <path
+        android:strokeWidth="3.2"
+        android:strokeColor="#00E5FF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M17,56 A40,40 0,0,1 21,40" />
+
+    <!-- Conduítes angulares -->
+    <path android:fillColor="#00E5FF" android:pathData="M54,8 L56,15 L52,15 Z" />
+    <path android:fillColor="#00E5FF" android:pathData="M54,100 L56,93 L52,93 Z" />
+    <path android:fillColor="#00E5FF" android:pathData="M8,54 L15,56 L15,52 Z" />
+    <path android:fillColor="#00E5FF" android:pathData="M100,54 L93,56 L93,52 Z" />
+
+    <!-- Anéis internos holográficos -->
+    <path
+        android:strokeWidth="1.8"
+        android:strokeColor="#00E5FF"
+        android:strokeAlpha="0.75"
+        android:fillColor="#00000000"
+        android:pathData="M54,54m-27,0a27,27 0,1,1 54,0a27,27 0,1,1 -54,0" />
+
+    <path
+        android:strokeWidth="1.2"
+        android:strokeColor="#7C4DFF"
+        android:strokeAlpha="0.5"
+        android:fillColor="#00000000"
+        android:pathData="M54,54m-22,0a22,22 0,1,1 44,0a22,22 0,1,1 -44,0" />
+
+    <!-- Núcleo Tri-Core holográfico -->
+    <path
+        android:strokeWidth="2.5"
+        android:strokeColor="#00E5FF"
+        android:strokeLineJoin="round"
+        android:fillColor="#1A00E5FF"
+        android:pathData="M54,32 L73,65 L35,65 Z" />
+
+    <path
+        android:strokeWidth="2"
+        android:strokeColor="#7C4DFF"
+        android:strokeLineJoin="round"
+        android:fillColor="#1A7C4DFF"
+        android:pathData="M54,76 L35,43 L73,43 Z" />
+
+    <!-- Cristal focal central do Reator -->
+    <path
+        android:pathData="M54,54m-9,0a9,9 0,1,1 18,0a9,9 0,1,1 -18,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="9"
+                android:type="radial"
+                android:startColor="#FFFFFF"
+                android:endColor="#00E5FF" />
+        </aapt:attr>
+    </path>
+
+    <!-- Ponto quântico central -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,54m-3.5,0a3.5,3.5 0,1,1 7,0a3.5,3.5 0,1,1 -7,0" />
 </vector>

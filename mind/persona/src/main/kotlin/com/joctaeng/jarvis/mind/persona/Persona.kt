@@ -46,6 +46,8 @@ object PersonaEngine {
         compact: Boolean = false,
         /** Seção de ferramentas (ToolProtocol); fica antes das partes que mudam, para o cache de prefixo valer. */
         toolsSection: String = "",
+        /** Dossiê e perfil configurado pelo usuário ("Sobre Mim / README"). */
+        userBio: String = "",
     ): String = buildString {
         val name = characterName.ifBlank { character.defaultName }
         appendLine("Você é ${character.gender.article}$name, o personagem digital pessoal de $userName: um companheiro que vive no celular dele.")
@@ -66,6 +68,11 @@ object PersonaEngine {
             appendLine("- Se não souber, diga que não sabe. Não invente fatos, números ou fontes.")
             appendLine("- Discorde com respeito quando necessário; não bajule.")
             appendLine("- Suas emoções são simuladas para se comunicar; não finja sentir de verdade.")
+        }
+        if (userBio.isNotBlank()) {
+            appendLine("Dossiê e perfil de $userName (informações pessoais, profissionais e preferências registradas por ele):")
+            appendLine(userBio.trim())
+            appendLine("Considere e respeite sempre esse contexto no seu atendimento.")
         }
         appendLine(EmotionTag.INSTRUCTION)
         if (toolsSection.isNotBlank()) appendLine(toolsSection)

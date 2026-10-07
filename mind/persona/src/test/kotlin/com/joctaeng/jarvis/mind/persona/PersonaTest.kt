@@ -122,6 +122,13 @@ class PersonaEngineTest {
         assertFalse("memória 20\n" in prompt)
         assertTrue("memória 30" in prompt)
     }
+
+    @Test fun promptCarriesUserBioDossier() {
+        val bio = "Prof. Joctã Lindoso Galvão — professor de Matemática Aplicada"
+        val prompt = PersonaEngine.systemPrompt("Joctã", CharacterCatalog.default, "", PersonaMode.FRIENDLY, emptyList(), ctx, userBio = bio)
+        assertTrue("Dossiê e perfil de Joctã" in prompt)
+        assertTrue(bio in prompt)
+    }
 }
 
 class CharacterCatalogTest {

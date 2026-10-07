@@ -78,6 +78,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     private val app get() = JarvisApp.from(this)
     private val diagnostics get() = app.diagnostics
     private var dragging = false
+    private var lastInteractionTime = SystemClock.elapsedRealtime()
     private val prefs by lazy { getSharedPreferences("overlay", Context.MODE_PRIVATE) }
 
     override fun onCreate() {
@@ -198,6 +199,35 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         startFpsMeter()
         CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking) { dragging }
         followSettings()
+        bindPortalEvents()
+        startIdlePortalMonitor()
+    }
+
+    /** Emerge do portal automaticamente quando a voz fala ou sessão começa. */
+    private fun bindPortalEvents() = lifecycleScope.launch {
+        app.voice.speaking.collect { speaking ->
+            if (speaking) {
+                lastInteractionTime = SystemClock.elapsedRealtime()
+                if (renderer.isMinimizedToPortal) {
+                    renderer.emergeFromDimension()
+                }
+            }
+        }
+    }
+
+    /** Entende inatividade do usuário e recolhe suavemente para o portal dimensional. */
+    private fun startIdlePortalMonitor() = lifecycleScope.launch {
+        while (isActive) {
+            delay(3_000)
+            if (!app.settings.autoPortalDismiss) continue
+            if (renderer.isMinimizedToPortal || dragging || OverlayBus.sessionActive.value || app.voice.speaking.value) {
+                continue
+            }
+            val elapsed = SystemClock.elapsedRealtime() - lastInteractionTime
+            if (elapsed > 40_000L) {
+                renderer.dismissToDimension()
+            }
+        }
     }
 
     /** Tamanho alterado em "Meu Euno" é aplicado na hora. */
@@ -343,6 +373,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         private var startX = 0
         private var startY = 0
         private var downTime = 0L
+        private var lastTapTime = 0L
         private var pinchStartDistance = 0f
         private var pinchStartSize = 0
         private var pinched = false
@@ -357,6 +388,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
                     downTime = event.eventTime
                     dragging = false
                     pinched = false
+                    lastInteractionTime = SystemClock.elapsedRealtime()
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> if (event.pointerCount == 2) {
                     pinched = true
@@ -376,6 +408,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
                     val dy = event.rawY - downY
                     if (!dragging && (abs(dx) > slop || abs(dy) > slop)) {
                         dragging = true
+                        lastInteractionTime = SystemClock.elapsedRealtime()
                         renderer.play(AnimState.DRAGGED)
                     }
                     if (dragging) {
@@ -393,10 +426,29 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
                         onDragEnd()
                     }
                     dragging -> onDragEnd()
-                    event.eventTime - downTime >= longPressMillis -> onLongPress()
+                    event.eventTime - downTime >= longPressMillis -> {
+                        lastInteractionTime = SystemClock.elapsedRealtime()
+                        onLongPress()
+                    }
                     else -> {
                         v.performClick()
-                        onTap()
+                        lastInteractionTime = SystemClock.elapsedRealtime()
+                        val now = event.eventTime
+                        if (renderer.isMinimizedToPortal) {
+                            // Está na outra dimensão: toque faz ele emergir em 3D de volta
+                            renderer.emergeFromDimension()
+                            renderer.play(AnimState.WAKING)
+                            renderer.setEmotion(Emotion.HAPPY, 0.8f)
+                        } else {
+                            // Já está visível em 3D: duplo toque rápido (< 350ms) recolhe para o portal
+                            if (now - lastTapTime < 350L) {
+                                renderer.dismissToDimension()
+                                lastTapTime = 0L
+                            } else {
+                                lastTapTime = now
+                                onTap()
+                            }
+                        }
                     }
                 }
                 MotionEvent.ACTION_CANCEL -> if (dragging || pinched) onDragEnd()

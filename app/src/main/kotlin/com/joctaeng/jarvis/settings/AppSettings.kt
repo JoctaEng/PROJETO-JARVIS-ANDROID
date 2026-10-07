@@ -63,6 +63,9 @@ class AppSettings(context: Context) {
     var userName by string("userName", "Joctã")
     var characterId by string("characterId", CharacterArt.DEFAULT_ID)
 
+    /** Dossiê e perfil configurado pelo professor ("Sobre Mim / README"). */
+    var userBio by string("userBio", "")
+
     /** Nome escolhido pelo usuário; vazio = nome padrão do personagem. */
     var characterName by string("characterName", "")
     var personaMode by enum("personaMode", PersonaMode.FRIENDLY)
@@ -74,6 +77,8 @@ class AppSettings(context: Context) {
     var localBackend by enum("localBackend", LocalBackend.GPU)
     var placementMode by enum("placementMode", PlacementMode.FREE)
     var characterSizeDp by int("characterSizeDp", 88)
+    /** Recolher automaticamente para o portal dimensional após período sem interação. */
+    var autoPortalDismiss by boolean("autoPortalDismiss", true)
     var ttsEngine by string("ttsEngine", "")
     var ttsVoice by string("ttsVoice", "")
     var ttsRate by float("ttsRate", 1.0f)
