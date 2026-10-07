@@ -150,7 +150,8 @@ class OpenAiCompatibleProvider(private val config: CloudConfig) : LlmProvider {
             connectTimeout = config.connectTimeoutMillis
             readTimeout = config.readTimeoutMillis
             setRequestProperty("Content-Type", "application/json")
-            config.apiKey?.takeIf { it.isNotBlank() }?.let { setRequestProperty("Authorization", "Bearer $it") }
+            // Chave colada do navegador costuma vir com espaço ou quebra de linha, e o provedor a recusa.
+            config.apiKey?.trim()?.takeIf { it.isNotBlank() }?.let { setRequestProperty("Authorization", "Bearer $it") }
             doOutput = method == "POST"
         }
 
@@ -168,12 +169,16 @@ class OpenAiCompatibleProvider(private val config: CloudConfig) : LlmProvider {
                 error?.let { e -> (e as? JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull ?: e.toString() }
             }.getOrNull() ?: it.take(200)
         }
-        val hint = when (status) {
+        val hint = when {
+            // O Gemini responde 400 (e não 401) para chave inválida.
+            status in 400..403 && detail?.contains("API key", ignoreCase = true) == true -> "chave de API recusada"
+            else -> when (status) {
             401, 403 -> "chave de API recusada"
             404 -> "endereço ou modelo não encontrado"
             429 -> "limite de uso atingido"
             in 500..599 -> "erro no servidor do provedor"
             else -> "erro HTTP"
+            }
         }
         return "$hint ($status)" + (detail?.let { ": $it" } ?: "")
     }

@@ -57,6 +57,7 @@ import com.joctaeng.jarvis.core.contracts.LlmChunk
 import com.joctaeng.jarvis.core.contracts.LlmRequest
 import com.joctaeng.jarvis.core.model.ChatMessage
 import com.joctaeng.jarvis.core.model.Emotion
+import com.joctaeng.jarvis.core.model.ProviderLocation
 import com.joctaeng.jarvis.core.model.Role
 import com.joctaeng.jarvis.mind.cloud.CloudConfig
 import com.joctaeng.jarvis.mind.cloud.OpenAiCompatibleProvider
@@ -254,11 +255,18 @@ class SettingsActivity : ComponentActivity() {
                         baseUrl = it
                         settings.cloudBaseUrl = it.trim()
                     },
-                    label = { Text("Endereço (termina em /v1)") },
+                    label = { Text(if (preset.baseUrl.isNotEmpty()) "Endereço do serviço (já preenchido)" else "Endereço (termina em /v1)") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (preset.location == ProviderLocation.EXTERNAL_CLOUD && preset.baseUrl.isNotEmpty() && baseUrl.trim() != preset.baseUrl) {
+                    Hint("Este endereço foi alterado. O padrão do ${preset.label} é ${preset.baseUrl}")
+                    TextButton(onClick = {
+                        baseUrl = preset.baseUrl
+                        settings.cloudBaseUrl = preset.baseUrl
+                    }) { Text("Restaurar endereço padrão") }
+                }
                 OutlinedTextField(
                     value = key,
                     onValueChange = { key = it },
@@ -269,7 +277,7 @@ class SettingsActivity : ComponentActivity() {
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
-                        app.secrets.put(SecretStore.CLOUD_API_KEY, key)
+                        app.secrets.put(SecretStore.CLOUD_API_KEY, key.trim())
                         keySaved = key.isNotBlank()
                         key = ""
                         status = if (keySaved) "Chave salva com segurança (Android Keystore)." else "Chave removida."

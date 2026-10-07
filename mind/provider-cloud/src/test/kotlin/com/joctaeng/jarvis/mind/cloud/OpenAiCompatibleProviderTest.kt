@@ -68,6 +68,19 @@ class OpenAiCompatibleProviderTest {
         assertTrue("\"model\":\"modelo-x\"" in lastBody)
     }
 
+    @Test fun geminiInvalidKeyIsReportedAsKeyProblem() = runTest {
+        respond("/v1/chat/completions", 400, """[{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}]""")
+        val chunk = provider().generate(request).toList().single()
+        assertIs<LlmChunk.Error>(chunk)
+        assertTrue(chunk.message.startsWith("chave de API recusada (400)"), chunk.message)
+    }
+
+    @Test fun pastedKeyWithSpacesIsTrimmed() = runTest {
+        respond("/v1/chat/completions", 200, "data: [DONE]\n\n", "text/event-stream")
+        provider(key = "  segredo\n").generate(request).toList()
+        assertEquals("Bearer segredo", lastAuth)
+    }
+
     @Test fun httpErrorBecomesReadableError() = runTest {
         respond("/v1/chat/completions", 401, """{"error":{"message":"Invalid API key"}}""")
         val chunk = provider().generate(request).toList().single()

@@ -24,6 +24,13 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: NDK e CMake (IA do celular)
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" --install "ndk;29.0.13113456" "cmake;3.31.6" > /dev/null
+          ls "$ANDROID_HOME/ndk" "$ANDROID_HOME/cmake"
+
       - name: Fonte do llama.cpp (IA do celular, ADR 0009)
         run: git clone --depth 1 --branch v0.5.0 https://github.com/ggml-org/llama.cpp mind/provider-llama/src/main/cpp/llama.cpp
 
