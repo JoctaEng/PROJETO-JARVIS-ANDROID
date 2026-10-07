@@ -3,14 +3,17 @@ package com.joctaeng.jarvis.conversation
 import com.joctaeng.jarvis.JarvisApp
 import com.joctaeng.jarvis.core.contracts.LlmChunk
 import com.joctaeng.jarvis.core.contracts.LlmProvider
+import com.joctaeng.jarvis.core.contracts.LocalLlmProvider
 import com.joctaeng.jarvis.core.contracts.LlmRequest
 import com.joctaeng.jarvis.core.model.AnimState
 import com.joctaeng.jarvis.core.model.ChatMessage
 import com.joctaeng.jarvis.core.model.Emotion
+import com.joctaeng.jarvis.core.model.ProviderLocation
 import com.joctaeng.jarvis.core.model.Role
 import com.joctaeng.jarvis.device.DeviceState
 import com.joctaeng.jarvis.mind.cloud.CloudConfig
 import com.joctaeng.jarvis.mind.cloud.OpenAiCompatibleProvider
+import com.joctaeng.jarvis.mind.llama.LlamaCppProvider
 import com.joctaeng.jarvis.mind.local.LiteRtLmProvider
 import com.joctaeng.jarvis.mind.orchestrator.BrainPreference
 import com.joctaeng.jarvis.mind.orchestrator.Orchestrator
@@ -23,6 +26,7 @@ import com.joctaeng.jarvis.mind.persona.PromptContext
 import com.joctaeng.jarvis.mind.persona.SentenceChunker
 import com.joctaeng.jarvis.mind.persona.StreamingEmotionParser
 import com.joctaeng.jarvis.overlay.OverlayBus
+import com.joctaeng.jarvis.poc.ModelStore
 import com.joctaeng.jarvis.settings.CloudPreset
 import com.joctaeng.jarvis.settings.SecretStore
 import kotlinx.coroutines.CoroutineScope
@@ -67,7 +71,7 @@ class ConversationController(private val app: JarvisApp) {
     private var nextId = 1L
     private var job: Job? = null
     private var calmDown: Job? = null
-    private var local: LiteRtLmProvider? = null
+    private var local: LocalLlmProvider? = null
     private var localKey: String? = null
 
     private val _entries = MutableStateFlow<List<ChatEntry>>(emptyList())
@@ -132,7 +136,7 @@ class ConversationController(private val app: JarvisApp) {
             )
             return
         }
-        val onlyLocal = providers.all { it is LiteRtLmProvider } || settings.brainPreference == BrainPreference.LOCAL_ONLY
+        val onlyLocal = providers.all { it.location == ProviderLocation.ON_DEVICE } || settings.brainPreference == BrainPreference.LOCAL_ONLY
         val memories = app.memory.all().map { it.text }
         val prompt = PersonaEngine.systemPrompt(
             userName = settings.userName,
@@ -258,13 +262,17 @@ class ConversationController(private val app: JarvisApp) {
         )
     }
 
-    private fun localProvider(): LiteRtLmProvider? {
+    /** Cérebro do celular configurado (para o botão de teste em Meu Euno). */
+    fun localBrain(): LlmProvider? = localProvider()
+
+    private fun localProvider(): LocalLlmProvider? {
         val path = settings.localModelPath
         if (path.isBlank() || !File(path).isFile) return null
         val key = "$path|${settings.localBackend}"
         if (key != localKey) {
             local?.let { old -> scope.launch { old.unload() } }
-            local = LiteRtLmProvider(File(path), settings.localBackend, app.cacheDir)
+            val file = File(path)
+            local = if (ModelStore.isGguf(file)) LlamaCppProvider(file) else LiteRtLmProvider(file, settings.localBackend, app.cacheDir)
             localKey = key
         }
         return local

@@ -45,6 +45,7 @@ dependencies {
     implementation(project(":core:contracts"))
     implementation(project(":mind:orchestrator"))
     implementation(project(":mind:provider-local"))
+    implementation(project(":mind:provider-llama"))
     implementation(project(":mind:provider-cloud"))
     implementation(project(":mind:persona"))
     implementation(project(":mind:memory"))

@@ -59,7 +59,6 @@ object PersonaEngine {
             appendLine("- Suas emoções são simuladas para se comunicar; não finja sentir de verdade.")
         }
         appendLine(EmotionTag.INSTRUCTION)
-        appendLine("Agora: ${context.nowDescription}.")
         if (context.offline) appendLine("Você está offline, usando o cérebro do próprio celular.")
         if (context.privateMode) appendLine("Modo Privado ativo: nada desta conversa será memorizado.")
         val shown = if (compact) memories.takeLast(10) else memories.takeLast(40)
@@ -67,5 +66,7 @@ object PersonaEngine {
             appendLine("O que você sabe sobre $userName (memórias que ele autorizou):")
             shown.forEach { appendLine("- $it") }
         }
+        // Por último: muda a cada minuto e assim não invalida o começo já lido pela IA do celular (cache de prefixo).
+        appendLine("Agora: ${context.nowDescription}.")
     }.trimEnd()
 }

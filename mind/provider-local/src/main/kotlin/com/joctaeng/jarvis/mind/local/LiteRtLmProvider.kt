@@ -8,7 +8,7 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.joctaeng.jarvis.core.contracts.GenerationStats
 import com.joctaeng.jarvis.core.contracts.LlmChunk
-import com.joctaeng.jarvis.core.contracts.LlmProvider
+import com.joctaeng.jarvis.core.contracts.LocalLlmProvider
 import com.joctaeng.jarvis.core.contracts.LlmRequest
 import com.joctaeng.jarvis.core.model.Capability
 import com.joctaeng.jarvis.core.model.ChatMessage
@@ -37,7 +37,7 @@ class LiteRtLmProvider(
     private val modelFile: File,
     private val backend: LocalBackend,
     private val cacheDir: File,
-) : LlmProvider {
+) : LocalLlmProvider {
 
     override val id: String = "local-litertlm-${backend.name.lowercase()}"
     override val displayName: String = "IA local (${modelFile.nameWithoutExtension}, ${backend.name})"
@@ -77,7 +77,7 @@ class LiteRtLmProvider(
     }
 
     /** Libera a memória do modelo (chamado também em onTrimMemory). */
-    suspend fun unload() = lock.withLock {
+    override suspend fun unload() = lock.withLock {
         engine?.close()
         engine = null
     }

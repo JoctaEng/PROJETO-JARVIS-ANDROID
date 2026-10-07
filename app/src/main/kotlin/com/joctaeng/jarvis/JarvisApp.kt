@@ -6,6 +6,7 @@ import android.content.Context
 import com.joctaeng.jarvis.conversation.ConversationController
 import com.joctaeng.jarvis.diagnostics.Diagnostics
 import com.joctaeng.jarvis.mind.memory.MemoryStore
+import com.joctaeng.jarvis.poc.ModelDownload
 import com.joctaeng.jarvis.poc.ModelStore
 import com.joctaeng.jarvis.settings.AppSettings
 import com.joctaeng.jarvis.settings.SecretStore
@@ -19,6 +20,7 @@ class JarvisApp : Application() {
     lateinit var diagnostics: Diagnostics
         private set
     lateinit var modelStore: ModelStore
+    lateinit var modelDownload: ModelDownload
         private set
     lateinit var settings: AppSettings
         private set
@@ -32,6 +34,7 @@ class JarvisApp : Application() {
         super.onCreate()
         diagnostics = Diagnostics(this)
         modelStore = ModelStore(this)
+        modelDownload = ModelDownload(this, modelStore)
         settings = AppSettings(this)
         secrets = SecretStore(this)
     }

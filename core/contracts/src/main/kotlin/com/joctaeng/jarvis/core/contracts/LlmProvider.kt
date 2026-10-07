@@ -24,6 +24,12 @@ interface LlmProvider {
     fun generate(request: LlmRequest): Flow<LlmChunk>
 }
 
+/** Cérebro que roda no aparelho e ocupa memória enquanto carregado. */
+interface LocalLlmProvider : LlmProvider {
+    /** Libera a memória do modelo (regra "um modelo pesado por vez" e onTrimMemory). */
+    suspend fun unload()
+}
+
 data class LlmRequest(
     val systemPrompt: String,
     val messages: List<ChatMessage>,

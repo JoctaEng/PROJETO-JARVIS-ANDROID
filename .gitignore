@@ -10,3 +10,7 @@ captures/
 *.aab
 *.litertlm
 *.task
+
+# Fonte do llama.cpp (baixada pelo CI)
+mind/provider-llama/src/main/cpp/llama.cpp/
+*.gguf

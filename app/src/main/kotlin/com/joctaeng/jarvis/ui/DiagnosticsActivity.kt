@@ -54,6 +54,7 @@ import com.joctaeng.jarvis.mind.local.LocalBackend
 import com.joctaeng.jarvis.overlay.OverlayBus
 import com.joctaeng.jarvis.overlay.OverlayService
 import com.joctaeng.jarvis.poc.LlmBenchmark
+import com.joctaeng.jarvis.poc.ModelStore
 import com.joctaeng.jarvis.poc.Report
 import com.joctaeng.jarvis.poc.SpeechTestPhrases
 import com.joctaeng.jarvis.poc.SttProbe
@@ -204,7 +205,7 @@ class DiagnosticsActivity : ComponentActivity() {
     private fun LlmSection(report: Report, refreshKey: Int, onChanged: () -> Unit) {
         val app = JarvisApp.from(this)
         val scope = rememberCoroutineScope()
-        var models by remember { mutableStateOf(app.modelStore.list()) }
+        var models by remember { mutableStateOf(app.modelStore.list().filterNot { ModelStore.isGguf(it) }) }
         var selected by remember { mutableStateOf<File?>(models.firstOrNull()) }
         var backend by remember { mutableStateOf(LocalBackend.GPU) }
         var status by remember { mutableStateOf("") }
@@ -218,7 +219,7 @@ class DiagnosticsActivity : ComponentActivity() {
                     val file = app.modelStore.import(uri) { copied, total ->
                         status = "Copiando: ${copied shr 20} MB" + if (total > 0) " de ${total shr 20} MB" else ""
                     }
-                    models = app.modelStore.list()
+                    models = app.modelStore.list().filterNot { ModelStore.isGguf(it) }
                     selected = file
                     "Modelo importado: ${file.name}"
                 } catch (e: Exception) {

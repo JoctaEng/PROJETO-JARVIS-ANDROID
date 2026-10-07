@@ -8,15 +8,15 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Modelos locais `.litertlm` guardados em Android/data/com.joctaeng.jarvis/files/models.
- * Entram por importação (seletor de arquivos) ou copiando direto para a pasta (adb push).
+ * Modelos locais (`.gguf` para o llama.cpp, `.litertlm` para o LiteRT-LM) em Android/data/com.joctaeng.jarvis/files/models.
+ * Entram por download no app, importação (seletor de arquivos) ou copiando direto para a pasta (adb push).
  */
 class ModelStore(context: Context) {
     private val appContext = context.applicationContext
     val directory: File = File(appContext.getExternalFilesDir(null) ?: appContext.filesDir, "models").apply { mkdirs() }
 
     fun list(): List<File> =
-        directory.listFiles { f -> f.isFile && f.name.endsWith(".litertlm") }.orEmpty().sortedBy { it.name }
+        directory.listFiles { f -> f.isFile && EXTENSIONS.any { f.name.endsWith(it) } }.orEmpty().sortedBy { it.name }
 
     suspend fun import(uri: Uri, onProgress: (copied: Long, total: Long) -> Unit): File = withContext(Dispatchers.IO) {
         val resolver = appContext.contentResolver
@@ -28,7 +28,7 @@ class ModelStore(context: Context) {
                 if (!c.isNull(1)) total = c.getLong(1)
             }
         }
-        require(name.endsWith(".litertlm")) { "Escolha um arquivo .litertlm (recebido: $name)" }
+        require(EXTENSIONS.any { name.endsWith(it) }) { "Escolha um arquivo .gguf ou .litertlm (recebido: $name)" }
         val target = File(directory, name)
         val temp = File(directory, "$name.part")
         resolver.openInputStream(uri).use { input ->
@@ -56,5 +56,11 @@ class ModelStore(context: Context) {
 
     fun delete(file: File) {
         if (file.parentFile == directory) file.delete()
+    }
+
+    companion object {
+        val EXTENSIONS = listOf(".gguf", ".litertlm")
+
+        fun isGguf(file: File): Boolean = file.name.endsWith(".gguf")
     }
 }

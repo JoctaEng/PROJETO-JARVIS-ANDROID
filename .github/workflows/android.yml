@@ -24,6 +24,15 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Fonte do llama.cpp (IA do celular, ADR 0009)
+        run: git clone --depth 1 --branch v0.5.0 https://github.com/ggml-org/llama.cpp mind/provider-llama/src/main/cpp/llama.cpp
+
+      - name: Conferir o endereço do modelo recomendado (Qwen3-4B)
+        run: |
+          URL=$(grep -A1 'RECOMMENDED_URL =' app/src/main/kotlin/com/joctaeng/jarvis/poc/ModelDownload.kt | grep -o 'https://[^"]*')
+          echo "URL: $URL"
+          curl -sSIL --fail --max-time 60 "$URL" | grep -iE '^(HTTP|content-length|x-linked-size)' || { echo "::error::Endereço do modelo não respondeu"; exit 1; }
+
       - name: Testes de unidade (lógica pura + app)
         run: ./gradlew test --stacktrace
 

@@ -47,6 +47,7 @@ val jvmOnly = providers.gradleProperty("jarvis.jvmOnly").orNull == "true"
 if (!jvmOnly) {
     include(
         ":mind:provider-local",
+        ":mind:provider-llama",
         ":app",
     )
 }

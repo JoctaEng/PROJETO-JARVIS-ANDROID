@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -63,6 +65,8 @@ import com.joctaeng.jarvis.mind.orchestrator.BrainPreference
 import com.joctaeng.jarvis.mind.persona.CharacterCatalog
 import com.joctaeng.jarvis.mind.persona.CharacterProfile
 import com.joctaeng.jarvis.mind.persona.PersonaMode
+import com.joctaeng.jarvis.poc.ModelDownload
+import com.joctaeng.jarvis.poc.ModelStore
 import com.joctaeng.jarvis.settings.CloudPreset
 import com.joctaeng.jarvis.settings.PlacementMode
 import com.joctaeng.jarvis.settings.SecretStore
@@ -212,8 +216,6 @@ class SettingsActivity : ComponentActivity() {
         var keySaved by remember { mutableStateOf(app.secrets.has(SecretStore.CLOUD_API_KEY)) }
         var models by remember { mutableStateOf<List<String>>(emptyList()) }
         var status by remember { mutableStateOf("") }
-        var localPath by remember { mutableStateOf(settings.localModelPath) }
-        var backend by remember { mutableStateOf(settings.localBackend) }
 
         fun provider() = OpenAiCompatibleProvider(
             CloudConfig("teste", preset.label, baseUrl, app.secrets.get(SecretStore.CLOUD_API_KEY), model.ifBlank { "-" }, preset.location),
@@ -276,7 +278,7 @@ class SettingsActivity : ComponentActivity() {
                         status = "Buscando modelos…"
                         scope.launch {
                             status = try {
-                                models = provider().listModels()
+                                models = provider().listModels().sortedByDescending { "flash" in it }
                                 if (models.isEmpty()) "O provedor não listou modelos; digite o nome." else "Toque em um modelo para escolher."
                             } catch (e: Exception) {
                                 "Não consegui listar: ${e.message}"
@@ -292,8 +294,12 @@ class SettingsActivity : ComponentActivity() {
                     },
                     label = { Text("Modelo") },
                     singleLine = true,
+                    isError = !looksLikeModelId(model),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (!looksLikeModelId(model)) {
+                    Hint("Use o nome técnico do modelo, sem espaços (ex.: gemini-2.5-flash). Toque em Buscar modelos e escolha da lista.")
+                }
                 if (models.isNotEmpty()) {
                     Column(Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState())) {
                         models.forEach { m ->
@@ -328,20 +334,141 @@ class SettingsActivity : ComponentActivity() {
             }
             if (status.isNotEmpty()) Hint(status)
 
-            Text("Cérebro no celular", style = MaterialTheme.typography.labelLarge)
-            val localModels = app.modelStore.list()
-            if (localModels.isEmpty()) Hint("Nenhum modelo .litertlm importado. Importe no Diagnóstico (PoC 0.3).")
-            Choice(listOf("") + localModels.map { it.path }, localPath, { path ->
-                if (path.isEmpty()) "Nenhum" else localModels.first { it.path == path }.let { "${it.name} (${it.length() shr 20} MB)" }
-            }) {
-                localPath = it
-                settings.localModelPath = it
+            LocalBrain()
+        }
+    }
+
+    @Composable
+    private fun LocalBrain() {
+        val scope = rememberCoroutineScope()
+        var localPath by remember { mutableStateOf(settings.localModelPath) }
+        var backend by remember { mutableStateOf(settings.localBackend) }
+        var localModels by remember { mutableStateOf(app.modelStore.list()) }
+        var download by remember { mutableStateOf(app.modelDownload.current()) }
+        var status by remember { mutableStateOf("") }
+        var busy by remember { mutableStateOf(false) }
+
+        fun choose(path: String) {
+            localPath = path
+            settings.localModelPath = path
+        }
+
+        fun refresh() {
+            localModels = app.modelStore.list()
+            if (localPath.isNotEmpty() && localModels.none { it.path == localPath }) choose("")
+            if (localPath.isEmpty()) localModels.firstOrNull { ModelStore.isGguf(it) }?.let { choose(it.path) }
+        }
+
+        LaunchedEffect(download is ModelDownload.State.Running) {
+            if (download !is ModelDownload.State.Running) return@LaunchedEffect
+            while (download is ModelDownload.State.Running) {
+                delay(1000)
+                download = app.modelDownload.current()
             }
-            if (localPath.isNotEmpty()) {
-                Choice(LocalBackend.entries, backend, { if (it == LocalBackend.GPU) "GPU (mais rápido)" else "CPU (mais compatível)" }) {
-                    backend = it
-                    settings.localBackend = it
+            refresh()
+        }
+
+        val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            busy = true
+            scope.launch {
+                status = try {
+                    val file = app.modelStore.import(uri) { copied, total ->
+                        status = "Copiando: ${copied shr 20} MB" + if (total > 0) " de ${total shr 20} MB" else ""
+                    }
+                    refresh()
+                    choose(file.path)
+                    "Modelo pronto: ${file.name}"
+                } catch (e: Exception) {
+                    "Falha ao importar: ${e.message}"
                 }
+                busy = false
+            }
+        }
+
+        Text("Cérebro no celular (offline)", style = MaterialTheme.typography.labelLarge)
+        Hint("Funciona sem internet e sem chave. É mais lento que o online: a primeira resposta pode levar meio minuto; as seguintes saem mais rápido.")
+
+        val recommended = app.modelDownload.target
+        if (!recommended.isFile) {
+            when (val d = download) {
+                is ModelDownload.State.Running -> {
+                    val pct = if (d.totalBytes > 0) " (${d.downloadedBytes * 100 / d.totalBytes}%)" else ""
+                    Hint("Baixando Qwen3-4B: ${d.downloadedBytes shr 20} de ${if (d.totalBytes > 0) d.totalBytes shr 20 else 2400} MB$pct" + (d.waitingReason?.let { " — $it" } ?: ""))
+                    OutlinedButton(onClick = {
+                        app.modelDownload.cancel()
+                        download = app.modelDownload.current()
+                    }) { Text("Cancelar download") }
+                }
+                else -> {
+                    if (d is ModelDownload.State.Failed) Hint("O download falhou: ${d.reason}")
+                    Button(onClick = {
+                        app.modelDownload.start()
+                        download = app.modelDownload.current()
+                    }) { Text("Baixar Qwen3-4B (2,4 GB, só no Wi-Fi)") }
+                    Hint("Mesmo modelo do EduMath. Pode fechar o app: o download continua e aparece nas notificações.")
+                }
+            }
+        }
+
+        OutlinedButton(onClick = { importer.launch(arrayOf("*/*")) }, enabled = !busy) { Text("Importar arquivo .gguf ou .litertlm") }
+        Hint(
+            "O Android não deixa um app abrir os arquivos de outro, então o Euno não enxerga o modelo guardado pelo EduMath. " +
+                "Para não baixar de novo: copie Qwen3-4B-Q4_K_M.gguf do PC (pasta %APPDATA%\\codigomaker\\modelos\\celular) para a pasta Download do celular e toque em Importar.",
+        )
+        if (status.isNotEmpty()) Hint(status)
+
+        if (localModels.isEmpty()) {
+            Hint("Nenhum modelo no celular ainda.")
+        } else {
+            Choice(listOf("") + localModels.map { it.path }, localPath, { path ->
+                if (path.isEmpty()) "Não usar" else localModels.first { it.path == path }.let { "${it.name} (${it.length() shr 20} MB)" }
+            }) { choose(it) }
+        }
+
+        val selected = localModels.firstOrNull { it.path == localPath }
+        if (selected != null && !ModelStore.isGguf(selected)) {
+            Choice(LocalBackend.entries, backend, { if (it == LocalBackend.GPU) "GPU (mais rápido)" else "CPU (mais compatível)" }) {
+                backend = it
+                settings.localBackend = it
+            }
+        }
+        if (selected != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(enabled = !busy, onClick = {
+                    val brain = app.conversation.localBrain() ?: return@OutlinedButton
+                    busy = true
+                    status = "Carregando o modelo e pensando… (a primeira vez demora)"
+                    scope.launch {
+                        val start = System.currentTimeMillis()
+                        var first = -1L
+                        val text = StringBuilder()
+                        var error: String? = null
+                        brain.generate(LlmRequest("Responda em português, em uma frase curta.", listOf(ChatMessage(Role.USER, "Diga oi.")), 40)).collect {
+                            when (it) {
+                                is LlmChunk.Text -> {
+                                    if (first < 0) first = System.currentTimeMillis() - start
+                                    text.append(it.text)
+                                    status = "Respondendo: ${text.toString().trim().take(80)}"
+                                }
+                                is LlmChunk.Error -> error = it.message
+                                else -> Unit
+                            }
+                        }
+                        val total = System.currentTimeMillis() - start
+                        status = error?.let { "Falhou: $it" }
+                            ?: "Funcionou: \"${text.toString().trim().take(80)}\" · 1ª palavra em ${first / 1000.0} s · total ${total / 1000.0} s"
+                        busy = false
+                    }
+                }) { Text("Testar IA do celular") }
+                TextButton(enabled = !busy, onClick = {
+                    app.conversation.releaseLocalModel()
+                    app.modelStore.delete(selected)
+                    status = "Apagado: ${selected.name}"
+                    choose("")
+                    download = app.modelDownload.current()
+                    refresh()
+                }) { Text("Apagar") }
             }
         }
     }
@@ -501,3 +628,6 @@ class SettingsActivity : ComponentActivity() {
         }
     }
 }
+
+/** Identificadores de API não têm espaços ("Gemini 3.8 flash" é nome comercial, não ID). */
+private fun looksLikeModelId(name: String): Boolean = name.none { it.isWhitespace() }
