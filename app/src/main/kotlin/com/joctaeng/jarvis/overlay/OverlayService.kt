@@ -248,7 +248,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         if (hidden || view == null) return
         hidden = true
         engageJob?.cancel()
-        renderer.setEngaged(false)
+        renderer.engage(false)
         renderer.dismissToDimension()
         collapseJob = lifecycleScope.launch {
             delay(480) // deixa a animação de saída terminar
@@ -286,11 +286,11 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
 
     /** Chega mais perto e olha para o usuário por alguns segundos. */
     private fun engage() {
-        renderer.setEngaged(true)
+        renderer.engage(true)
         engageJob?.cancel()
         engageJob = lifecycleScope.launch {
             delay(ENGAGE_MILLIS)
-            renderer.setEngaged(false)
+            renderer.engage(false)
         }
     }
 

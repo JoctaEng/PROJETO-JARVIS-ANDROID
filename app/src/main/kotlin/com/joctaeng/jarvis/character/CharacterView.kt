@@ -75,7 +75,7 @@ class ComposeCharacterRenderer : CharacterRenderer {
     var engaged by mutableStateOf(false)
         private set
 
-    fun setEngaged(value: Boolean) {
+    fun engage(value: Boolean) {
         engaged = value
         if (value) look = Offset.Zero
     }
