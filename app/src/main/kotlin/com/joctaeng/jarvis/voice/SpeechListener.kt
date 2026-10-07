@@ -3,6 +3,8 @@ package com.joctaeng.jarvis.voice
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -10,9 +12,17 @@ import android.speech.SpeechRecognizer
 /**
  * Escuta uma fala por vez, com texto parcial enquanto o usuário fala.
  * Prefere o reconhecedor no aparelho (funcionou na PoC 0.4). Usar na thread principal.
+ *
+ * Tolerância a pausas: o reconhecedor do Android encerra a fala cedo (e os extras de silêncio
+ * são só uma sugestão, que muitos reconhecedores ignoram). Por isso, ao receber um resultado
+ * final, o texto fica guardado por [graceMs] e a escuta recomeça; se a pessoa voltar a falar nesse
+ * intervalo, as partes são juntadas numa só frase. Só depois da carência o resultado é entregue.
  */
-class SpeechListener(private val context: Context) {
+class SpeechListener(private val context: Context, private val graceMs: Long = 1100L) {
     private var recognizer: SpeechRecognizer? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var accumulated = ""
+    private var emitFinal: Runnable? = null
 
     sealed interface Event {
         data class Partial(val text: String) : Event
@@ -27,6 +37,22 @@ class SpeechListener(private val context: Context) {
 
     fun start(onEvent: (Event) -> Unit) {
         stop()
+        accumulated = ""
+        startSession(onEvent)
+    }
+
+    private fun join(a: String, b: String) = if (a.isBlank()) b else "$a $b"
+
+    private fun deliverFinal(onEvent: (Event) -> Unit) {
+        emitFinal?.let { handler.removeCallbacks(it) }
+        emitFinal = null
+        val text = accumulated
+        accumulated = ""
+        stopRecognizer()
+        if (text.isBlank()) onEvent(Event.Failed("Não entendi", silent = true)) else onEvent(Event.Final(text))
+    }
+
+    private fun startSession(onEvent: (Event) -> Unit) {
         val onDevice = SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
         if (!onDevice && !SpeechRecognizer.isRecognitionAvailable(context)) {
             onEvent(Event.Failed("Nenhum reconhecimento de voz instalado", silent = false))
@@ -48,18 +74,38 @@ class SpeechListener(private val context: Context) {
 
             override fun onPartialResults(partialResults: Bundle?) {
                 partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                    ?.takeIf { it.isNotBlank() }?.let { onEvent(Event.Partial(it)) }
+                    ?.takeIf { it.isNotBlank() }?.let {
+                        // Voltou a falar dentro da carência: segura a entrega e mostra a frase inteira.
+                        emitFinal?.let { r -> handler.removeCallbacks(r) }
+                        emitFinal = null
+                        onEvent(Event.Partial(join(accumulated, it)))
+                    }
             }
 
             override fun onResults(results: Bundle?) {
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                 release(r)
-                if (text.isNullOrBlank()) onEvent(Event.Failed("Não entendi", silent = true))
-                else onEvent(Event.Final(text))
+                if (!text.isNullOrBlank()) accumulated = join(accumulated, text)
+                if (accumulated.isBlank()) {
+                    onEvent(Event.Failed("Não entendi", silent = true))
+                } else if (graceMs <= 0) {
+                    deliverFinal(onEvent)
+                } else {
+                    // Escuta de novo e só entrega se a pessoa ficar em silêncio pela carência.
+                    startSession(onEvent)
+                    val run = Runnable { deliverFinal(onEvent) }
+                    emitFinal = run
+                    handler.postDelayed(run, graceMs)
+                }
             }
 
             override fun onError(error: Int) {
                 release(r)
+                if (accumulated.isNotBlank()) {
+                    // Silêncio depois de uma fala válida = a pessoa terminou.
+                    deliverFinal(onEvent)
+                    return
+                }
                 val silent = error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || error == SpeechRecognizer.ERROR_NO_MATCH
                 onEvent(Event.Failed(describe(error), silent))
             }
@@ -69,11 +115,21 @@ class SpeechListener(private val context: Context) {
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
                 .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1),
+                .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                // Sugestões de tolerância a pausas (nem todo reconhecedor respeita; a carência acima cobre).
+                .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+                .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L),
         )
     }
 
     fun stop() {
+        emitFinal?.let { handler.removeCallbacks(it) }
+        emitFinal = null
+        accumulated = ""
+        stopRecognizer()
+    }
+
+    private fun stopRecognizer() {
         recognizer?.let {
             it.cancel()
             release(it)

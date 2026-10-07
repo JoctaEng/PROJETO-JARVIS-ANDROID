@@ -47,6 +47,7 @@ import com.joctaeng.jarvis.character.CharacterSync
 import com.joctaeng.jarvis.chat.ChatActivity
 import com.joctaeng.jarvis.settings.PlacementMode
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -79,6 +80,9 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     private val diagnostics get() = app.diagnostics
     private var dragging = false
     private var lastInteractionTime = SystemClock.elapsedRealtime()
+    private var hidden = false
+    private var collapseJob: Job? = null
+    private var engageJob: Job? = null
     private val prefs by lazy { getSharedPreferences("overlay", Context.MODE_PRIVATE) }
 
     override fun onCreate() {
@@ -203,30 +207,90 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         startIdlePortalMonitor()
     }
 
-    /** Emerge do portal automaticamente quando a voz fala ou sessão começa. */
-    private fun bindPortalEvents() = lifecycleScope.launch {
-        app.voice.speaking.collect { speaking ->
-            if (speaking) {
-                lastInteractionTime = SystemClock.elapsedRealtime()
-                if (renderer.isMinimizedToPortal) {
-                    renderer.emergeFromDimension()
+    /** Reage ao que acontece: emerge quando alguém fala/ouve e recolhe ao pedido ("tchau"). */
+    private fun bindPortalEvents() {
+        lifecycleScope.launch {
+            app.voice.speaking.collect { speaking ->
+                if (speaking) {
+                    lastInteractionTime = SystemClock.elapsedRealtime()
+                    show()
                 }
             }
         }
+        lifecycleScope.launch {
+            OverlayBus.listening.collect { listening ->
+                if (listening) {
+                    lastInteractionTime = SystemClock.elapsedRealtime()
+                    show()
+                }
+            }
+        }
+        lifecycleScope.launch { OverlayBus.dismissRequests.collect { hide() } }
     }
 
-    /** Entende inatividade do usuário e recolhe suavemente para o portal dimensional. */
+    /** Recolhe depois de um tempo parado — nunca enquanto ouve, pensa, fala ou há conversa aberta. */
     private fun startIdlePortalMonitor() = lifecycleScope.launch {
         while (isActive) {
             delay(3_000)
-            if (!app.settings.autoPortalDismiss) continue
-            if (renderer.isMinimizedToPortal || dragging || OverlayBus.sessionActive.value || app.voice.speaking.value) {
+            if (!app.settings.autoPortalDismiss || hidden || dragging) continue
+            val busy = OverlayBus.sessionActive.value || OverlayBus.listening.value || app.voice.speaking.value ||
+                OverlayBus.dashboardVisible.value || renderer.state == AnimState.THINKING || renderer.state == AnimState.LISTENING
+            if (busy) {
+                lastInteractionTime = SystemClock.elapsedRealtime()
                 continue
             }
-            val elapsed = SystemClock.elapsedRealtime() - lastInteractionTime
-            if (elapsed > 40_000L) {
-                renderer.dismissToDimension()
-            }
+            if (SystemClock.elapsedRealtime() - lastInteractionTime > IDLE_HIDE_MILLIS) hide()
+        }
+    }
+
+    /** Recolhe: o personagem some e a janela encolhe para um risquinho, que não bloqueia toques ao redor. */
+    private fun hide() {
+        if (hidden || view == null) return
+        hidden = true
+        engageJob?.cancel()
+        renderer.setEngaged(false)
+        renderer.dismissToDimension()
+        collapseJob = lifecycleScope.launch {
+            delay(480) // deixa a animação de saída terminar
+            val v = view ?: return@launch
+            val cx = params.x + params.width / 2
+            val bottom = params.y + params.height
+            params.width = dpToPx(RISK_WIDTH_DP)
+            params.height = dpToPx(RISK_HEIGHT_DP)
+            val p = Placement.clamp(Point(cx - params.width / 2, bottom - params.height - dpToPx(8)), windowSize(), screenSize(), insets())
+            params.x = p.x
+            params.y = p.y
+            windowManager.updateViewLayout(v, params)
+        }
+    }
+
+    /** Volta ao tamanho normal, no mesmo lugar (pelos pés), e chega mais perto. */
+    private fun show() {
+        if (!hidden) return
+        val v = view ?: return
+        hidden = false
+        collapseJob?.cancel()
+        val size = dpToPx(app.settings.characterSizeDp)
+        val cx = params.x + params.width / 2
+        val bottom = params.y + params.height + dpToPx(8)
+        params.width = size
+        params.height = size
+        val p = Placement.clamp(Point(cx - size / 2, bottom - size), windowSize(), screenSize(), insets())
+        params.x = p.x
+        params.y = p.y
+        windowManager.updateViewLayout(v, params)
+        lastInteractionTime = SystemClock.elapsedRealtime()
+        renderer.emergeFromDimension()
+        engage()
+    }
+
+    /** Chega mais perto e olha para o usuário por alguns segundos. */
+    private fun engage() {
+        renderer.setEngaged(true)
+        engageJob?.cancel()
+        engageJob = lifecycleScope.launch {
+            delay(ENGAGE_MILLIS)
+            renderer.setEngaged(false)
         }
     }
 
@@ -234,7 +298,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     private fun followSettings() = lifecycleScope.launch {
         app.settings.version.collect {
             renderer.applyProfile(app.settings.character)
-            resize(dpToPx(app.settings.characterSizeDp))
+            if (!hidden) resize(dpToPx(app.settings.characterSizeDp))
         }
     }
 
@@ -373,7 +437,6 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         private var startX = 0
         private var startY = 0
         private var downTime = 0L
-        private var lastTapTime = 0L
         private var pinchStartDistance = 0f
         private var pinchStartSize = 0
         private var pinched = false
@@ -390,7 +453,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
                     pinched = false
                     lastInteractionTime = SystemClock.elapsedRealtime()
                 }
-                MotionEvent.ACTION_POINTER_DOWN -> if (event.pointerCount == 2) {
+                MotionEvent.ACTION_POINTER_DOWN -> if (event.pointerCount == 2 && !hidden) {
                     pinched = true
                     dragging = false
                     pinchStartDistance = distance(event)
@@ -433,21 +496,14 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
                     else -> {
                         v.performClick()
                         lastInteractionTime = SystemClock.elapsedRealtime()
-                        val now = event.eventTime
-                        if (renderer.isMinimizedToPortal) {
-                            // Está na outra dimensão: toque faz ele emergir em 3D de volta
-                            renderer.emergeFromDimension()
+                        if (hidden) {
+                            // Estava recolhido: volta e já reage.
+                            show()
                             renderer.play(AnimState.WAKING)
                             renderer.setEmotion(Emotion.HAPPY, 0.8f)
                         } else {
-                            // Já está visível em 3D: duplo toque rápido (< 350ms) recolhe para o portal
-                            if (now - lastTapTime < 350L) {
-                                renderer.dismissToDimension()
-                                lastTapTime = 0L
-                            } else {
-                                lastTapTime = now
-                                onTap()
-                            }
+                            engage()
+                            onTap()
                         }
                     }
                 }
@@ -466,6 +522,10 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         private const val NOTIFICATION_ID = 1
         const val MIN_SIZE_DP = 56
         const val MAX_SIZE_DP = 180
+        private const val RISK_WIDTH_DP = 44
+        private const val RISK_HEIGHT_DP = 22
+        private const val IDLE_HIDE_MILLIS = 40_000L
+        private const val ENGAGE_MILLIS = 6_000L
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, OverlayService::class.java))

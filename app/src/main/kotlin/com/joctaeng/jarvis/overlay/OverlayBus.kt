@@ -2,7 +2,9 @@ package com.joctaeng.jarvis.overlay
 
 import com.joctaeng.jarvis.core.model.AnimState
 import com.joctaeng.jarvis.core.model.Emotion
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 
 /** Estado compartilhado (mesmo processo) entre overlay, sessão de toque e painel. */
 object OverlayBus {
@@ -24,4 +26,13 @@ object OverlayBus {
 
     /** Tempo entre o toque e o primeiro quadro já reagindo (meta < 100 ms). */
     val lastReactionMillis = MutableStateFlow<Long?>(null)
+
+    private val _dismissRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Pedido para o personagem se recolher (ex.: "tchau"). */
+    val dismissRequests: SharedFlow<Unit> = _dismissRequests
+
+    fun requestDismiss() {
+        _dismissRequests.tryEmit(Unit)
+    }
 }

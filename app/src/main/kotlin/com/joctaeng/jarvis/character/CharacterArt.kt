@@ -50,6 +50,12 @@ object CharacterArt {
 
     fun hasArt(characterId: String): Boolean = characterId in frames
 
+    /**
+     * Personagens cujos quadros passam em `tools/arte/verificar_alinhamento.py` (mesma pose e escala).
+     * Só eles recebem fusão entre expressões. Luna e Thor ficam fora até a arte ser regerada.
+     */
+    fun isAligned(characterId: String): Boolean = characterId == "jocta_casual"
+
     /** Decodifica uma vez por processo; a troca de expressão (boca a cada ~110 ms) não volta a ler o arquivo. */
     @Synchronized
     fun load(resources: Resources, characterId: String): Map<Expression, ImageBitmap>? =

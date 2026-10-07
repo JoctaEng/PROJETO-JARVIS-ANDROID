@@ -157,3 +157,4 @@ Regras: encerrar **só o que o Euno abriu agora** (a ferramenta `abrir_app` deve
 7. **Menores:** `metadata.json` na raiz (arquivo de ferramenta, nome "PROJETO JARVIS") pode sair; 16 JPGs de ~1,9 MB entraram no git (≈29 MB); mensagens de commit e o ícone ("Reator Arc", referência ao Homem de Ferro) voltam à marca JARVIS, contra o ADR 0008 (decidir se vale para uso pessoal ou se o ícone muda antes de qualquer publicação).
 
 **Falhas 3 e 4 do relatório (tocar sem abrir o chat; modo trabalho "de costas"):** pedidos de funcionalidade válidos e ainda não feitos. A 4 exige arte nova (personagem de costas): decidir se vale o custo antes.
+- 2026-10-07 (sessão Claude): limpeza de dados pessoais e limite de 4.000 caracteres do dossiê; assinatura sem fallback; tolerância a pausas na escuta; conhecimento de si; "tchau"; risquinho + toque que aproxima; v0.6.0. Pedidos e fases em `docs/PEDIDOS-DO-USUARIO.md`.

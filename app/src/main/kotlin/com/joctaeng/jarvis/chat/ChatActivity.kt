@@ -96,6 +96,14 @@ class ChatActivity : ComponentActivity() {
                 }
             }
         }
+        // "Tchau": encerra a conversa por voz e fecha a janela; o personagem se recolhe.
+        lifecycleScope.launch {
+            OverlayBus.dismissRequests.collect {
+                voiceMode = false
+                stopListening()
+                finish()
+            }
+        }
         setContent { JarvisTheme { ChatSheet() } }
         if (voiceMode) startListening()
     }

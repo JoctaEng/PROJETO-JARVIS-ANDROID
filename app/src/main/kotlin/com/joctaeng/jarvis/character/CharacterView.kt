@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -71,6 +72,15 @@ class ComposeCharacterRenderer : CharacterRenderer {
         isMinimizedToPortal = !isMinimizedToPortal
     }
 
+    /** Aproximou-se do usuário (toque, ouvindo, falando): cresce um pouco e olha para ele. */
+    var engaged by mutableStateOf(false)
+        private set
+
+    fun setEngaged(value: Boolean) {
+        engaged = value
+        if (value) look = Offset.Zero
+    }
+
     /** Cor do personagem escolhido: corpo do boneco provisório e anel de "ouvindo". */
     var bodyColor by mutableStateOf(BodyBase)
         private set
@@ -119,8 +129,16 @@ fun CharacterView(
         animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
         label = "portal_transition",
     )
-    LaunchedEffect(animate, maxFps) {
-        if (!animate) return@LaunchedEffect
+    val engage by animateFloatAsState(
+        targetValue = if (renderer.engaged || renderer.state in ENGAGED_STATES) 1f else 0f,
+        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+        label = "engage",
+    )
+    val fade = remember { ArtFade() }
+    // Recolhido e já assentado: 0 quadros por segundo (só o risquinho estático).
+    val hiddenSettled = renderer.isMinimizedToPortal && transition < 0.005f
+    LaunchedEffect(animate, maxFps, hiddenSettled) {
+        if (!animate || hiddenSettled) return@LaunchedEffect
         val start = System.nanoTime()
         val frameMillis = (1000L / maxFps.coerceIn(1, 60))
         while (isActive) {
@@ -132,14 +150,35 @@ fun CharacterView(
     val art = remember(renderer.characterId) { CharacterArt.load(resources, renderer.characterId) }
     Canvas(modifier) {
         onFrame?.invoke()
-        // 1. Portal dimensional sob os pés ou orbe dimensional flutuante
-        drawDimensionalPortal(renderer, time, transition)
-        // 2. Personagem em 3D emergindo/em pé
-        if (transition > 0.005f) {
-            if (art != null) drawArt(renderer, art, time, blink = animate, transition = transition)
-            else drawCharacter(renderer, time, transition = transition)
+        if (transition < 0.005f) {
+            drawRisquinho()
+            return@Canvas
         }
+        // 1. Base dimensional sob os pés (some junto com o personagem)
+        drawDimensionalPortal(renderer, time, transition)
+        // 2. Personagem emergindo/em pé
+        if (art != null) drawArt(renderer, art, time, blink = animate, transition = transition, engage = engage, fade = fade, aligned = CharacterArt.isAligned(renderer.characterId))
+        else drawCharacter(renderer, time, transition = transition)
     }
+}
+
+private val ENGAGED_STATES = setOf(AnimState.LISTENING, AnimState.SPEAKING, AnimState.THINKING, AnimState.WAKING)
+
+/** Memória do desenho para fundir (crossfade) a troca de expressão. */
+private class ArtFade {
+    var current: ImageBitmap? = null
+    var previous: ImageBitmap? = null
+    var changedAt = 0f
+}
+
+/** Estado recolhido: apenas um risquinho discreto, sem animação. */
+private fun DrawScope.drawRisquinho() {
+    val w = size.width * 0.72f
+    val h = (size.height * 0.2f).coerceAtLeast(3f)
+    val topLeft = Offset((size.width - w) / 2f, (size.height - h) / 2f)
+    val radius = CornerRadius(h / 2f, h / 2f)
+    drawRoundRect(Color(0xFF00E5FF).copy(alpha = 0.18f), topLeft - Offset(h, h), Size(w + 2 * h, h * 3f), CornerRadius(h * 1.5f, h * 1.5f))
+    drawRoundRect(Color(0xFF00E5FF).copy(alpha = 0.7f), topLeft, Size(w, h), radius)
 }
 
 private val BodyBase = Color(0xFF5B8DEF)
@@ -169,28 +208,17 @@ private fun DrawScope.drawListeningRing(r: ComposeCharacterRenderer, t: Float, c
     )
 }
 
-private fun lerpFloat(a: Float, b: Float, f: Float): Float = a + (b - a) * f
-
-/**
- * Portal Dimensional holográfico sob os pés dos personagens.
- *
- * - Quando ativo (transition = 1): base/pedestal dimensional 3D sob os pés com anéis holográficos.
- * - Quando recolhido (transition = 0): o personagem volta para a outra dimensão e apenas o círculo
- *   dimensional flutua suavemente na tela do celular com pulso cósmico e anéis rotativos.
- */
+/** Base dimensional holográfica sob os pés; some por completo ao recolher (fica só o risquinho). */
 private fun DrawScope.drawDimensionalPortal(r: ComposeCharacterRenderer, t: Float, transition: Float) {
     val side = size.minDimension
 
-    // Interpolação de posição:
-    // transition = 0 -> portal centralizado na janela (size.height / 2f)
-    // transition = 1 -> portal na base dos pés (size.height * 0.90f)
-    val centerY = lerpFloat(size.height / 2f, size.height * 0.90f, transition)
+    val centerY = size.height * 0.90f
     val centerX = size.width / 2f
     val center = Offset(centerX, centerY)
 
     // Geometria: de círculo flutuante (minimizado) para elipse plana 3D nos pés (expandido)
-    val radiusX = lerpFloat(side * 0.32f, side * 0.42f, transition)
-    val radiusY = lerpFloat(side * 0.32f, side * 0.13f, transition)
+    val radiusX = side * 0.42f
+    val radiusY = side * 0.13f
     val scaleY = (radiusY / radiusX).coerceAtLeast(0.05f)
 
     val cyanHolo = Color(0xFF00E5FF)
@@ -208,7 +236,7 @@ private fun DrawScope.drawDimensionalPortal(r: ComposeCharacterRenderer, t: Floa
     }
 
     // 1. Campo de energia e vórtice interno
-    val coreAlpha = lerpFloat(0.42f + 0.28f * pulse, 0.22f, transition)
+    val coreAlpha = 0.22f * transition
     withTransform({
         scale(1f, scaleY, center)
     }) {
@@ -238,7 +266,7 @@ private fun DrawScope.drawDimensionalPortal(r: ComposeCharacterRenderer, t: Floa
         for (i in 0 until 4) {
             val startAngle = i * 90f + 10f
             drawArc(
-                color = cyanHolo.copy(alpha = 0.85f),
+                color = cyanHolo.copy(alpha = 0.85f * transition),
                 startAngle = startAngle,
                 sweepAngle = 70f,
                 useCenter = false,
@@ -258,7 +286,7 @@ private fun DrawScope.drawDimensionalPortal(r: ComposeCharacterRenderer, t: Floa
         for (i in 0 until 3) {
             val startAngle = i * 120f + 15f
             drawArc(
-                color = purpleCore.copy(alpha = 0.75f),
+                color = purpleCore.copy(alpha = 0.75f * transition),
                 startAngle = startAngle,
                 sweepAngle = 90f,
                 useCenter = false,
@@ -267,22 +295,6 @@ private fun DrawScope.drawDimensionalPortal(r: ComposeCharacterRenderer, t: Floa
                 style = Stroke(width = strokeWidth * 0.8f, cap = StrokeCap.Round),
             )
         }
-    }
-
-    // 4. Quando minimizado (transition < 0.5f), desenha o núcleo / orbe quântico flutuante no centro
-    if (transition < 0.5f) {
-        val orbAlpha = (1f - transition * 2f).coerceIn(0f, 1f)
-        val coreRadius = side * (0.07f + 0.018f * pulse)
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(Color.White, cyanHolo, Color.Transparent),
-                center = center,
-                radius = coreRadius * 1.6f,
-            ),
-            radius = coreRadius,
-            center = center,
-            alpha = orbAlpha,
-        )
     }
 }
 
@@ -295,10 +307,22 @@ private fun DrawScope.drawArt(
     t: Float,
     blink: Boolean,
     transition: Float,
+    engage: Float,
+    fade: ArtFade,
+    aligned: Boolean,
 ) {
     var wanted = ExpressionPicker.pick(r.state, r.emotion, r.mouthLevel)
     if (blink && wanted == Expression.NEUTRO && Expression.DORMINDO in art && isBlinking(t)) wanted = Expression.DORMINDO
     val image = ExpressionPicker.resolve(wanted, art) ?: return
+
+    // Troca de expressão com fusão curta (só para arte alinhada; em arte desalinhada fundiria "fantasmas").
+    if (fade.changedAt > t) fade.changedAt = t
+    if (image !== fade.current) {
+        fade.previous = fade.current
+        fade.current = image
+        fade.changedAt = t
+    }
+    val f = ((t - fade.changedAt) / FADE_SECONDS).coerceIn(0f, 1f)
 
     val side = size.minDimension
     if (transition >= 0.98f) {
@@ -308,24 +332,34 @@ private fun DrawScope.drawArt(
     val lift = bobbing(r.state, t) * side * transition
     val pivot = Offset(size.width / 2f, size.height * 0.90f)
 
-    // O personagem submerge / emerge do portal dimensional sob os pés
+    // O personagem submerge / emerge da base dimensional sob os pés
     val sink = (1f - transition) * (side * 0.48f)
-    val currentScale = breath * (0.15f + 0.85f * transition)
+    // Em repouso fica um pouco menor; ao se engajar "chega mais perto" (cresce) e olha para o usuário.
+    val closeness = 0.90f + 0.10f * engage
+    val currentScale = breath * closeness * (0.15f + 0.85f * transition)
     val currentAlpha = (transition * 1.25f).coerceIn(0f, 1f)
+    // Balanço lento, independente da boca, e leve deslocamento para onde olha (paralaxe).
+    val sway = 0.8f * sin(2f * PI.toFloat() * t / 5.2f) * (1f - 0.6f * engage)
+    val shiftX = r.look.x * side * 0.012f
 
     withTransform({
-        translate(top = -lift + sink)
+        translate(left = shiftX, top = -lift + sink)
+        rotate(sway, pivot)
         scale(currentScale, currentScale, pivot)
     }) {
-        drawImage(
-            image,
-            dstOffset = IntOffset(((size.width - side) / 2f).toInt(), ((size.height - side) / 2f).toInt()),
-            dstSize = IntSize(side.toInt(), side.toInt()),
-            alpha = currentAlpha,
-            filterQuality = FilterQuality.Medium,
-        )
+        val dst = IntOffset(((size.width - side) / 2f).toInt(), ((size.height - side) / 2f).toInt())
+        val dstSize = IntSize(side.toInt(), side.toInt())
+        val previous = fade.previous
+        if (aligned && f < 1f && previous != null) {
+            drawImage(previous, dstOffset = dst, dstSize = dstSize, alpha = currentAlpha, filterQuality = FilterQuality.Medium)
+            drawImage(image, dstOffset = dst, dstSize = dstSize, alpha = currentAlpha * f, filterQuality = FilterQuality.Medium)
+        } else {
+            drawImage(image, dstOffset = dst, dstSize = dstSize, alpha = currentAlpha, filterQuality = FilterQuality.Medium)
+        }
     }
 }
+
+private const val FADE_SECONDS = 0.12f
 
 private fun DrawScope.drawCharacter(r: ComposeCharacterRenderer, t: Float, transition: Float) {
     val side = size.minDimension

@@ -27,10 +27,13 @@ import com.joctaeng.jarvis.mind.orchestrator.BrainPreference
 import com.joctaeng.jarvis.mind.orchestrator.Orchestrator
 import com.joctaeng.jarvis.mind.orchestrator.OrchestratorEvent
 import com.joctaeng.jarvis.mind.orchestrator.RoutingHints
+import com.joctaeng.jarvis.mind.persona.DismissCommands
 import com.joctaeng.jarvis.mind.persona.MemoryCommand
 import com.joctaeng.jarvis.mind.persona.MemoryCommands
 import com.joctaeng.jarvis.mind.persona.PersonaEngine
 import com.joctaeng.jarvis.mind.persona.PromptContext
+import com.joctaeng.jarvis.mind.persona.SelfInfo
+import com.joctaeng.jarvis.mind.persona.SelfKnowledge
 import com.joctaeng.jarvis.mind.persona.SentenceChunker
 import com.joctaeng.jarvis.mind.persona.StreamingEmotionParser
 import com.joctaeng.jarvis.overlay.OverlayBus
@@ -102,6 +105,12 @@ class ConversationController(private val app: JarvisApp) {
             _busy.value = true
             add(ChatEntry(nextId++, Role.USER, clean))
             try {
+                if (DismissCommands.matches(clean)) {
+                    say("Até logo!", Emotion.HAPPY, speak)
+                    if (speak) voice.awaitIdle()
+                    OverlayBus.requestDismiss()
+                    return@launch
+                }
                 val command = MemoryCommands.parse(clean)
                 if (command != null) handleMemory(command, speak) else respond(speak)
                 if (speak) voice.awaitIdle()
@@ -163,6 +172,18 @@ class ConversationController(private val app: JarvisApp) {
             compact = onlyLocal,
             toolsSection = if (tools.isEmpty()) "" else ToolProtocol.systemSection(tools),
             userBio = settings.userBio,
+            selfSection = SelfKnowledge.section(
+                SelfInfo(
+                    versionName = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull() ?: "?",
+                    brainNames = providers.map { it.displayName },
+                    voiceName = settings.voiceEngine.name.lowercase(),
+                    autonomyLabel = settings.autonomy.name.lowercase(),
+                    toolNames = tools.map { it.name },
+                    memoryCount = memories.size,
+                    privateMode = settings.privateMode,
+                ),
+                compact = onlyLocal,
+            ),
         )
         val history = _entries.value.filter { !it.note && !it.streaming }.takeLast(HISTORY).map { ChatMessage(it.role, it.text) }
         val maxTokens = if (onlyLocal) 512 else null

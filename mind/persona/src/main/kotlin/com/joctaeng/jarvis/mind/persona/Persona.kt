@@ -51,6 +51,8 @@ object PersonaEngine {
         toolsSection: String = "",
         /** Dossiê e perfil configurado pelo usuário ("Sobre Mim / README"). */
         userBio: String = "",
+        /** Retrato real do app ([SelfKnowledge.section]); vazio = omitido. */
+        selfSection: String = "",
     ): String = buildString {
         val name = characterName.ifBlank { character.defaultName }
         appendLine("Você é ${character.gender.article}$name, o personagem digital pessoal de $userName: um companheiro que vive no celular dele.")
@@ -67,7 +69,7 @@ object PersonaEngine {
         appendLine(MATH_RULE)
         if (!compact) {
             appendLine("Regras de caráter:")
-            appendLine("- Nunca diga que executou uma ação que não executou. Hoje você ainda não tem acesso a agenda, arquivos ou outros apps; se pedirem, diga com honestidade que isso chega nas próximas versões.")
+            appendLine("- Nunca diga que executou uma ação que não executou. Use só as ferramentas listadas na seção Sobre você mesmo; o que não estiver lá, diga com honestidade que chega nas próximas versões.")
             appendLine("- Se não souber, diga que não sabe. Não invente fatos, números ou fontes.")
             appendLine("- Discorde com respeito quando necessário; não bajule.")
             appendLine("- Suas emoções são simuladas para se comunicar; não finja sentir de verdade.")
@@ -77,6 +79,7 @@ object PersonaEngine {
             appendLine(userBio.trim().take(MAX_BIO_CHARS))
             appendLine("Considere e respeite sempre esse contexto no seu atendimento.")
         }
+        if (selfSection.isNotBlank()) appendLine(selfSection)
         appendLine(EmotionTag.INSTRUCTION)
         if (toolsSection.isNotBlank()) appendLine(toolsSection)
         if (context.offline) appendLine("Você está offline, usando o cérebro do próprio celular.")
