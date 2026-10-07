@@ -1,6 +1,17 @@
 package com.joctaeng.jarvis.voice
 
 import com.joctaeng.jarvis.mind.persona.SpokenText
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import com.joctaeng.jarvis.settings.CloudPreset
+import com.joctaeng.jarvis.settings.VoiceEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
@@ -25,7 +36,7 @@ data class VoiceOption(val name: String, val label: String, val needsNetwork: Bo
  * quando instalado — no HyperOS o padrão costuma ser um motor mais robótico — e
  * escolhe a voz pt-BR de maior qualidade, salvo escolha do usuário.
  */
-class VoiceOutput(context: Context, private val settings: AppSettings) {
+class VoiceOutput(context: Context, private val settings: AppSettings, private val geminiKey: () -> String? = { null }) {
     private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private var tts: TextToSpeech? = null
@@ -43,6 +54,67 @@ class VoiceOutput(context: Context, private val settings: AppSettings) {
 
     var activeEngine: String? = null
         private set
+
+    // Voz natural do Gemini: fila própria, sintetiza a próxima frase enquanto a atual toca.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var cloud: CloudPipeline? = null
+
+    /** Motor que vai falar agora: "Gemini" (natural) ou o do Android. */
+    val usingNaturalVoice: Boolean get() = naturalVoice() != null
+
+    private fun naturalVoice(): GeminiSpeech? {
+        if (settings.voiceEngine == VoiceEngine.ANDROID || settings.cloudPreset != CloudPreset.GEMINI) return null
+        val key = geminiKey()?.takeIf { it.isNotBlank() } ?: return null
+        if (!online()) return null
+        return GeminiSpeech(key, settings.geminiTtsModel.ifBlank { GeminiSpeech.DEFAULT_MODEL })
+    }
+
+    private fun online(): Boolean {
+        val cm = appContext.getSystemService(ConnectivityManager::class.java) ?: return false
+        return cm.getNetworkCapabilities(cm.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+    }
+
+    private fun naturalVoiceName(): String = settings.geminiVoice.ifBlank { GeminiSpeech.defaultVoiceFor(settings.character.id) }
+
+    /** Fila do Gemini: produtor sintetiza (até 2 frases adiante), consumidor toca em ordem. */
+    private inner class CloudPipeline(private val speech: GeminiSpeech) {
+        @Volatile var stopped = false
+        private val sentences = Channel<String>(Channel.UNLIMITED)
+        private val clips = Channel<Pair<String, Deferred<GeminiSpeech.Clip?>>>(2)
+        private val jobs = listOf(
+            scope.launch {
+                for (text in sentences) {
+                    val voice = naturalVoiceName()
+                    clips.send(text to scope.async { runCatching { speech.synthesize(text, voice) }.getOrNull() })
+                }
+            },
+            scope.launch(Dispatchers.IO) {
+                for ((text, pending) in clips) {
+                    val clip = pending.await()
+                    if (stopped) break
+                    if (clip == null) {
+                        // Falhou (rede, cota): esta frase sai na voz do Android, sem perder a fala.
+                        main.post { if (ready) enqueue(text) else finishedOne() }
+                        continue
+                    }
+                    _speaking.value = true
+                    speech.play(clip) { stopped }
+                    finishedOne()
+                }
+            },
+        )
+
+        fun offer(text: String) {
+            sentences.trySend(text)
+        }
+
+        fun stop() {
+            stopped = true
+            sentences.close()
+            clips.cancel()
+            jobs.forEach { it.cancel() }
+        }
+    }
 
     fun start() {
         if (tts != null) return
@@ -66,6 +138,11 @@ class VoiceOutput(context: Context, private val settings: AppSettings) {
         val clean = clean(text)
         if (clean.isBlank()) return
         _queued.update { it + 1 }
+        naturalVoice()?.let { speech ->
+            val pipeline = cloud?.takeIf { !it.stopped } ?: CloudPipeline(speech).also { cloud = it }
+            pipeline.offer(clean)
+            return
+        }
         if (!ready) {
             waiting += clean
             return
@@ -74,6 +151,8 @@ class VoiceOutput(context: Context, private val settings: AppSettings) {
     }
 
     fun stop() {
+        cloud?.stop()
+        cloud = null
         waiting.clear()
         tts?.stop()
         _queued.value = 0

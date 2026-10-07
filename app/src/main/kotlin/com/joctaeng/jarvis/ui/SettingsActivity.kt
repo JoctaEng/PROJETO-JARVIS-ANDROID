@@ -50,6 +50,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.joctaeng.jarvis.JarvisApp
+import com.joctaeng.jarvis.voice.GeminiSpeech
+import com.joctaeng.jarvis.settings.VoiceEngine
 import androidx.compose.runtime.collectAsState
 import com.joctaeng.jarvis.tools.McpServerInfo
 import com.joctaeng.jarvis.core.model.AutonomyLevel
@@ -542,6 +544,25 @@ class SettingsActivity : ComponentActivity() {
         }
 
         Section("Voz") {
+            var naturalEngine by remember { mutableStateOf(settings.voiceEngine) }
+            var naturalVoice by remember { mutableStateOf(settings.geminiVoice) }
+            Text("Voz natural (Gemini)", style = MaterialTheme.typography.labelLarge)
+            Choice(VoiceEngine.entries, naturalEngine, { it.label }) {
+                naturalEngine = it
+                settings.voiceEngine = it
+                voice.stop()
+            }
+            if (settings.cloudPreset != CloudPreset.GEMINI) {
+                Hint("A voz natural usa a mesma chave do Google Gemini do Cérebro. Escolha o Gemini lá para ativá-la.")
+            } else if (naturalEngine != VoiceEngine.ANDROID) {
+                val default = GeminiSpeech.defaultVoiceFor(settings.character.id)
+                Choice(listOf("") + GeminiSpeech.VOICES, naturalVoice, { if (it.isEmpty()) "Padrão de ${settings.displayName} ($default)" else it }) {
+                    naturalVoice = it
+                    settings.geminiVoice = it
+                }
+                Hint("Sem internet (ou se a voz natural falhar), ${settings.displayName} fala com a voz do Android abaixo. Cada uso consome cota da sua chave do Gemini.")
+            }
+            Text("Voz do Android (reserva)", style = MaterialTheme.typography.labelLarge)
             if (engines.none { it.packageName == VoiceOutput.GOOGLE_TTS }) {
                 Hint("Para uma voz bem mais natural, instale \"Serviços de fala do Google\" na Play Store.")
                 OutlinedButton(onClick = {

@@ -83,6 +83,12 @@ class AppSettings(context: Context) {
     var speakReplies by boolean("speakReplies", true)
     var privateMode by boolean("privateMode", false)
 
+    /** Voz: Automático = natural do Gemini quando houver internet e chave do Gemini; senão a do Android. */
+    var voiceEngine by enum("voiceEngine", VoiceEngine.AUTO)
+    /** Vazio = voz padrão do personagem. */
+    var geminiVoice by string("geminiVoice", "")
+    var geminiTtsModel by string("geminiTtsModel", "")
+
     /** Nível de autonomia (seção 10.2). Operador: consultas livres, ações pedem confirmação. */
     var autonomy by enum("autonomy", AutonomyLevel.OPERATOR)
     private var disabledToolsRaw by string("disabledTools", "")
@@ -122,4 +128,10 @@ class AppSettings(context: Context) {
                 _version.value++
             }
         }
+}
+
+enum class VoiceEngine(val label: String) {
+    AUTO("Automático: natural (Gemini) com internet, Android sem internet"),
+    GEMINI("Sempre natural (Gemini)"),
+    ANDROID("Sempre a voz do Android"),
 }

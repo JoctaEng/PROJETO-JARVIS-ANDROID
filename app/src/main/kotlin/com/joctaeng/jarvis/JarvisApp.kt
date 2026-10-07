@@ -28,7 +28,7 @@ class JarvisApp : Application() {
     lateinit var secrets: SecretStore
         private set
     val memory: MemoryStore by lazy { MemoryStore(File(filesDir, "memory/memory.json")) }
-    val voice: VoiceOutput by lazy { VoiceOutput(this, settings).also { it.start() } }
+    val voice: VoiceOutput by lazy { VoiceOutput(this, settings) { secrets.get(SecretStore.CLOUD_API_KEY) }.also { it.start() } }
     val conversation: ConversationController by lazy { ConversationController(this) }
     val toolbox: Toolbox by lazy { Toolbox(this) }
 
