@@ -54,7 +54,7 @@ jobs:
             echo "::warning::Segredo EUNO_SIGNING_SEED ausente: APK assinado com chave temporária (não atualiza por cima)."
             exit 0
           fi
-          pip install --quiet cryptography
+          python3 -m pip install --quiet --upgrade cryptography --break-system-packages || pip install --quiet cryptography || true
           SENHA=$(openssl rand -hex 24)
           echo "::add-mask::$SENHA"
           python tools/assinatura/gerar_keystore.py "$RUNNER_TEMP/euno.p12" "$SENHA"

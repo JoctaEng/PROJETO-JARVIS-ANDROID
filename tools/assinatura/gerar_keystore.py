@@ -29,7 +29,7 @@ def main(out_path: str, password: str) -> None:
     key = ec.derive_private_key(scalar, ec.SECP256R1())
 
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Euno"), x509.NameAttribute(NameOID.ORGANIZATION_NAME, "JoctaEng")])
-    cert = (
+    builder = (
         x509.CertificateBuilder()
         .subject_name(name)
         .issuer_name(name)
@@ -37,8 +37,11 @@ def main(out_path: str, password: str) -> None:
         .serial_number(1)
         .not_valid_before(datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc))
         .not_valid_after(datetime.datetime(2076, 1, 1, tzinfo=datetime.timezone.utc))
-        .sign(key, hashes.SHA256(), ecdsa_deterministic=True)
     )
+    try:
+        cert = builder.sign(key, hashes.SHA256(), ecdsa_deterministic=True)
+    except TypeError:
+        cert = builder.sign(key, hashes.SHA256())
     data = pkcs12.serialize_key_and_certificates(
         b"euno", key, cert, None, serialization.BestAvailableEncryption(password.encode()),
     )
