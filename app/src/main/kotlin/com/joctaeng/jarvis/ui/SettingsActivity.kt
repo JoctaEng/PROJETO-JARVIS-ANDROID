@@ -50,6 +50,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.joctaeng.jarvis.JarvisApp
+import com.joctaeng.jarvis.mind.persona.Gender
+import com.joctaeng.jarvis.voice.KokoroVoice
 import com.joctaeng.jarvis.voice.GeminiSpeech
 import com.joctaeng.jarvis.settings.VoiceEngine
 import androidx.compose.runtime.collectAsState
@@ -546,21 +548,69 @@ class SettingsActivity : ComponentActivity() {
         Section("Voz") {
             var naturalEngine by remember { mutableStateOf(settings.voiceEngine) }
             var naturalVoice by remember { mutableStateOf(settings.geminiVoice) }
-            Text("Voz natural (Gemini)", style = MaterialTheme.typography.labelLarge)
+            var kokoroSpeaker by remember { mutableIntStateOf(settings.kokoroSpeaker) }
+            var kokoroState by remember { mutableStateOf<KokoroVoice.State>(KokoroVoice.State.NotInstalled) }
+            val voiceScope = rememberCoroutineScope()
+            LaunchedEffect(Unit) {
+                while (true) {
+                    kokoroState = voice.kokoro.poll()
+                    if (kokoroState !is KokoroVoice.State.Downloading) break
+                    delay(1000)
+                }
+            }
+            Text("Voz natural", style = MaterialTheme.typography.labelLarge)
             Choice(VoiceEngine.entries, naturalEngine, { it.label }) {
                 naturalEngine = it
                 settings.voiceEngine = it
                 voice.stop()
             }
-            if (settings.cloudPreset != CloudPreset.GEMINI) {
-                Hint("A voz natural usa a mesma chave do Google Gemini do Cérebro. Escolha o Gemini lá para ativá-la.")
-            } else if (naturalEngine != VoiceEngine.ANDROID) {
-                val default = GeminiSpeech.defaultVoiceFor(settings.character.id)
-                Choice(listOf("") + GeminiSpeech.VOICES, naturalVoice, { if (it.isEmpty()) "Padrão de ${settings.displayName} ($default)" else it }) {
-                    naturalVoice = it
-                    settings.geminiVoice = it
+            if (naturalEngine == VoiceEngine.AUTO || naturalEngine == VoiceEngine.GEMINI) {
+                if (settings.cloudPreset != CloudPreset.GEMINI) {
+                    Hint("A voz do Gemini usa a mesma chave do Google Gemini do Cérebro. Escolha o Gemini lá para ativá-la.")
+                } else {
+                    val default = GeminiSpeech.defaultVoiceFor(settings.character.id)
+                    Choice(listOf("") + GeminiSpeech.VOICES, naturalVoice, { if (it.isEmpty()) "Gemini: padrão de ${settings.displayName} ($default)" else "Gemini: $it" }) {
+                        naturalVoice = it
+                        settings.geminiVoice = it
+                    }
+                    Hint("Cada fala consome cota da sua chave do Gemini.")
                 }
-                Hint("Sem internet (ou se a voz natural falhar), ${settings.displayName} fala com a voz do Android abaixo. Cada uso consome cota da sua chave do Gemini.")
+            }
+            if (naturalEngine != VoiceEngine.ANDROID && naturalEngine != VoiceEngine.GEMINI) {
+                when (val k = kokoroState) {
+                    KokoroVoice.State.Ready -> {
+                        val default = KokoroVoice.defaultSpeakerFor(settings.character.id, settings.character.gender == Gender.FEMALE)
+                        Choice(listOf(-1) + KokoroVoice.VOICES.keys, kokoroSpeaker, {
+                            if (it < 0) "Kokoro: padrão de ${settings.displayName} (${KokoroVoice.VOICES[default]})" else "Kokoro: ${KokoroVoice.VOICES[it]}"
+                        }) {
+                            kokoroSpeaker = it
+                            settings.kokoroSpeaker = it
+                        }
+                        TextButton(onClick = {
+                            voice.kokoro.delete()
+                            kokoroState = KokoroVoice.State.NotInstalled
+                        }) { Text("Apagar voz offline") }
+                    }
+                    is KokoroVoice.State.Downloading -> {
+                        Hint("Baixando voz offline: ${k.bytes shr 20} de ${if (k.total > 0) k.total shr 20 else 130} MB")
+                        OutlinedButton(onClick = { voice.kokoro.cancel(); kokoroState = KokoroVoice.State.NotInstalled }) { Text("Cancelar") }
+                    }
+                    KokoroVoice.State.Extracting -> Hint("Preparando a voz…")
+                    else -> {
+                        if (k is KokoroVoice.State.Failed) Hint("Falhou: ${k.reason}")
+                        Button(onClick = {
+                            voice.kokoro.startDownload()
+                            voiceScope.launch {
+                                while (true) {
+                                    delay(1000)
+                                    kokoroState = voice.kokoro.poll()
+                                    if (kokoroState !is KokoroVoice.State.Downloading) break
+                                }
+                            }
+                        }) { Text("Baixar voz offline Kokoro (~130 MB, Wi-Fi)") }
+                        Hint("Voz natural sem internet, em português do Brasil (vozes Dora, Alex e Santa).")
+                    }
+                }
             }
             Text("Voz do Android (reserva)", style = MaterialTheme.typography.labelLarge)
             if (engines.none { it.packageName == VoiceOutput.GOOGLE_TTS }) {

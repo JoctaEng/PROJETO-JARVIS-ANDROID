@@ -14,3 +14,6 @@ captures/
 # Fonte do llama.cpp (baixada pelo CI)
 mind/provider-llama/src/main/cpp/llama.cpp/
 *.gguf
+
+# AAR do sherpa-onnx (baixado pelo CI)
+app/libs/*.aar

@@ -16,6 +16,8 @@ android {
         // versionCode cresce a cada build do CI, para o APK novo sempre atualizar o anterior.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "${providers.gradleProperty("euno.version").get()} (Fase ${providers.gradleProperty("euno.phase").get()})"
+        // Só arm64 (Redmi Note 13 Pro+ e celulares atuais): llama.cpp e sherpa-onnx são pesados em 4 arquiteturas.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     // Chave fixa (ADR 0010): o CI gera a keystore a partir do segredo EUNO_SIGNING_SEED. Sem ela (build local),
@@ -68,6 +70,9 @@ dependencies {
     implementation(project(":mind:memory"))
     implementation(project(":action:gateway"))
     implementation(project(":action:mcp"))
+    // Voz offline (Kokoro): AAR oficial do sherpa-onnx v1.13.8, baixado pelo CI dos releases do GitHub (não está no Maven).
+    implementation(files("libs/sherpa-onnx-1.13.8.aar"))
+    implementation(libs.commons.compress)
     implementation(project(":system:resources"))
     implementation(project(":presence:placement"))
     implementation(project(":presence:expression"))

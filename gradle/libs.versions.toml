@@ -1,6 +1,7 @@
 # Versões alinhadas ao app oficial Google AI Edge Gallery (que usa LiteRT-LM),
 # para reduzir risco de incompatibilidade. Ver docs/ADR/0002-versoes-e-build.md.
 [versions]
+commonsCompress = "1.28.0"
 agp = "9.0.1"
 kotlin = "2.2.21"
 coroutines = "1.10.2"
@@ -15,6 +16,7 @@ junit = "4.13.2"
 serializationJson = "1.7.3"
 
 [libraries]
+commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 plugin-android = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }
 plugin-kotlin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
 plugin-compose-compiler = { group = "org.jetbrains.kotlin", name = "compose-compiler-gradle-plugin", version.ref = "kotlin" }

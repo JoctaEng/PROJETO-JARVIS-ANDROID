@@ -34,6 +34,12 @@ jobs:
       - name: Fonte do llama.cpp (IA do celular, ADR 0009)
         run: git clone --depth 1 --branch v0.5.0 https://github.com/ggml-org/llama.cpp mind/provider-llama/src/main/cpp/llama.cpp
 
+      - name: sherpa-onnx (voz offline Kokoro)
+        run: |
+          mkdir -p app/libs
+          curl -sSfL -o app/libs/sherpa-onnx-1.13.8.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar
+          echo "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96  app/libs/sherpa-onnx-1.13.8.aar" | sha256sum -c -
+
       - name: Conferir o endereço do modelo recomendado (Qwen3-4B)
         run: |
           URL=$(grep -A1 'RECOMMENDED_URL =' app/src/main/kotlin/com/joctaeng/jarvis/poc/ModelDownload.kt | grep -o 'https://[^"]*')

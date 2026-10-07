@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.joctaeng.jarvis.settings.CloudPreset
 import com.joctaeng.jarvis.settings.VoiceEngine
+import com.joctaeng.jarvis.mind.persona.Gender
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -59,15 +60,30 @@ class VoiceOutput(context: Context, private val settings: AppSettings, private v
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var cloud: CloudPipeline? = null
 
-    /** Motor que vai falar agora: "Gemini" (natural) ou o do Android. */
-    val usingNaturalVoice: Boolean get() = naturalVoice() != null
+    val kokoro = KokoroVoice(appContext)
 
-    private fun naturalVoice(): GeminiSpeech? {
-        if (settings.voiceEngine == VoiceEngine.ANDROID || settings.cloudPreset != CloudPreset.GEMINI) return null
-        val key = geminiKey()?.takeIf { it.isNotBlank() } ?: return null
-        if (!online()) return null
-        return GeminiSpeech(key, settings.geminiTtsModel.ifBlank { GeminiSpeech.DEFAULT_MODEL })
+    /** Gera uma frase em áudio; null = não deu (cai para a próxima voz). */
+    private fun interface Synth {
+        suspend fun clip(text: String): GeminiSpeech.Clip?
     }
+
+    /** Ordem: Gemini (online) → Kokoro (offline, se instalado) → voz do Android. */
+    private fun naturalVoice(): Synth? {
+        val engine = settings.voiceEngine
+        if (engine == VoiceEngine.ANDROID) return null
+        val gemini = if (engine != VoiceEngine.KOKORO && settings.cloudPreset == CloudPreset.GEMINI && online()) {
+            geminiKey()?.takeIf { it.isNotBlank() }?.let { GeminiSpeech(it, settings.geminiTtsModel.ifBlank { GeminiSpeech.DEFAULT_MODEL }) }
+        } else null
+        val offline = if (engine != VoiceEngine.GEMINI && kokoro.installed) kokoro else null
+        if (gemini == null && offline == null) return null
+        return Synth { text ->
+            gemini?.let { g -> runCatching { g.synthesize(text, naturalVoiceName()) }.getOrNull() }
+                ?: offline?.let { k -> runCatching { k.synthesize(text, kokoroSpeaker(), settings.ttsRate) }.getOrNull() }
+        }
+    }
+
+    private fun kokoroSpeaker(): Int = settings.kokoroSpeaker.takeIf { it >= 0 }
+        ?: KokoroVoice.defaultSpeakerFor(settings.character.id, settings.character.gender == Gender.FEMALE)
 
     private fun online(): Boolean {
         val cm = appContext.getSystemService(ConnectivityManager::class.java) ?: return false
@@ -77,15 +93,14 @@ class VoiceOutput(context: Context, private val settings: AppSettings, private v
     private fun naturalVoiceName(): String = settings.geminiVoice.ifBlank { GeminiSpeech.defaultVoiceFor(settings.character.id) }
 
     /** Fila do Gemini: produtor sintetiza (até 2 frases adiante), consumidor toca em ordem. */
-    private inner class CloudPipeline(private val speech: GeminiSpeech) {
+    private inner class CloudPipeline(private val speech: Synth) {
         @Volatile var stopped = false
         private val sentences = Channel<String>(Channel.UNLIMITED)
         private val clips = Channel<Pair<String, Deferred<GeminiSpeech.Clip?>>>(2)
         private val jobs = listOf(
             scope.launch {
                 for (text in sentences) {
-                    val voice = naturalVoiceName()
-                    clips.send(text to scope.async { runCatching { speech.synthesize(text, voice) }.getOrNull() })
+                    clips.send(text to scope.async { speech.clip(text) })
                 }
             },
             scope.launch(Dispatchers.IO) {
@@ -98,7 +113,7 @@ class VoiceOutput(context: Context, private val settings: AppSettings, private v
                         continue
                     }
                     _speaking.value = true
-                    speech.play(clip) { stopped }
+                    PcmPlayer.play(clip) { stopped }
                     finishedOne()
                 }
             },

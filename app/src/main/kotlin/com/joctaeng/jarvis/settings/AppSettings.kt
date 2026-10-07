@@ -88,6 +88,8 @@ class AppSettings(context: Context) {
     /** Vazio = voz padrão do personagem. */
     var geminiVoice by string("geminiVoice", "")
     var geminiTtsModel by string("geminiTtsModel", "")
+    /** -1 = voz Kokoro padrão do personagem. */
+    var kokoroSpeaker by int("kokoroSpeaker", -1)
 
     /** Nível de autonomia (seção 10.2). Operador: consultas livres, ações pedem confirmação. */
     var autonomy by enum("autonomy", AutonomyLevel.OPERATOR)
@@ -131,7 +133,8 @@ class AppSettings(context: Context) {
 }
 
 enum class VoiceEngine(val label: String) {
-    AUTO("Automático: natural (Gemini) com internet, Android sem internet"),
-    GEMINI("Sempre natural (Gemini)"),
-    ANDROID("Sempre a voz do Android"),
+    AUTO("Automático: Gemini com internet, Kokoro sem internet"),
+    GEMINI("Gemini (online)"),
+    KOKORO("Kokoro (offline, no celular)"),
+    ANDROID("Voz do Android"),
 }

@@ -54,34 +54,6 @@ class GeminiSpeech(private val apiKey: String, private val model: String = DEFAU
         }
     }
 
-    /** Toca e só retorna quando terminar (ou quando [stopped] virar true). */
-    fun play(clip: Clip, stopped: () -> Boolean) {
-        val track = AudioTrack.Builder()
-            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-            .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(clip.sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .setBufferSizeInBytes(AudioTrack.getMinBufferSize(clip.sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT) * 2)
-            .build()
-        try {
-            track.play()
-            var offset = 0
-            val step = clip.sampleRate / 5 * 2 // ~200 ms por bloco, para parar rápido
-            while (offset < clip.pcm.size && !stopped()) {
-                val n = track.write(clip.pcm, offset, minOf(step, clip.pcm.size - offset))
-                if (n <= 0) break
-                offset += n
-            }
-            if (!stopped()) {
-                // Espera o que ainda está no buffer acabar de tocar.
-                val totalFrames = clip.pcm.size / 2
-                while (!stopped() && track.playbackHeadPosition < totalFrames) Thread.sleep(20)
-            }
-        } finally {
-            runCatching { track.stop() }
-            track.release()
-        }
-    }
-
     private fun findAudio(json: JSONObject): JSONObject? {
         val outputs = json.optJSONArray("outputs") ?: return null
         for (i in 0 until outputs.length()) {
@@ -124,6 +96,35 @@ class GeminiSpeech(private val apiKey: String, private val model: String = DEFAU
                 pos += 8 + size + (size and 1)
             }
             return Clip(bytes.copyOfRange(44.coerceAtMost(bytes.size), bytes.size), rate)
+        }
+    }
+}
+
+/** Toca PCM 16 bits mono e só retorna quando terminar (ou quando [stopped] virar true). */
+object PcmPlayer {
+    fun play(clip: GeminiSpeech.Clip, stopped: () -> Boolean) {
+        val track = AudioTrack.Builder()
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+            .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(clip.sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .setBufferSizeInBytes(AudioTrack.getMinBufferSize(clip.sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT) * 2)
+            .build()
+        try {
+            track.play()
+            var offset = 0
+            val step = clip.sampleRate / 5 * 2 // ~200 ms por bloco, para parar rápido
+            while (offset < clip.pcm.size && !stopped()) {
+                val n = track.write(clip.pcm, offset, minOf(step, clip.pcm.size - offset))
+                if (n <= 0) break
+                offset += n
+            }
+            if (!stopped()) {
+                val totalFrames = clip.pcm.size / 2
+                while (!stopped() && track.playbackHeadPosition < totalFrames) Thread.sleep(20)
+            }
+        } finally {
+            runCatching { track.stop() }
+            track.release()
         }
     }
 }
