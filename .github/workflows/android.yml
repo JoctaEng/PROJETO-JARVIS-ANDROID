@@ -40,6 +40,21 @@ jobs:
           echo "URL: $URL"
           curl -sSIL --fail --max-time 60 "$URL" | grep -iE '^(HTTP|content-length|x-linked-size)' || { echo "::error::Endereço do modelo não respondeu"; exit 1; }
 
+      - name: Chave de assinatura fixa (ADR 0010)
+        env:
+          EUNO_SIGNING_SEED: ${{ secrets.EUNO_SIGNING_SEED }}
+        run: |
+          if [ -z "$EUNO_SIGNING_SEED" ]; then
+            echo "::warning::Segredo EUNO_SIGNING_SEED ausente: APK assinado com chave temporária (não atualiza por cima)."
+            exit 0
+          fi
+          pip install --quiet cryptography
+          SENHA=$(openssl rand -hex 24)
+          echo "::add-mask::$SENHA"
+          python tools/assinatura/gerar_keystore.py "$RUNNER_TEMP/euno.p12" "$SENHA"
+          echo "EUNO_KEYSTORE_FILE=$RUNNER_TEMP/euno.p12" >> "$GITHUB_ENV"
+          echo "EUNO_KEYSTORE_PASSWORD=$SENHA" >> "$GITHUB_ENV"
+
       - name: Testes de unidade (lógica pura + app)
         run: ./gradlew test --stacktrace
 

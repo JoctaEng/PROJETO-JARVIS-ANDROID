@@ -18,11 +18,27 @@ android {
         versionName = "${providers.gradleProperty("euno.version").get()} (Fase ${providers.gradleProperty("euno.phase").get()})"
     }
 
+    // Chave fixa (ADR 0010): o CI gera a keystore a partir do segredo EUNO_SIGNING_SEED. Sem ela (build local),
+    // usa a chave de debug da máquina, e o APK não atualiza por cima do instalado.
+    val eunoKeystore = System.getenv("EUNO_KEYSTORE_FILE")?.let(::file)?.takeIf { it.isFile }
+    signingConfigs {
+        if (eunoKeystore != null) {
+            create("euno") {
+                storeFile = eunoKeystore
+                storeType = "PKCS12"
+                storePassword = System.getenv("EUNO_KEYSTORE_PASSWORD")
+                keyAlias = "euno"
+                keyPassword = System.getenv("EUNO_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
+        val signing = if (eunoKeystore != null) signingConfigs.getByName("euno") else signingConfigs.getByName("debug")
+        debug { signingConfig = signing }
         release {
             isMinifyEnabled = false
-            // APK pessoal (sideload): assinado com a chave de debug até existir uma chave própria.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signing
         }
     }
     compileOptions {
