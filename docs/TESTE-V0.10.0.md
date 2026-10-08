@@ -42,7 +42,7 @@ Fonte: relatório "Enviar relatório de erros" do Prof. Joctã, gerado ~18:47 (h
 1. [DADO] "Que horas é agora" → "18:35" (hora certa naquele momento).
 2. [DADO] Resumo do dia usou a agenda (UEBs, Ministério Público) corretamente via `agenda_consultar`.
 3. [DADO] "O que você sabe sobre mim e sobre minha esposa": respondeu que não tem info pessoal; menciona "tarefas no EduMath" (origem não verificada).
-4. [DADO] Contatos: achou "Meu Amor ❤️", mas mostrou o número como **`$98987177598$`** (cifrões visíveis). [LEITURA] O prompt manda toda fórmula em `$…$` (Persona.kt), e o número foi tratado como fórmula. O número também não traz DDD (como está no contato? verificar no vídeo).
+4. [DADO] Contatos: achou "Meu Amor ❤️", mas mostrou o número como **`$98987177598$`** (cifrões visíveis). [LEITURA] O prompt manda toda fórmula em `$…$` (Persona.kt), e o número foi tratado como fórmula. O número `98987177598` tem DDD 98 + 987177598, ou seja (98) 98717-7598 (confirmado no relatório do Gemini, seção 17); a observação anterior de que faltava DDD estava errada.
 5. [DADO] Abrir WhatsApp: ferramenta `abrir_app` falhou duas vezes ("WhatsApp" e "WhatsApp Business": "não encontrei um app chamado …"). O Euno disse "vou abrir agora mesmo" antes do resultado e depois "[confuso]/[pensativo]" — as **marcas de emoção aparecem como texto** na conversa.
 6. [LEITURA] O manifesto já tem `queries` MAIN/LAUNCHER, então a visibilidade de pacotes provavelmente não é a causa. Hipóteses a testar: o app está em outro espaço (Segundo Espaço/clone do HyperOS), o rótulo difere, ou a lista de lançáveis vem incompleta. Não confirmado.
 7. [DADO] "Anote o nome da minha esposa…": respondeu "Anotado!", "Registro mental feito", depois "corrigido… Thythay…", "Thaynára", "Thaynara". O nome só ficou certo no fim. A esposa aparece como **Thaynara Neves Souza Galvão** (grafia final dada pelo usuário). Antes, "Tainara" e "Thythay" foram erros de escuta/escrita.
@@ -111,3 +111,26 @@ Não iniciar até o usuário mandar.
 - [LEITURA] Por isso não consegui assistir ao vídeo nem extrair seu conteúdo. Nenhum relatório do vídeo foi feito ainda; esta seção não substitui a análise.
 - Opções para o usuário destravar: (a) um clipe menor (ex.: 1 a 3 min por parte, ou MP4 com resolução mais baixa); (b) quadros-chave em PNG (um a cada poucos segundos), que eu consigo ler como imagem; (c) a transcrição ou legendas, se o gravador gerar; (d) um texto com o que aparece em cada minuto.
 - Nada foi corrigido nem codado.
+
+## 17. Relatório do Gemini sobre o vídeo (documento do Drive, 4 páginas) — conferido contra o relatório de erros
+Fonte: Google Doc "Relatório em Vídeo do Euno - Análise Pormenorizada e Audiodescrição" (ID 1RlbonZ1HLuX_R0Qfm54_wBdrwNqHoi9uUyi00VfyRS4). Vídeo: 19 min 01 s; relógio da tela de 18:30 a 18:50; link no YouTube (não listado) citado pelo próprio documento. **Eu não assisti ao vídeo**; abaixo está só o que o Gemini escreveu, confrontado com os dados do relatório de erros.
+
+### 17.1 O que o Gemini descreve (linha do tempo dele, em blocos)
+00:00–02:30 usuário reclama de ter de tocar na tela a cada turno; 02:30–05:40 silêncio/retomada; 05:40–07:30 agenda do MPMA (57ª Promotoria; UEBs) e hora 18:35; 07:30–08:00 vôlei; 08:00–09:15 "o que sabe da esposa"; 09:15–09:50 contato "meu amor ❤️" com (98) 98717-7598; 09:50–11:05 WhatsApp e WhatsApp Business falham, chips "Confuso"/"Pensativo"; 11:05–13:55 nome da esposa e apelido "Tita"; 13:55–16:15 correções de grafia, "burrice digital"; 16:15–17:45 "quem sou eu para você"; 17:45–19:01 formação e despedida.
+
+### 17.2 O que confere com o relatório de erros (alta confiança)
+- Agenda, hora 18:35, contato "Meu Amor ❤️", falha ao abrir WhatsApp/Business, correções do nome (Thaynara), "burrice", "quem sou eu", formação desconhecida, despedida: todos aparecem também na conversa do relatório.
+- O usuário tem de tocar/falar repetidamente a cada turno (coerente com o erro 11 e a queixa do usuário, seção 14).
+
+### 17.3 O que NÃO confere ou é suspeito (não usar como fato)
+1. **"Memória persistente: Sucesso Total"** — contradiz o código: nada foi gravado, porque "anote o nome…" não casa com os prefixos de `MemoryCommands` (seção 8, item 8). O Gemini avaliou pela fala do Euno ("anotado"), não por prova de gravação.
+2. **Apelido "Tita"** — não existe na conversa do relatório; pode ser algo dito só no vídeo, ou invenção do Gemini. Confirmar.
+3. **"Botão circular azul/roxo com 4 estados (Standby/Listening/Thinking/Speaking)", "tema #121212", "waveform"** — não corresponde ao que o código desenha (cartão de chat com "Ajustes/Fechar/Nova", botão "Falar"/"Enviar", personagem). Descrição provavelmente inventada. Não confiar na seção 2 do documento.
+4. **Pacotes `com.whatsapp` e `com.whatsapp.w4b`** — o registro de ferramentas só diz "não encontrei um app chamado …". Os nomes de pacote são suposição dele.
+5. **Bloco 1: "Euno explica tecnicamente a versão 0.10.0, sensibilidade a ruídos e promete escuta contínua nas próximas builds"** — o texto do relatório de erros não traz essa fala do Euno. Se ocorreu, foi antes das 18:34 ou fora do trecho; se não, é invenção. Verificar no vídeo.
+6. **"Escuta contínua: parcial por ruído ambiental / quedas de conexão"** — diagnóstico do Gemini sem evidência. O dado real é o erro 11 (SERVER_DISCONNECTED, a confirmar) e a hipótese de dois reconhecedores disputando o microfone (seção 14).
+7. **Recomendação de "bipe de confirmação sonoro"** — o usuário quer o contrário (menos bip). Descartar.
+8. O documento **não menciona**: voz robótica do Android (cota do Gemini), legenda, botão "Nova", "Oi Joca" (que no relatório de erros foi reconhecido às 18:42), teclado, nem a falha 11 explícita. Ou não apareceram no vídeo, ou o Gemini não percebeu. Só o vídeo (quadros) resolve.
+
+### 17.4 Conclusão provisória
+O relatório do Gemini serve como roteiro de tempo e confirma o que o relatório de erros já mostrava, mas **mistura fatos com invenções** (itens 1, 3, 4, 6). Para decidir correções, usar: (a) o relatório de erros, (b) o que o usuário disse, (c) quadros/prints do vídeo quando chegarem. Nada foi corrigido nem codado.
