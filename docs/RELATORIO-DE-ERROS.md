@@ -15,3 +15,9 @@ O relatório não inclui chaves de API nem o texto das conversas.
 
 ## Proteção contra reinstalar
 O CI só publica o APK se a assinatura for igual à de `tools/assinatura/impressao_esperada.txt` e se o segredo `EUNO_SIGNING_SEED` existir. O código de versão cresce a cada build. Mudar essa impressão só com decisão explícita.
+
+## Diagnóstico do relatório real (v0.6.2, 08/10/2026)
+- A assinatura bateu: a atualização por cima funcionou sem desinstalar.
+- **Modelo local recarregado a cada uso (1ª palavra em ~58–72 s)**: `onTrimMemory` descarregava o modelo em qualquer nível ≥ RUNNING_LOW, inclusive UI_HIDDEN (ao fechar a conversa). Com o modelo já na memória a 1ª palavra saiu em ~15 s. Corrigido na 0.6.3 (só descarrega com memória crítica) e o modelo passa a ser carregado ao abrir a conversa.
+- **Kokoro sintetizava 3,3 s de áudio em ~8,5–11 s (2,6× mais lento que o tempo real)**: por isso as pausas longas entre trechos. Na 0.6.3 o Automático marca o Kokoro como lento e usa a voz do Android (flag `kokoroLento` no relatório); escolher Kokoro manualmente em Meu Euno → Voz ainda o usa.
+- Nova linha `llama:` no registro: tokens do prompt, quantos vieram do cache, tempo de leitura do prompt, 1º token, tokens gerados e tempo, e a carga do modelo.

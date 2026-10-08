@@ -29,7 +29,7 @@ class ReportCollector(private val app: JarvisApp) {
             "Memória" to memory,
             "Bateria" to "${runCatching { DeviceState.batteryPercent(app) }.getOrDefault(-1)}%",
             "Configuração" to "cérebro=${s.brainPreference.name}; nuvem=${s.cloudPreset.name}; voz=${s.voiceEngine.name}; " +
-                "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}",
+                "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; kokoroLento=${s.kokoroTooSlow}",
         )
         val sections = buildList {
             add("Eventos, erros e quedas (mais recente no fim)" to app.events.tail(60_000))

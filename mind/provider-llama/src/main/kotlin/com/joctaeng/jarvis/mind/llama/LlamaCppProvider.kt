@@ -26,7 +26,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Cérebro local via llama.cpp para modelos `.gguf` (ADR 0009). O motor nativo guarda um modelo por vez
  * e reaproveita o começo da conversa já lido (cache de prefixo), então respostas seguidas saem mais rápido.
  */
-class LlamaCppProvider(private val modelFile: File) : LocalLlmProvider {
+class LlamaCppProvider(
+    private val modelFile: File,
+    /** Recebe notas de diagnóstico (carga do modelo, tempos de cada resposta). */
+    private val onNote: ((String) -> Unit)? = null,
+) : LocalLlmProvider {
 
     override val id: String = "local-llamacpp"
     override val displayName: String = "IA do celular (${modelFile.nameWithoutExtension})"
@@ -48,8 +52,12 @@ class LlamaCppProvider(private val modelFile: File) : LocalLlmProvider {
         if (loaded) return
         LlamaNative.loadError?.let { error("Motor local indisponível: $it") }
         withContext(Dispatchers.IO) {
+            val t0 = System.nanoTime()
             when (LlamaNative.nativeLoad(modelFile.absolutePath, CONTEXT, THREADS, THREADS_BATCH, BATCH)) {
-                0 -> owner = this@LlamaCppProvider
+                0 -> {
+                    owner = this@LlamaCppProvider
+                    onNote?.invoke("modelo carregado na memória em ${(System.nanoTime() - t0) / 1_000_000} ms")
+                }
                 -1 -> error("Não consegui abrir o modelo ${modelFile.name} (arquivo incompleto ou formato não suportado)")
                 else -> error("Memória insuficiente para o contexto do modelo")
             }
@@ -94,6 +102,10 @@ class LlamaCppProvider(private val modelFile: File) : LocalLlmProvider {
                     trySendBlocking(LlmChunk.Text(piece)).isSuccess
                 }
                 val m = LlamaNative.nativeMetrics()
+                onNote?.invoke(
+                    "prompt=${m[0]} tok (reaproveitados do cache: ${m[1]}); leitura do prompt=${m[2]} ms; 1º token=${m[3]} ms; " +
+                        "gerados=${m[4]} tok em ${m[5]} ms; threads=${m[8]}/${m[9]}",
+                )
                 when {
                     code >= 0 -> send(
                         LlmChunk.Done(

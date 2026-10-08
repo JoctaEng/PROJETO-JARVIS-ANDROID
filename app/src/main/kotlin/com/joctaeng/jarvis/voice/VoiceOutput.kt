@@ -91,18 +91,18 @@ class VoiceOutput(
         val gemini = if (engine != VoiceEngine.KOKORO && settings.cloudPreset == CloudPreset.GEMINI && online()) {
             geminiKey()?.takeIf { it.isNotBlank() }?.let { GeminiSpeech(it, settings.geminiTtsModel.ifBlank { GeminiSpeech.DEFAULT_MODEL }) }
         } else null
-        val offline = if (engine != VoiceEngine.GEMINI && kokoro.installed) kokoro else null
+        val offline = if (engine != VoiceEngine.GEMINI && kokoro.installed && (engine == VoiceEngine.KOKORO || !settings.kokoroTooSlow)) kokoro else null
         if (gemini == null && offline == null) return null
         return Synth { text ->
             val t0 = SystemClock.elapsedRealtime()
             var clip: GeminiSpeech.Clip? = null
-            var engine = "nenhum"
+            var used = "nenhum"
             // Gemini com disjuntor: depois de uma falha ele descansa por 2 min, para não atrasar cada frase.
             if (gemini != null && System.currentTimeMillis() >= geminiSkipUntil) {
                 val r = runCatching { gemini.synthesize(text, naturalVoiceName()) }
                 clip = r.getOrNull()
                 if (clip != null) {
-                    engine = "gemini"
+                    used = "gemini"
                 } else {
                     geminiSkipUntil = System.currentTimeMillis() + GEMINI_COOLDOWN_MS
                     events?.warn("voz", "Gemini falhou após ${SystemClock.elapsedRealtime() - t0} ms; descansando 2 min e usando o motor seguinte", r.exceptionOrNull())
@@ -111,9 +111,34 @@ class VoiceOutput(
             if (clip == null && offline != null) {
                 val r = runCatching { offline.synthesize(text, kokoroSpeaker(), settings.ttsRate) }
                 clip = r.getOrNull()
-                if (clip != null) engine = "kokoro" else events?.error("voz", "Kokoro falhou após ${SystemClock.elapsedRealtime() - t0} ms", r.exceptionOrNull())
+                if (clip != null) {
+                    used = "kokoro"
+                    noteKokoroSpeed(clip, SystemClock.elapsedRealtime() - t0)
+                } else {
+                    events?.error("voz", "Kokoro falhou após ${SystemClock.elapsedRealtime() - t0} ms", r.exceptionOrNull())
+                }
             }
-            Spoken(clip, engine, SystemClock.elapsedRealtime() - t0)
+            Spoken(clip, used, SystemClock.elapsedRealtime() - t0)
+        }
+    }
+
+    private var kokoroWarm = false
+    private var kokoroSlowStreak = 0
+
+    /**
+     * Kokoro mais lento que o tempo real faz pausas entre frases. A 1ª frase de cada sessão inclui o carregamento e não conta;
+     * duas frases seguidas acima de 1,5× o tempo real marcam o Kokoro como lento e o modo Automático passa a usar a voz do Android.
+     */
+    private fun noteKokoroSpeed(clip: GeminiSpeech.Clip, synthMs: Long) {
+        val audioMs = (clip.pcm.size * 1000L / (clip.sampleRate * 2L)).coerceAtLeast(1)
+        if (!kokoroWarm) {
+            kokoroWarm = true
+            return
+        }
+        if (synthMs * 10 > audioMs * 15) kokoroSlowStreak++ else kokoroSlowStreak = 0
+        if (kokoroSlowStreak >= 2 && settings.voiceEngine == VoiceEngine.AUTO && !settings.kokoroTooSlow) {
+            settings.kokoroTooSlow = true
+            events?.warn("voz", "Kokoro lento neste aparelho (${synthMs * 100 / audioMs}% do tempo do áudio); o Automático passa a usar a voz do Android. Para voltar a usá-lo, escolha Kokoro em Meu Euno → Voz.")
         }
     }
 

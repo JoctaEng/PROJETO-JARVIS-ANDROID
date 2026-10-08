@@ -137,6 +137,17 @@ class ConversationController(private val app: JarvisApp) {
         _entries.value = emptyList()
     }
 
+    /**
+     * Carrega o modelo do celular em segundo plano quando a pessoa abre a conversa, para a leitura de ~2,4 GB
+     * acontecer enquanto ela fala. Só quando o cérebro local pode ser usado (evita ocupar memória à toa).
+     */
+    fun preloadLocalModel() {
+        if (settings.brainPreference == BrainPreference.ONLINE_FIRST) return
+        val provider = localProvider() as? LlamaCppProvider ?: return
+        if (provider.isLoaded) return
+        scope.launch { runCatching { provider.load() }.onFailure { app.events.warn("llama", "pré-carga do modelo falhou", it) } }
+    }
+
     /** Libera o modelo local da memória (onTrimMemory). */
     fun releaseLocalModel() {
         val provider = local ?: return
@@ -368,7 +379,7 @@ class ConversationController(private val app: JarvisApp) {
         if (key != localKey) {
             local?.let { old -> scope.launch { old.unload() } }
             val file = File(path)
-            local = if (ModelStore.isGguf(file)) LlamaCppProvider(file) else LiteRtLmProvider(file, settings.localBackend, app.cacheDir)
+            local = if (ModelStore.isGguf(file)) LlamaCppProvider(file) { app.events.info("llama", it) } else LiteRtLmProvider(file, settings.localBackend, app.cacheDir)
             localKey = key
         }
         return local

@@ -90,7 +90,14 @@ class JarvisApp : Application() {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         // Regra 3.3: aviso de memória baixa descarrega o modelo local na hora.
-        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) conversation.releaseLocalModel()
+        // Só descarrega com memória realmente crítica. Antes, qualquer nível >= RUNNING_LOW (inclusive UI_HIDDEN, ao fechar a
+        // conversa) tirava o modelo da memória e a próxima resposta levava ~1 minuto para recarregar 2,4 GB.
+        if (level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL || level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
+            events.warn("sistema", "memória crítica (nível $level): liberando o modelo local")
+            conversation.releaseLocalModel()
+        } else if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            events.info("sistema", "aviso de memória (nível $level); modelo local mantido")
+        }
     }
 
     companion object {

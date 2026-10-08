@@ -84,6 +84,7 @@ class ChatActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         listener = SpeechListener(this, events = app.events)
+        app.conversation.preloadLocalModel()
         OverlayBus.sessionActive.value = true
         CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking)
         lifecycleScope.launch { app.settings.version.collect { renderer.applyProfile(app.settings.character) } }

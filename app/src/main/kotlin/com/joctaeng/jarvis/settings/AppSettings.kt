@@ -87,6 +87,8 @@ class AppSettings(context: Context) {
     var continuousVoice by boolean("continuousVoice", true)
     var speakReplies by boolean("speakReplies", true)
     var privateMode by boolean("privateMode", false)
+    /** Marcado sozinho quando o Kokoro sintetiza bem mais devagar que o tempo real neste aparelho (modo Automático o evita). */
+    var kokoroTooSlow by boolean("kokoroTooSlow", false)
 
     /** Voz: Automático = natural do Gemini quando houver internet e chave do Gemini; senão a do Android. */
     var voiceEngine by enum("voiceEngine", VoiceEngine.AUTO)
