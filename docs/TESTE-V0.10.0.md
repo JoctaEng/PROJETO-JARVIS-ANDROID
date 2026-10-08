@@ -93,3 +93,14 @@ O que isso confirma/contradiz no relatório (fatos do código e do relatório, s
 5. [DADO] `poc02_touch_session` e `poc04_speech` ficaram vazios: partes da medição nunca são gravadas.
 
 Requisito anotado para a próxima fase (do usuário): **detector de erros completo**, que registre cada evento e cada falha em ordem, em tempo real, sem perder o começo, incluindo o ouvinte do chamado, os códigos de erro do reconhecedor (com nome), cada reinício, cada toque, e capture exceções e o logcat do próprio app. Não iniciar até o usuário mandar.
+
+## 15. Pedido do usuário: botão "Habilitar tudo para teste completo" (anotado; nada codado)
+Palavras do Prof. Joctã: incluir um **botão geral "Habilitar tudo para teste completo"**, para ele não precisar procurar em cada parte dos Ajustes o que ligar, pois isso o faz **errar ou esquecer** algo. Dentro dessa área, **chaves de liga/desliga para cada recurso específico**, cada uma com uma **legenda discreta** dizendo que "é melhor testada em conjunto com tal chave e tal chave" (dica para o desenvolvedor/IA).
+
+Observações para quem for implementar (sugestões, não decisões):
+1. Uma área única nos Ajustes (no topo, junto de "Conversa"): botão geral + lista de chaves, cada uma ligada à configuração real (sem estado duplicado).
+2. As chaves candidatas hoje (as que mudam o comportamento nos testes): Legenda, Começar ouvindo ao tocar, Conversa contínua, Responder falando, Ouvir comandos enquanto fala, Silenciar o bip, Incluir a conversa no relatório, Chamar pelo nome ("Oi Joca"), e as futuras (registro completo/detector de erros, acessibilidade, etc.). Também as permissões (microfone, agenda, contatos) e a isenção de bateria, que hoje ficam em lugares diferentes.
+3. Cada legenda deve citar as chaves "irmãs" reais (ex.: "Ouvir comandos enquanto fala" funciona melhor com "Conversa contínua" e "Responder falando"; "Oi Joca" pode disputar o microfone com a conversa — ver seção 14).
+4. O botão geral deve mostrar o que ele ligou e o que precisa de ação do usuário (permissão do Android, bateria "Sem restrições"), em vez de fingir que tudo ficou ligado.
+5. Deve existir um jeito de voltar ao estado anterior ("restaurar o que eu tinha").
+Não iniciar até o usuário mandar.
