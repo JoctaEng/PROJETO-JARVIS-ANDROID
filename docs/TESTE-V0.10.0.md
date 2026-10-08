@@ -104,3 +104,10 @@ Observações para quem for implementar (sugestões, não decisões):
 4. O botão geral deve mostrar o que ele ligou e o que precisa de ação do usuário (permissão do Android, bateria "Sem restrições"), em vez de fingir que tudo ficou ligado.
 5. Deve existir um jeito de voltar ao estado anterior ("restaurar o que eu tinha").
 Não iniciar até o usuário mandar.
+
+## 16. Estado do vídeo "Relatório em Vídeo do Euno" (verificado no Drive)
+- [DADO] Encontrado no Drive do usuário: mp4, 947.159.473 bytes (~903 MiB), criado em 08/10/2026 21:50 UTC, último upload em 22:00 UTC. ID 11CbDmvWTh54lr8bZsr2blv2ps5D7m8Al.
+- [DADO] As ferramentas de Drive disponíveis só leem texto/documentos (PDF, Office, imagens). Não tocam vídeo, e baixar o arquivo em base64 (~1,26 GB de texto) não cabe no contexto.
+- [LEITURA] Por isso não consegui assistir ao vídeo nem extrair seu conteúdo. Nenhum relatório do vídeo foi feito ainda; esta seção não substitui a análise.
+- Opções para o usuário destravar: (a) um clipe menor (ex.: 1 a 3 min por parte, ou MP4 com resolução mais baixa); (b) quadros-chave em PNG (um a cada poucos segundos), que eu consigo ler como imagem; (c) a transcrição ou legendas, se o gravador gerar; (d) um texto com o que aparece em cada minuto.
+- Nada foi corrigido nem codado.
