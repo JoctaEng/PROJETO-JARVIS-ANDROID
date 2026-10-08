@@ -1,5 +1,7 @@
 package com.joctaeng.jarvis.tools
 
+import android.Manifest
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,6 +13,12 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.StatFs
 import android.provider.AlarmClock
+import android.provider.CalendarContract
+import com.joctaeng.jarvis.system.resources.AgendaEvent
+import com.joctaeng.jarvis.system.resources.AgendaFormatter
+import com.joctaeng.jarvis.system.resources.AgendaPeriod
+import java.time.Instant
+import java.time.ZoneId
 import com.joctaeng.jarvis.core.contracts.Tool
 import com.joctaeng.jarvis.core.contracts.ToolContext
 import com.joctaeng.jarvis.core.model.RiskLevel
@@ -25,7 +33,7 @@ object AndroidTools {
         val app = context.applicationContext
         return listOf(
             OpenApp(app), ListApps(app), PhoneStatus(app), SetAlarm(app), SetTimer(app),
-            Flashlight(app), ShareText(app), OpenLink(app), WebSearch(app), OpenMap(app),
+            Flashlight(app), ShareText(app), OpenLink(app), WebSearch(app), OpenMap(app), AgendaQuery(app),
         )
     }
 }
@@ -226,5 +234,55 @@ private class OpenMap(context: Context) : AndroidTool(
         val fallback = Uri.parse("https://www.google.com/maps/search/?api=1&query=" + Uri.encode(place))
         return if (start(Intent(Intent.ACTION_VIEW, uri)) || start(Intent(Intent.ACTION_VIEW, fallback))) ok("mapa" to place)
         else ToolResult.Failure("nenhum app de mapas disponível")
+    }
+}
+
+/** Fase 2: lê a agenda do celular (Google Agenda e outras contas sincronizadas), só leitura. */
+private class AgendaQuery(context: Context) : AndroidTool(
+    context, "agenda_consultar",
+    "Lê a agenda do celular (Google Agenda e outras) e lista os compromissos de hoje, amanhã ou dos próximos 7 dias. " +
+        "Use para 'como está meu dia', 'tenho algo amanhã?', 'o que tenho esta semana'.",
+    RiskLevel.READ,
+    """"periodo":{"type":"string","enum":["hoje","amanha","semana"],"description":"hoje (padrão), amanha ou semana"}""",
+) {
+    override fun run(args: JSONObject): ToolResult {
+        if (context.checkSelfPermission(Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+            return ToolResult.Failure("Sem permissão para ler a agenda. Peça ao usuário para abrir Meu Euno, em O que posso fazer, e tocar em Permitir ler a agenda.")
+        }
+        val period = AgendaPeriod.parse(args.optString("periodo"))
+        val zone = ZoneId.systemDefault()
+        val now = Instant.now()
+        val (from, to) = AgendaFormatter.range(period, zone, now)
+        val events = runCatching { readEvents(from, to) }.getOrElse { return ToolResult.Failure("Não consegui ler a agenda: ${it.message}") }
+        return ToolResult.Success(AgendaFormatter.format(events, period, zone, now))
+    }
+
+    private fun readEvents(from: Long, to: Long): List<AgendaEvent> {
+        val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().also {
+            ContentUris.appendId(it, from)
+            ContentUris.appendId(it, to)
+        }.build()
+        val projection = arrayOf(
+            CalendarContract.Instances.TITLE,
+            CalendarContract.Instances.BEGIN,
+            CalendarContract.Instances.END,
+            CalendarContract.Instances.ALL_DAY,
+            CalendarContract.Instances.EVENT_LOCATION,
+            CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
+        )
+        val out = mutableListOf<AgendaEvent>()
+        context.contentResolver.query(uri, projection, null, null, "${CalendarContract.Instances.BEGIN} ASC")?.use { c ->
+            while (c.moveToNext() && out.size < 200) {
+                out += AgendaEvent(
+                    title = c.getString(0).orEmpty().ifBlank { "(sem título)" },
+                    startMillis = c.getLong(1),
+                    endMillis = c.getLong(2),
+                    allDay = c.getInt(3) == 1,
+                    location = c.getString(4)?.ifBlank { null },
+                    calendar = c.getString(5),
+                )
+            }
+        }
+        return out
     }
 }

@@ -1,6 +1,8 @@
 package com.joctaeng.jarvis.ui
 
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -795,6 +797,20 @@ class SettingsActivity : ComponentActivity() {
                 settings.autonomy = it
             }
             Hint("Ações críticas (apagar, enviar em seu nome, pagar) sempre pedem confirmação. Tudo fica no Histórico de ações.")
+
+            Text("Agenda", style = MaterialTheme.typography.labelLarge)
+            var calendarGranted by remember {
+                mutableStateOf(checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED)
+            }
+            val calendarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { calendarGranted = it }
+            if (calendarGranted) {
+                Hint("Acesso à agenda concedido: pergunte \"como está meu dia?\". Só leitura.")
+            } else {
+                OutlinedButton(onClick = { calendarLauncher.launch(Manifest.permission.READ_CALENDAR) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Permitir ler a agenda")
+                }
+            }
+            Hint("A agenda é lida no celular. Com cérebro online, só os compromissos que você pedir vão ao provedor.")
 
             Text("No celular", style = MaterialTheme.typography.labelLarge)
             app.toolbox.native.forEach { tool ->

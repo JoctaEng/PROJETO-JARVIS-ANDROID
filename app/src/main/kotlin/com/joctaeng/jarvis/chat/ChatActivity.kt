@@ -105,6 +105,13 @@ class ChatActivity : ComponentActivity() {
                 finish()
             }
         }
+        // "Para de ouvir" / "encerrar": a conversa por voz acaba, o personagem fica.
+        lifecycleScope.launch {
+            OverlayBus.stopListeningRequests.collect {
+                voiceMode = false
+                stopListening()
+            }
+        }
         setContent { JarvisTheme { ChatSheet() } }
         if (voiceMode) startListening()
     }

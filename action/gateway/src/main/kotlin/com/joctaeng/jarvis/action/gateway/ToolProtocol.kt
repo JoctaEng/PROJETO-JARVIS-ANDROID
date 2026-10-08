@@ -27,7 +27,7 @@ object ToolProtocol {
         appendLine("Você pode agir no celular do usuário e nos apps dele com as ferramentas abaixo. Para usar uma, escreva apenas:")
         appendLine("$OPEN{\"name\": \"nome_da_ferramenta\", \"arguments\": {…}}$CLOSE")
         appendLine("Depois pare e espere o resultado, que chega numa mensagem <tool_response>. Pode usar várias em sequência.")
-        appendLine("Use uma ferramenta só quando o pedido precisar dela. Nunca diga que fez algo antes de o resultado confirmar;")
+        appendLine("Use uma ferramenta só quando o pedido for claro e precisar dela; se o pedido estiver confuso, cortado ou ambíguo, pergunte antes de agir. Nunca diga que fez algo antes de o resultado confirmar;")
         appendLine("se vier erro, negado ou cancelado, diga isso com honestidade. Não mostre o JSON ao usuário.")
         appendLine("<tools>")
         tools.forEach { tool ->

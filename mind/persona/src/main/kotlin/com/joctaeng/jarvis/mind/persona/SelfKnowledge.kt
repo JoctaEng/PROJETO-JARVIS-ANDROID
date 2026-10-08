@@ -22,7 +22,7 @@ object SelfKnowledge {
         "interromper minha fala falando por cima",
         "controlar qualquer tela do celular tocando nela (controle por acessibilidade)",
         "fechar outros apps sozinho",
-        "agenda, e-mail e arquivos (fases seguintes)",
+        "contatos, e-mail, arquivos e notificações (Fase 2, em andamento; só a leitura da agenda já existe)",
         "corpo 3D de verdade, de costas ou em outras poses",
     )
 

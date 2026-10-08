@@ -28,7 +28,8 @@ import com.joctaeng.jarvis.mind.orchestrator.BrainPreference
 import com.joctaeng.jarvis.mind.orchestrator.Orchestrator
 import com.joctaeng.jarvis.mind.orchestrator.OrchestratorEvent
 import com.joctaeng.jarvis.mind.orchestrator.RoutingHints
-import com.joctaeng.jarvis.mind.persona.DismissCommands
+import com.joctaeng.jarvis.mind.persona.VoiceCommand
+import com.joctaeng.jarvis.mind.persona.VoiceCommands
 import com.joctaeng.jarvis.diagnostics.Poc
 import com.joctaeng.jarvis.mind.persona.MemoryCommand
 import com.joctaeng.jarvis.mind.persona.MemoryCommands
@@ -107,11 +108,22 @@ class ConversationController(private val app: JarvisApp) {
             _busy.value = true
             add(ChatEntry(nextId++, Role.USER, clean))
             try {
-                if (DismissCommands.matches(clean)) {
-                    say("Até logo!", Emotion.HAPPY, speak)
-                    if (speak) voice.awaitIdle()
-                    OverlayBus.requestDismiss()
-                    return@launch
+                when (VoiceCommands.parse(clean)) {
+                    VoiceCommand.DISMISS -> {
+                        app.events.info("conversa", "comando de voz: despedida")
+                        say("Até logo!", Emotion.HAPPY, speak)
+                        if (speak) voice.awaitIdle()
+                        OverlayBus.requestDismiss()
+                        return@launch
+                    }
+                    VoiceCommand.STOP_LISTENING -> {
+                        app.events.info("conversa", "comando de voz: parar de ouvir")
+                        // Para de ouvir já, para a voz continuar a conversa só se a pessoa pedir de novo.
+                        OverlayBus.requestStopListening()
+                        say("Tudo bem, parei de ouvir.", Emotion.NEUTRAL, speak)
+                        return@launch
+                    }
+                    null -> Unit
                 }
                 val command = MemoryCommands.parse(clean)
                 if (command != null) handleMemory(command, speak) else respond(speak)

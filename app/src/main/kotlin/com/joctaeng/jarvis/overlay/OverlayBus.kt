@@ -35,4 +35,13 @@ object OverlayBus {
     fun requestDismiss() {
         _dismissRequests.tryEmit(Unit)
     }
+
+    private val _stopListeningRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Pedido para parar de ouvir ("para de ouvir", "encerrar"), sem recolher o personagem. */
+    val stopListeningRequests: SharedFlow<Unit> = _stopListeningRequests
+
+    fun requestStopListening() {
+        _stopListeningRequests.tryEmit(Unit)
+    }
 }
