@@ -26,3 +26,11 @@ O CI só publica o APK se a assinatura for igual à de `tools/assinatura/impress
 - Cérebro online: 1ª palavra em ~1 s e resposta inteira em ~1,0–1,3 s. O modelo online não é o gargalo.
 - O atraso para falar vinha 100% da voz: o Gemini TTS falhava com `resposta sem áudio` (HTTP 200, mas o áudio não estava onde o código procurava) e caía no Kokoro, que levava 5–36 s por frase.
 - v0.6.4: a leitura do Gemini TTS passou a procurar o áudio em qualquer parte da resposta, tenta `generateContent` e `interactions` e, se ainda falhar, o relatório mostra o formato real da resposta (`resposta={...}`), sem o áudio. Nas linhas `voz:` o motor aparece como `gemini/generateContent` ou `gemini/interactions`.
+
+## Terceiro relatório (v0.7.0)
+- **Voz do Gemini funcionando**: `motor=gemini/generateContent`, 2–7 s por frase e `pausa antes` de 0–4 ms (sem buracos na fala). Cérebro online: 1ª palavra em 1–2,7 s. Toque → reação em 48 ms.
+- **O HyperOS fechou o app** ("processo anterior encerrado: OneKeyClean", importância 125): é o limpador do sistema. O relatório agora mostra "Otimização de bateria ignorada". Para o app não ser fechado:
+  1. Configurações → Apps → Euno → **Economia de bateria: Sem restrições**; ativar **Início automático**.
+  2. Na tela de apps recentes, **travar o Euno** (segurar o cartão do app e tocar no cadeado) para a "limpeza com um toque" não o encerrar.
+  3. No app Segurança → Acelerar/Limpar: não incluir o Euno.
+- **Agenda sem permissão**: a ferramenta agora abre sozinha o pedido de permissão (v0.7.1) em vez de mandar procurar em Meu Euno. Contatos usam o mesmo caminho.

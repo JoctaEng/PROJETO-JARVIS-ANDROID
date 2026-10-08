@@ -810,7 +810,16 @@ class SettingsActivity : ComponentActivity() {
                     Text("Permitir ler a agenda")
                 }
             }
-            Hint("A agenda é lida no celular. Com cérebro online, só os compromissos que você pedir vão ao provedor.")
+            var contactsGranted by remember {
+                mutableStateOf(checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED)
+            }
+            val contactsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { contactsGranted = it }
+            if (!contactsGranted) {
+                OutlinedButton(onClick = { contactsLauncher.launch(Manifest.permission.READ_CONTACTS) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Permitir ler os contatos")
+                }
+            }
+            Hint("Agenda e contatos são lidos no celular, só leitura. Com cérebro online, só o que você pedir vai ao provedor. Se faltar permissão, ele mesmo abre o pedido na tela.")
 
             Text("No celular", style = MaterialTheme.typography.labelLarge)
             app.toolbox.native.forEach { tool ->

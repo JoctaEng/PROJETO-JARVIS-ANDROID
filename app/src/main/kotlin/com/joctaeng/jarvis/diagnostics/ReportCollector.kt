@@ -3,6 +3,7 @@ package com.joctaeng.jarvis.diagnostics
 import android.app.ActivityManager
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.PowerManager
 import com.joctaeng.jarvis.JarvisApp
 import com.joctaeng.jarvis.device.DeviceState
 import com.joctaeng.jarvis.system.resources.ErrorReport
@@ -27,6 +28,7 @@ class ReportCollector(private val app: JarvisApp) {
             "Aparelho" to "${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
             "Assinatura do APK (SHA-256)" to signatureFingerprint(),
             "Memória" to memory,
+            "Otimização de bateria ignorada" to batteryExempt(),
             "Bateria" to "${runCatching { DeviceState.batteryPercent(app) }.getOrDefault(-1)}%",
             "Configuração" to "cérebro=${s.brainPreference.name}; nuvem=${s.cloudPreset.name}; voz=${s.voiceEngine.name}; " +
                 "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; kokoroLento=${s.kokoroTooSlow}",
@@ -41,6 +43,11 @@ class ReportCollector(private val app: JarvisApp) {
         }
         return ErrorReport.build(header, sections, maxChars)
     }
+
+    /** "não" = o HyperOS pode fechar o app em segundo plano (limpador de memória, economia de bateria). */
+    private fun batteryExempt(): String =
+        runCatching { if (app.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(app.packageName)) "sim" else "NÃO (o sistema pode fechar o app)" }
+            .getOrDefault("?")
 
     private fun signatureFingerprint(): String = runCatching {
         val info = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_SIGNING_CERTIFICATES)

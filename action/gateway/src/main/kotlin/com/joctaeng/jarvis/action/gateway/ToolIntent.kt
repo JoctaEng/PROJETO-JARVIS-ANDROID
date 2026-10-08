@@ -15,7 +15,7 @@ object ToolIntent {
         "wifi", "wi-fi", "bluetooth", "tela", "ligar", "desligar", "mensagem", "ferramenta",
         "mcp", "edumath", "configur", "volume", "brilho", "notifica", "instal", "toque", "tocar",
         "agenda", "arquivo", "pasta", "foto", "câmera", "camera",
-        "meu dia", "compromiss", "reuni", "hoje", "amanh", "semana", "evento",
+        "contato", "telefone", "numero", "número", "meu dia", "compromiss", "reuni", "hoje", "amanh", "semana", "evento",
     )
 
     fun likely(text: String): Boolean {

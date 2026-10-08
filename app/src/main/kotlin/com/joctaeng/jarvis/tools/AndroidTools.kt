@@ -14,6 +14,7 @@ import android.os.BatteryManager
 import android.os.StatFs
 import android.provider.AlarmClock
 import android.provider.CalendarContract
+import android.provider.ContactsContract
 import com.joctaeng.jarvis.system.resources.AgendaEvent
 import com.joctaeng.jarvis.system.resources.AgendaFormatter
 import com.joctaeng.jarvis.system.resources.AgendaPeriod
@@ -23,6 +24,7 @@ import com.joctaeng.jarvis.core.contracts.Tool
 import com.joctaeng.jarvis.core.contracts.ToolContext
 import com.joctaeng.jarvis.core.model.RiskLevel
 import com.joctaeng.jarvis.core.model.ToolResult
+import com.joctaeng.jarvis.ui.PermissionActivity
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.Normalizer
@@ -33,7 +35,7 @@ object AndroidTools {
         val app = context.applicationContext
         return listOf(
             OpenApp(app), ListApps(app), PhoneStatus(app), SetAlarm(app), SetTimer(app),
-            Flashlight(app), ShareText(app), OpenLink(app), WebSearch(app), OpenMap(app), AgendaQuery(app),
+            Flashlight(app), ShareText(app), OpenLink(app), WebSearch(app), OpenMap(app), AgendaQuery(app), ContactsSearch(app),
         )
     }
 }
@@ -61,6 +63,16 @@ private abstract class AndroidTool(
     }.isSuccess
 
     protected fun ok(vararg pairs: Pair<String, Any?>) = ToolResult.Success(JSONObject(pairs.toMap()).toString())
+
+    /** Se a permissão faltar, abre o pedido na tela (sem a pessoa procurar nas configurações) e devolve o aviso para o cérebro. */
+    protected fun missingPermission(permission: String, what: String): ToolResult? {
+        if (context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) return null
+        runCatching { context.startActivity(PermissionActivity.intent(context, permission)) }
+        return ToolResult.Failure(
+            "Ainda sem permissão para $what. Abri o pedido de permissão na tela do usuário: " +
+                "diga a ele para tocar em Permitir e depois pedir de novo.",
+        )
+    }
 }
 
 internal fun normalize(text: String): String =
@@ -246,9 +258,7 @@ private class AgendaQuery(context: Context) : AndroidTool(
     """"periodo":{"type":"string","enum":["hoje","amanha","semana"],"description":"hoje (padrão), amanha ou semana"}""",
 ) {
     override fun run(args: JSONObject): ToolResult {
-        if (context.checkSelfPermission(Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
-            return ToolResult.Failure("Sem permissão para ler a agenda. Peça ao usuário para abrir Meu Euno, em O que posso fazer, e tocar em Permitir ler a agenda.")
-        }
+        missingPermission(Manifest.permission.READ_CALENDAR, "ler a agenda")?.let { return it }
         val period = AgendaPeriod.parse(args.optString("periodo"))
         val zone = ZoneId.systemDefault()
         val now = Instant.now()
@@ -286,3 +296,37 @@ private class AgendaQuery(context: Context) : AndroidTool(
         return out
     }
 }
+
+/** Fase 2: procura contatos do celular pelo nome (só leitura). */
+private class ContactsSearch(context: Context) : AndroidTool(
+    context, "contatos_buscar",
+    "Procura um contato do celular pelo nome e devolve nome e telefones. Use para 'qual o telefone da Maria?'.",
+    RiskLevel.READ,
+    """"nome":{"type":"string","description":"nome ou parte do nome do contato"}""", listOf("nome"),
+) {
+    override fun run(args: JSONObject): ToolResult {
+        missingPermission(Manifest.permission.READ_CONTACTS, "ler os contatos")?.let { return it }
+        val query = args.optString("nome").trim()
+        if (query.isBlank()) return ToolResult.Failure("informe o nome do contato")
+        val phone = ContactsContract.CommonDataKinds.Phone
+        val found = linkedMapOf<String, MutableList<String>>()
+        runCatching {
+            context.contentResolver.query(
+                phone.CONTENT_URI,
+                arrayOf(phone.DISPLAY_NAME, phone.NUMBER),
+                "${phone.DISPLAY_NAME} LIKE ?",
+                arrayOf("%$query%"),
+                "${phone.DISPLAY_NAME} ASC",
+            )?.use { c ->
+                while (c.moveToNext() && found.size <= 8) {
+                    val name = c.getString(0).orEmpty()
+                    val number = c.getString(1).orEmpty()
+                    if (name.isNotBlank() && number.isNotBlank()) found.getOrPut(name) { mutableListOf() }.let { if (number !in it) it += number }
+                }
+            }
+        }.onFailure { return ToolResult.Failure("Não consegui ler os contatos: ${it.message}") }
+        if (found.isEmpty()) return ToolResult.Success("Nenhum contato encontrado com \"$query\".")
+        return ToolResult.Success(found.entries.take(8).joinToString("\n") { (name, numbers) -> "- $name: ${numbers.joinToString(", ")}" })
+    }
+}
+
