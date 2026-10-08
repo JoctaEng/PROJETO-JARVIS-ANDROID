@@ -30,6 +30,7 @@ class ReportCollector(private val app: JarvisApp) {
             "Memória" to memory,
             "Otimização de bateria ignorada" to batteryExempt(),
             "Voz do Gemini hoje" to "${if (s.geminiTtsDay == java.time.LocalDate.now().toString()) s.geminiTtsCount else 0} pedidos (limite diário da conta gratuita: 100)",
+            "Voz do Gemini em descanso até" to (s.geminiTtsSkipUntil.takeIf { it > System.currentTimeMillis() }?.let { java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.US).format(java.util.Date(it)) } ?: "não"),
             "Bateria" to "${runCatching { DeviceState.batteryPercent(app) }.getOrDefault(-1)}%",
             "Configuração" to "cérebro=${s.brainPreference.name}; nuvem=${s.cloudPreset.name}; voz=${s.voiceEngine.name}; " +
                 "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; kokoroLento=${s.kokoroTooSlow}; paciência=${s.listenPatienceMs} ms; ouvirEnquantoFala=${s.bargeIn}",
@@ -39,6 +40,10 @@ class ReportCollector(private val app: JarvisApp) {
             Poc.all.forEach { poc ->
                 val lines = app.diagnostics.read(poc).takeLast(25).joinToString("\n") { rec -> rec.entries.joinToString(" ") { "${it.key}=${it.value}" } }
                 add("Medições $poc" to lines)
+            }
+            if (s.reportIncludeChat) {
+                add("Conversa atual (incluída porque você ligou em Ajustes → Conversa)" to app.conversation.entries.value.filter { !it.note }
+                    .joinToString("\n") { "${if (it.role == com.joctaeng.jarvis.core.model.Role.USER) "Eu" else "Euno"}: ${it.text.take(600)}" })
             }
             add("Últimas ações das ferramentas" to runCatching { File(app.filesDir, "audit.jsonl").readLines().takeLast(30).joinToString("\n") }.getOrDefault(""))
         }

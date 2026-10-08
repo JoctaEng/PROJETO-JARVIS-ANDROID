@@ -18,7 +18,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,6 +34,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -42,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontStyle
@@ -75,7 +81,7 @@ class ChatActivity : ComponentActivity() {
     private lateinit var listener: SpeechListener
     private lateinit var bargeListener: SpeechListener
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private var bargeOn by mutableStateOf(false)
+    private val bargeOn get() = app.settings.bargeIn
     private var partial by mutableStateOf("")
     private var status by mutableStateOf("")
     private var voiceMode by mutableStateOf(false)
@@ -87,9 +93,8 @@ class ChatActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        listener = SpeechListener(this, events = app.events)
-        bargeListener = SpeechListener(this, events = app.events).also { it.graceMs = 0L }
-        bargeOn = app.settings.bargeIn
+        listener = SpeechListener(this, events = app.events, muteBeep = { app.settings.muteMicBeep })
+        bargeListener = SpeechListener(this, events = app.events, muteBeep = { app.settings.muteMicBeep }).also { it.graceMs = 0L }
         app.conversation.preloadLocalModel()
         OverlayBus.sessionActive.value = true
         CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking)
@@ -103,10 +108,11 @@ class ChatActivity : ComponentActivity() {
                 }
             }
         }
-        // Ouvir comandos enquanto ele fala ("pera aí", "tchau"...): só liga com a opção marcada e a conversa por voz ativa.
+        // Ouvir comandos enquanto ele fala ("pera aí", "tchau"...): liga com a opção marcada em Ajustes → Conversa.
         lifecycleScope.launch {
             app.voice.speaking.collect { speaking ->
-                if (speaking && voiceMode && bargeOn) startBarge() else stopBarge()
+                if (speaking && bargeOn) startBarge() else stopBarge()
+                app.events.info("escuta", "falando=$speaking; ouvir comandos ao falar=${if (bargeOn) "ligado" else "desligado"}")
             }
         }
         // "Tchau": encerra a conversa por voz e fecha a janela; o personagem se recolhe.
@@ -144,21 +150,28 @@ class ChatActivity : ComponentActivity() {
     private fun startBarge() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
         fun again(delay: Long) {
-            if (app.voice.speaking.value && voiceMode && bargeOn) mainHandler.postDelayed({ startBarge() }, delay)
+            if (app.voice.speaking.value && bargeOn) mainHandler.postDelayed({ startBarge() }, delay)
         }
+        app.events.info("escuta", "ouvindo comandos enquanto ele fala")
+        status = "Ouvindo comandos…"
         bargeListener.start { event ->
             when (event) {
                 is SpeechListener.Event.Final -> {
+                    app.events.info("escuta", "ouvido durante a fala: ${event.text.length} caracteres")
                     handleBarge(event.text)
                     again(250)
                 }
-                is SpeechListener.Event.Failed -> again(700)
+                is SpeechListener.Event.Failed -> {
+                    app.events.info("escuta", "escuta de comandos falhou: ${event.message}")
+                    again(700)
+                }
                 else -> Unit
             }
         }
     }
 
     private fun stopBarge() {
+        if (status == "Ouvindo comandos…") status = ""
         mainHandler.removeCallbacksAndMessages(null)
         bargeListener.stop()
     }
@@ -233,6 +246,11 @@ class ChatActivity : ComponentActivity() {
         val speaking by app.voice.speaking.collectAsState()
         val pendingAction by app.toolbox.pending.collectAsState()
         var input by remember { mutableStateOf("") }
+        var showNew by remember { mutableStateOf(false) }
+        var summarizing by remember { mutableStateOf(false) }
+        var loadSummaries by remember { mutableStateOf(false) }
+        // Com o teclado aberto o cartão ocupa o espaço que sobra (antes ficava uma barra fina só com o campo de texto).
+        val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         val listState = rememberLazyListState()
         LaunchedEffect(entries.size, entries.lastOrNull()?.text?.length) {
             if (entries.isNotEmpty()) listState.animateScrollToItem(entries.size - 1)
@@ -246,7 +264,8 @@ class ChatActivity : ComponentActivity() {
             contentAlignment = Alignment.BottomCenter,
         ) {
             Card(
-                Modifier.fillMaxWidth().fillMaxHeight(0.62f).padding(8.dp).navigationBarsPadding().imePadding()
+                Modifier.fillMaxWidth().then(if (keyboardOpen) Modifier.fillMaxHeight() else Modifier.fillMaxHeight(0.62f))
+                    .padding(8.dp).then(if (keyboardOpen) Modifier.statusBarsPadding() else Modifier).navigationBarsPadding().imePadding()
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
                 shape = RoundedCornerShape(24.dp),
             ) {
@@ -265,6 +284,7 @@ class ChatActivity : ComponentActivity() {
                             }
                             Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        TextButton(onClick = { showNew = true }, enabled = !summarizing) { Text("Nova") }
                         TextButton(onClick = {
                             startActivity(Intent(this@ChatActivity, SettingsActivity::class.java))
                         }) { Text("Ajustes") }
@@ -288,23 +308,17 @@ class ChatActivity : ComponentActivity() {
                     }
 
                     pendingAction?.let { ConfirmationCard(it) }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Conversa por voz", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                        Switch(checked = voiceMode, onCheckedChange = {
-                            voiceMode = it
-                            if (it) startListening() else stopListening()
-                        })
-                        if (busy || speaking) {
-                            TextButton(onClick = { app.conversation.cancel() }) { Text("Parar") }
+                    if (!keyboardOpen) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Conversa por voz", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                            Switch(checked = voiceMode, onCheckedChange = {
+                                voiceMode = it
+                                if (it) startListening() else stopListening()
+                            })
+                            if (busy || speaking) {
+                                TextButton(onClick = { app.conversation.cancel() }) { Text("Parar") }
+                            }
                         }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Ouvir comandos enquanto ele fala (teste)", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                        Switch(checked = bargeOn, onCheckedChange = {
-                            bargeOn = it
-                            app.settings.bargeIn = it
-                            if (!it) stopBarge() else if (voiceMode && app.voice.speaking.value) startBarge()
-                        })
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
@@ -330,6 +344,57 @@ class ChatActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+
+        if (showNew) {
+            val hasSummaries = app.summaries.all().any { it.useInNewChats }
+            AlertDialog(
+                onDismissRequest = { if (!summarizing) showNew = false },
+                title = { Text("Nova conversa") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            if (summarizing) "Resumindo a conversa…"
+                            else "Posso guardar um resumo desta conversa (em Ajustes → Resumos de conversa) para você usar depois.",
+                        )
+                        if (!summarizing) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = loadSummaries, onCheckedChange = { loadSummaries = it })
+                                Text(
+                                    if (hasSummaries) "Começar já com os resumos marcados" else "Começar com resumos (nenhum marcado ainda)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(enabled = !summarizing, onClick = {
+                        if (!app.conversation.hasConversation()) {
+                            app.conversation.newConversation(loadSummaries)
+                            showNew = false
+                            return@TextButton
+                        }
+                        summarizing = true
+                        lifecycleScope.launch {
+                            app.conversation.summarizeCurrent()
+                            app.conversation.newConversation(loadSummaries)
+                            summarizing = false
+                            showNew = false
+                            status = "Resumo salvo"
+                        }
+                    }) { Text("Resumir e começar") }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(enabled = !summarizing, onClick = {
+                            app.conversation.newConversation(loadSummaries)
+                            showNew = false
+                        }) { Text("Só começar") }
+                        TextButton(enabled = !summarizing, onClick = { showNew = false }) { Text("Cancelar") }
+                    }
+                },
+            )
         }
     }
 

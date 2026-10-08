@@ -32,6 +32,7 @@ data class PromptContext(
 object PersonaEngine {
     /** Teto do dossiê no prompt: protege o contexto do modelo local e limita o que vai à nuvem. */
     const val MAX_BIO_CHARS = 4000
+    const val MAX_SUMMARY_CHARS = 3000
 
     /** A tela desenha LaTeX e a voz o lê em português; um único padrão evita fórmulas soltas em texto puro. */
     const val MATH_RULE =
@@ -53,6 +54,8 @@ object PersonaEngine {
         userBio: String = "",
         /** Retrato real do app ([SelfKnowledge.section]); vazio = omitido. */
         selfSection: String = "",
+        /** Resumos de conversas anteriores que o usuário marcou para valer como contexto. */
+        summaries: String = "",
     ): String = buildString {
         val name = characterName.ifBlank { character.defaultName }
         appendLine("Você é ${character.gender.article}$name, o personagem digital pessoal de $userName: um companheiro que vive no celular dele.")
@@ -78,6 +81,10 @@ object PersonaEngine {
             appendLine("Dossiê e perfil de $userName (informações pessoais, profissionais e preferências registradas por ele):")
             appendLine(userBio.trim().take(MAX_BIO_CHARS))
             appendLine("Considere e respeite sempre esse contexto no seu atendimento.")
+        }
+        if (summaries.isNotBlank()) {
+            appendLine("Resumos de conversas anteriores (contexto que $userName quer que você use; não repita, só leve em conta):")
+            appendLine(summaries.take(MAX_SUMMARY_CHARS))
         }
         if (selfSection.isNotBlank()) appendLine(selfSection)
         appendLine(EmotionTag.INSTRUCTION)

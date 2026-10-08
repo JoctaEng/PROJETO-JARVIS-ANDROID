@@ -228,7 +228,9 @@ private class WebSearch(context: Context) : AndroidTool(
     """"consulta":{"type":"string"}""", listOf("consulta"),
 ) {
     override fun run(args: JSONObject): ToolResult {
-        val q = args.optString("consulta")
+        // Modelos pequenos erram o nome do argumento: aceita variações comuns.
+        val q = listOf("consulta", "query", "q", "busca", "pesquisa", "termo", "texto", "pergunta")
+            .firstNotNullOfOrNull { args.optString(it).takeIf { v -> v.isNotBlank() } }.orEmpty()
         if (q.isBlank()) return ToolResult.Failure("consulta vazia")
         val uri = Uri.parse("https://www.google.com/search?q=" + Uri.encode(q))
         return if (start(Intent(Intent.ACTION_VIEW, uri))) ok("pesquisa" to q) else ToolResult.Failure("nenhum navegador disponível")

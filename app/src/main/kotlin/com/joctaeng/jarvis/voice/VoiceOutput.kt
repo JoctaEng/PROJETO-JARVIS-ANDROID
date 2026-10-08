@@ -55,7 +55,7 @@ class VoiceOutput(
     private var ready = false
     private val waiting = ArrayDeque<String>()
     private val counter = AtomicInteger()
-    @Volatile private var geminiSkipUntil = 0L
+    @Volatile private var geminiSkipUntil = settings.geminiTtsSkipUntil
     @Volatile private var lastClipEndAt = 0L
     private val androidWaiters = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
 
@@ -112,6 +112,7 @@ class VoiceOutput(
                     val quota = error?.message?.contains("HTTP 429") == true
                     val rest = if (quota) quotaCooldownMs(error?.message.orEmpty()) else GEMINI_COOLDOWN_MS
                     geminiSkipUntil = System.currentTimeMillis() + rest
+                    if (quota) settings.geminiTtsSkipUntil = geminiSkipUntil
                     events?.warn(
                         "voz",
                         if (quota) "COTA do Gemini esgotada (pedido nº $used0 hoje): vou usar a voz do Android por ${rest / 60_000} min"
@@ -385,9 +386,11 @@ class VoiceOutput(
             return
         }
         _speaking.value = true
-        if (withTimeoutOrNull(ANDROID_TTS_TIMEOUT_MS) { done.await() } == null) {
+        // Frase longa precisa de mais tempo: ~14 caracteres por segundo, no mínimo 20 s.
+        val limit = maxOf(ANDROID_TTS_TIMEOUT_MS, text.length * 70L + 10_000L)
+        if (withTimeoutOrNull(limit) { done.await() } == null) {
             androidWaiters.remove(id)
-            events?.error("voz", "voz do Android não terminou em ${ANDROID_TTS_TIMEOUT_MS / 1000} s")
+            events?.error("voz", "voz do Android não terminou em ${limit / 1000} s (frase de ${text.length} caracteres)")
         }
     }
 

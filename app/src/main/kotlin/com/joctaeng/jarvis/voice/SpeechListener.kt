@@ -23,6 +23,8 @@ import com.joctaeng.jarvis.system.resources.EventLog
 class SpeechListener(
     private val context: Context,
     private val events: EventLog? = null,
+    /** Consultado a cada início de escuta: silenciar o "bip" de ativação do reconhecedor? */
+    private val muteBeep: () -> Boolean = { false },
 ) {
     /** Silêncio (ms) que se espera depois de uma frase reconhecida antes de entregá-la; 0 = entrega na hora (comandos). */
     @Volatile var graceMs: Long = 1100L
@@ -42,6 +44,34 @@ class SpeechListener(
     }
 
     val isListening: Boolean get() = recognizer != null
+
+    private val audio = context.getSystemService(android.media.AudioManager::class.java)
+    private var savedVolumes: Map<Int, Int>? = null
+    private val unmute = Runnable { restoreVolumes() }
+
+    /**
+     * O reconhecedor toca um "bip" ao começar a ouvir (em geral nos fluxos de notificação/sistema). Abaixamos só esses
+     * fluxos por ~1 s e voltamos ao valor anterior; música e voz do personagem não são tocadas.
+     */
+    private fun muteBeepBriefly() {
+        if (!muteBeep()) return
+        runCatching {
+            if (savedVolumes == null) {
+                val streams = listOf(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.STREAM_SYSTEM)
+                savedVolumes = streams.associateWith { audio.getStreamVolume(it) }
+                streams.forEach { audio.setStreamVolume(it, 0, 0) }
+            }
+            handler.removeCallbacks(unmute)
+            handler.postDelayed(unmute, 1_100L)
+        }.onFailure { events?.warn("escuta", "não consegui silenciar o bip (${it.message})") }
+    }
+
+    private fun restoreVolumes() {
+        handler.removeCallbacks(unmute)
+        val saved = savedVolumes ?: return
+        savedVolumes = null
+        runCatching { saved.forEach { (stream, volume) -> audio.setStreamVolume(stream, volume, 0) } }
+    }
 
     fun start(onEvent: (Event) -> Unit) {
         stop()
@@ -74,6 +104,7 @@ class SpeechListener(
             SpeechRecognizer.createSpeechRecognizer(context)
         }
         recognizer = r
+        muteBeepBriefly()
         r.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) = Unit
             override fun onBeginningOfSpeech() = Unit
@@ -136,6 +167,7 @@ class SpeechListener(
     }
 
     fun stop() {
+        restoreVolumes()
         emitFinal?.let { handler.removeCallbacks(it) }
         emitFinal = null
         accumulated = ""

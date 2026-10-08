@@ -33,7 +33,9 @@ import com.joctaeng.jarvis.mind.persona.VoiceCommands
 import com.joctaeng.jarvis.diagnostics.Poc
 import com.joctaeng.jarvis.mind.persona.MemoryCommand
 import com.joctaeng.jarvis.mind.persona.MemoryCommands
+import com.joctaeng.jarvis.mind.persona.ConversationSummary
 import com.joctaeng.jarvis.mind.persona.PersonaEngine
+import com.joctaeng.jarvis.mind.memory.ConversationSummary as ConversationSummaryItem
 import com.joctaeng.jarvis.mind.persona.PromptContext
 import com.joctaeng.jarvis.mind.persona.SelfInfo
 import com.joctaeng.jarvis.mind.persona.SelfKnowledge
@@ -103,6 +105,9 @@ class ConversationController(private val app: JarvisApp) {
     val turnFinished: SharedFlow<Unit> = _turnFinished.asSharedFlow()
 
     /** Mensagens recebidas enquanto ele ainda responde: esperam na fila e viram uma resposta só no fim. */
+    /** Os resumos marcados valem só para a conversa que o usuário abriu pedindo isso (botão Nova conversa). */
+    @Volatile private var useSummaries = false
+
     private val queue = ArrayDeque<String>()
     private var queuedSpeak = false
 
@@ -199,6 +204,44 @@ class ConversationController(private val app: JarvisApp) {
     fun clearConversation() {
         cancel()
         _entries.value = emptyList()
+        useSummaries = false
+    }
+
+    /** Há o que resumir? (pelo menos uma fala do usuário). */
+    fun hasConversation(): Boolean = _entries.value.any { it.role == Role.USER && !it.note }
+
+    /** Começa do zero. [loadSummaries]: a nova conversa já leva em conta os resumos marcados em "Resumos de conversa". */
+    fun newConversation(loadSummaries: Boolean) {
+        clearConversation()
+        useSummaries = loadSummaries
+        app.events.info("conversa", "nova conversa (resumos=${if (loadSummaries) app.summaries.activeContext(PersonaEngine.MAX_SUMMARY_CHARS).length else 0} car.)")
+    }
+
+    /**
+     * Resume a conversa atual e guarda em "Resumos de conversa". Usa o cérebro configurado; sem cérebro ou com erro,
+     * guarda um resumo simples só com as falas do usuário. Retorna o resumo salvo, ou null se não havia conversa.
+     */
+    suspend fun summarizeCurrent(): ConversationSummaryItem? {
+        val talk = _entries.value.filter { !it.note && !it.streaming && it.text.isNotBlank() }
+        val userMessages = talk.filter { it.role == Role.USER }.map { it.text }
+        if (userMessages.isEmpty()) return null
+        val date = SimpleDateFormat("dd/MM", Locale.forLanguageTag("pt-BR")).format(Date())
+        val transcript = ConversationSummary.transcript(talk.map { (if (it.role == Role.USER) settings.userName.ifBlank { "Usuário" } else "Euno") to it.text })
+        val providers = configuredProviders().map { if (it.location == ProviderLocation.ON_DEVICE) CompactProvider(it, ConversationSummary.SYSTEM_PROMPT, 1) else it }
+        var text = ""
+        if (providers.isNotEmpty()) {
+            runCatching {
+                val device = DeviceState.snapshot(app, privateMode = settings.privateMode)
+                val request = LlmRequest(ConversationSummary.SYSTEM_PROMPT, listOf(ChatMessage(Role.USER, transcript)), 400)
+                Orchestrator(providers).respond(request, device, RoutingHints(preference = settings.brainPreference)).collect { event ->
+                    if (event is OrchestratorEvent.Chunk && event.chunk is LlmChunk.Text) text += (event.chunk as LlmChunk.Text).text
+                }
+            }.onFailure { app.events.warn("conversa", "resumo pelo cérebro falhou", it) }
+        }
+        val body = text.trim().ifBlank { ConversationSummary.fallback(userMessages) }.take(PersonaEngine.MAX_SUMMARY_CHARS)
+        val saved = app.summaries.add(ConversationSummary.title(userMessages.first(), date), body, useInNewChats = false)
+        app.events.info("conversa", "resumo salvo (${body.length} car., via ${if (text.isBlank()) "reserva" else "cérebro"})")
+        return saved
     }
 
     /**
@@ -236,7 +279,11 @@ class ConversationController(private val app: JarvisApp) {
         val memories = app.memory.all().map { it.text }
         val lastUser = _entries.value.lastOrNull { it.role == Role.USER }?.text.orEmpty()
         val tools = if (settings.autonomy == AutonomyLevel.OBSERVER) emptyList() else app.toolbox.enabledTools()
-        val prompt = PersonaEngine.systemPrompt(
+        val version = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull() ?: "?"
+        val summaries = if (useSummaries) app.summaries.activeContext(if (onlyLocal) LOCAL_SUMMARY_CHARS else PersonaEngine.MAX_SUMMARY_CHARS) else ""
+
+        // Dois prompts: o completo (nuvem) e o enxuto (celular). Cada cérebro recebe só o que cabe nele.
+        fun buildPrompt(compact: Boolean): String = PersonaEngine.systemPrompt(
             userName = settings.userName,
             character = settings.character,
             characterName = settings.characterName,
@@ -248,13 +295,14 @@ class ConversationController(private val app: JarvisApp) {
                 privateMode = settings.privateMode,
                 speakingAloud = speak,
             ),
-            compact = onlyLocal,
+            compact = compact,
             // No cérebro local, o prompt precisa caber numa leitura rápida: ferramentas só quando o pedido sugere ação.
-            toolsSection = if (tools.isEmpty() || (onlyLocal && !ToolIntent.likely(lastUser))) "" else ToolProtocol.systemSection(tools),
-            userBio = if (onlyLocal) settings.userBio.take(LOCAL_BIO_CHARS) else settings.userBio,
+            toolsSection = if (tools.isEmpty() || (compact && !ToolIntent.likely(lastUser))) "" else ToolProtocol.systemSection(tools),
+            userBio = if (compact) settings.userBio.take(LOCAL_BIO_CHARS) else settings.userBio,
+            summaries = if (compact) summaries.take(LOCAL_SUMMARY_CHARS) else summaries,
             selfSection = SelfKnowledge.section(
                 SelfInfo(
-                    versionName = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull() ?: "?",
+                    versionName = version,
                     brainNames = providers.map { it.displayName },
                     voiceName = settings.voiceEngine.name.lowercase(),
                     autonomyLabel = settings.autonomy.name.lowercase(),
@@ -262,9 +310,15 @@ class ConversationController(private val app: JarvisApp) {
                     memoryCount = memories.size,
                     privateMode = settings.privateMode,
                 ),
-                compact = onlyLocal,
+                compact = compact,
             ),
         )
+
+        val prompt = buildPrompt(onlyLocal)
+        val effective = if (onlyLocal) providers else providers.map { p ->
+            // Cérebro do celular no meio da lista (fallback): recebe prompt/histórico enxutos, não os da nuvem.
+            if (p.location == ProviderLocation.ON_DEVICE) CompactProvider(p, buildPrompt(true), LOCAL_HISTORY) else p
+        }
         val history = _entries.value.filter { !it.note && !it.streaming }.takeLast(if (onlyLocal) LOCAL_HISTORY else HISTORY).map { ChatMessage(it.role, it.text) }
         val maxTokens = if (onlyLocal) 512 else null
 
@@ -281,7 +335,7 @@ class ConversationController(private val app: JarvisApp) {
 
         val generate: (List<ChatMessage>) -> Flow<LlmChunk> = { messages ->
             flow {
-                Orchestrator(providers).respond(LlmRequest(prompt, messages, maxTokens), device, RoutingHints(preference = settings.brainPreference)).collect { event ->
+                Orchestrator(effective).respond(LlmRequest(prompt, messages, maxTokens), device, RoutingHints(preference = settings.brainPreference)).collect { event ->
                     when (event) {
                         is OrchestratorEvent.Notice -> if (event.text != lastNote) {
                             lastNote = event.text
@@ -464,5 +518,13 @@ class ConversationController(private val app: JarvisApp) {
         /** Cérebro local: menos histórico e dossiê menor, para o prefill caber num celular comum. */
         const val LOCAL_HISTORY = 8
         const val LOCAL_BIO_CHARS = 800
+        const val LOCAL_SUMMARY_CHARS = 800
     }
+}
+
+/** Troca prompt e histórico do pedido por versões enxutas quando o cérebro é o do celular (leitura rápida). */
+private class CompactProvider(private val inner: LlmProvider, private val compactPrompt: String, private val keep: Int) : LlmProvider by inner {
+    override fun generate(request: LlmRequest): Flow<LlmChunk> = inner.generate(
+        LlmRequest(compactPrompt, request.messages.takeLast(keep), request.maxOutputTokens ?: 512),
+    )
 }

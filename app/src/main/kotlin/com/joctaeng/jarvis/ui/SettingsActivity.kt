@@ -105,6 +105,8 @@ class SettingsActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text("Meu Euno", style = MaterialTheme.typography.headlineSmall)
+                        ConversationSection()
+                        SummariesSection()
                         CharacterSection()
                         ProfileSection()
                         BrainSection()
@@ -153,6 +155,106 @@ class SettingsActivity : ComponentActivity() {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, Modifier.weight(1f))
             Switch(checked = value, onCheckedChange = onChange)
+        }
+    }
+
+    @Composable
+    private fun ConversationSection() {
+        var listenOnOpen by remember { mutableStateOf(settings.listenOnOpen) }
+        var continuous by remember { mutableStateOf(settings.continuousVoice) }
+        var speakReplies by remember { mutableStateOf(settings.speakReplies) }
+        var patience by remember { mutableFloatStateOf(settings.listenPatienceMs / 1000f) }
+        var barge by remember { mutableStateOf(settings.bargeIn) }
+        var muteBeep by remember { mutableStateOf(settings.muteMicBeep) }
+        var reportChat by remember { mutableStateOf(settings.reportIncludeChat) }
+        Section("Conversa") {
+            Text("Paciência: espera ${"%.1f".format(patience)} s de silêncio antes de entender que terminei", style = MaterialTheme.typography.labelLarge)
+            Slider(value = patience, onValueChange = { patience = it }, onValueChangeFinished = {
+                settings.listenPatienceMs = (patience * 1000).toInt()
+            }, valueRange = 1.2f..6f)
+            Hint("Se eu parar no meio para pensar e ele já responder, aumente. Frases que terminam em \"e\", \"mas\", \"porque\" ganham mais tempo sozinhas.")
+            Toggle("Começar ouvindo quando eu tocar nele", listenOnOpen) {
+                listenOnOpen = it
+                settings.listenOnOpen = it
+            }
+            Toggle("Conversa contínua (volta a ouvir depois de responder)", continuous) {
+                continuous = it
+                settings.continuousVoice = it
+            }
+            Toggle("Responder falando quando eu falar", speakReplies) {
+                speakReplies = it
+                settings.speakReplies = it
+            }
+            Toggle("Ouvir comandos enquanto ele fala (teste)", barge) {
+                barge = it
+                settings.bargeIn = it
+            }
+            Hint("Com isso ligado, \"pera aí\", \"espera\", \"para\" ou \"tchau\" funcionam enquanto ele fala. Com fone de ouvido ele também recebe frases inteiras e as põe na fila.")
+            Toggle("Silenciar o \"bip\" do microfone", muteBeep) {
+                muteBeep = it
+                settings.muteMicBeep = it
+            }
+            Hint("Abaixa por instantes os sons de sistema/notificação ao começar a ouvir. Não mexe no volume da música.")
+            Toggle("Incluir o texto da conversa no relatório de erros", reportChat) {
+                reportChat = it
+                settings.reportIncludeChat = it
+            }
+            Hint("Desligado por padrão: o relatório só leva eventos e tempos. Ligado, leva também o que foi dito na conversa atual, para eu entender o erro.")
+        }
+    }
+
+    @Composable
+    private fun SummariesSection() {
+        var items by remember { mutableStateOf(app.summaries.all()) }
+        var editing by remember { mutableStateOf<com.joctaeng.jarvis.mind.memory.ConversationSummary?>(null) }
+        val date = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("pt-BR")) }
+        Section("Resumos de conversa") {
+            Hint("Ao tocar em \"Nova\" na conversa, posso guardar um resumo. Os marcados podem ser levados para uma conversa nova (você escolhe na hora). Resumos ocupam bem menos que a conversa inteira.")
+            if (items.isEmpty()) Hint("Nenhum resumo ainda.")
+            items.forEach { item ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.title, style = MaterialTheme.typography.labelLarge)
+                            Hint("${date.format(Date(item.createdAtMillis))} · ${item.text.length} caracteres")
+                        }
+                        Switch(checked = item.useInNewChats, onCheckedChange = {
+                            app.summaries.update(item.id, item.title, item.text, it)
+                            items = app.summaries.all()
+                        })
+                    }
+                    Text(item.text.take(240) + if (item.text.length > 240) "…" else "", style = MaterialTheme.typography.bodySmall)
+                    Row {
+                        TextButton(onClick = { editing = item }) { Text("Editar") }
+                        TextButton(onClick = {
+                            app.summaries.remove(item.id)
+                            items = app.summaries.all()
+                        }) { Text("Apagar") }
+                    }
+                }
+            }
+        }
+        editing?.let { item ->
+            var title by remember(item.id) { mutableStateOf(item.title) }
+            var text by remember(item.id) { mutableStateOf(item.text) }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { editing = null },
+                title = { Text("Editar resumo") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Título") }, singleLine = true)
+                        OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("Resumo") }, minLines = 4, maxLines = 10)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        app.summaries.update(item.id, title.trim().ifBlank { item.title }, text.trim(), item.useInNewChats)
+                        items = app.summaries.all()
+                        editing = null
+                    }) { Text("Salvar") }
+                },
+                dismissButton = { TextButton(onClick = { editing = null }) { Text("Cancelar") } },
+            )
         }
     }
 
@@ -623,11 +725,6 @@ class SettingsActivity : ComponentActivity() {
         var voiceName by remember { mutableStateOf(settings.ttsVoice) }
         var rate by remember { mutableFloatStateOf(settings.ttsRate) }
         var pitch by remember { mutableFloatStateOf(settings.ttsPitch) }
-        var listenOnOpen by remember { mutableStateOf(settings.listenOnOpen) }
-        var continuous by remember { mutableStateOf(settings.continuousVoice) }
-        var speakReplies by remember { mutableStateOf(settings.speakReplies) }
-        var patience by remember { mutableFloatStateOf(settings.listenPatienceMs / 1000f) }
-        var barge by remember { mutableStateOf(settings.bargeIn) }
         LaunchedEffect(refresh) {
             delay(900)
             if (refresh < 2) refresh++
@@ -746,28 +843,6 @@ class SettingsActivity : ComponentActivity() {
                 restart()
             }, valueRange = 0.6f..1.6f)
             Button(onClick = { voice.speak("Oi, ${settings.userName}! Eu sou ${settings.displayName}. Assim fica bom?") }) { Text("Testar voz") }
-            Text("Paciência: espera ${"%.1f".format(patience)} s de silêncio antes de entender que terminei", style = MaterialTheme.typography.labelLarge)
-            Slider(value = patience, onValueChange = { patience = it }, onValueChangeFinished = {
-                settings.listenPatienceMs = (patience * 1000).toInt()
-            }, valueRange = 1.2f..6f)
-            Hint("Se eu parar no meio para pensar e ele já responder, aumente. Frases que terminam em \"e\", \"mas\", \"porque\" ganham mais tempo sozinhas.")
-            Toggle("Ouvir comandos enquanto ele fala (teste)", barge) {
-                barge = it
-                settings.bargeIn = it
-            }
-            Hint("Com isso ligado, \"pera aí\", \"espera\", \"para\" ou \"tchau\" funcionam enquanto ele fala. Com fone de ouvido ele também recebe frases inteiras e as põe na fila.")
-            Toggle("Começar ouvindo quando eu tocar nele", listenOnOpen) {
-                listenOnOpen = it
-                settings.listenOnOpen = it
-            }
-            Toggle("Conversa contínua (volta a ouvir depois de responder)", continuous) {
-                continuous = it
-                settings.continuousVoice = it
-            }
-            Toggle("Responder falando quando eu falar", speakReplies) {
-                speakReplies = it
-                settings.speakReplies = it
-            }
         }
     }
 

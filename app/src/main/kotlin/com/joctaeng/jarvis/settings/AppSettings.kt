@@ -96,6 +96,12 @@ class AppSettings(context: Context) {
     /** Contador diário de pedidos à voz do Gemini (a conta gratuita tem limite por dia). */
     var geminiTtsDay by string("geminiTtsDay", "")
     var geminiTtsCount by int("geminiTtsCount", 0)
+    /** Até quando a voz do Gemini descansa (cota esgotada): guardado para valer também depois de reabrir o app. */
+    var geminiTtsSkipUntil by long("geminiTtsSkipUntil", 0L)
+    /** Inclui o texto da conversa no relatório de erros (desligado por padrão: privacidade). */
+    var reportIncludeChat by boolean("reportIncludeChat", false)
+    /** Silencia por instantes o "bip" do reconhecimento de voz (volumes de sistema/notificação; não toca na música). */
+    var muteMicBeep by boolean("muteMicBeep", true)
     var privateMode by boolean("privateMode", false)
     /** Marcado sozinho quando o Kokoro sintetiza bem mais devagar que o tempo real neste aparelho (modo Automático o evita). */
     var kokoroTooSlow by boolean("kokoroTooSlow", false)
@@ -131,6 +137,7 @@ class AppSettings(context: Context) {
     }
 
     private fun string(key: String, default: String) = pref({ prefs.getString(key, default) ?: default }) { putString(key, it) }
+    private fun long(key: String, default: Long) = pref({ prefs.getLong(key, default) }) { putLong(key, it) }
     private fun int(key: String, default: Int) = pref({ prefs.getInt(key, default) }) { putInt(key, it) }
     private fun float(key: String, default: Float) = pref({ prefs.getFloat(key, default) }) { putFloat(key, it) }
     private fun boolean(key: String, default: Boolean) = pref({ prefs.getBoolean(key, default) }) { putBoolean(key, it) }
