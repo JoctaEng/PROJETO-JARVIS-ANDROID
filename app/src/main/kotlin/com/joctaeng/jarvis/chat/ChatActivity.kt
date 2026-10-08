@@ -86,6 +86,9 @@ class ChatActivity : ComponentActivity() {
     private var status by mutableStateOf("")
     private var voiceMode by mutableStateOf(false)
 
+    /** Legenda: janela pequena no pé da tela, sem bloquear o app de trás. "Expandir" volta ao chat completo. */
+    private var captionOnly by mutableStateOf(false)
+
     private val micPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) startListening() else status = "Sem permissão de microfone: use o teclado."
@@ -100,6 +103,7 @@ class ChatActivity : ComponentActivity() {
         CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking)
         lifecycleScope.launch { app.settings.version.collect { renderer.applyProfile(app.settings.character) } }
         voiceMode = app.settings.listenOnOpen && intent.getBooleanExtra(EXTRA_FROM_TAP, false)
+        setCaption(app.settings.captionMode && intent.getBooleanExtra(EXTRA_FROM_TAP, false))
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -131,7 +135,13 @@ class ChatActivity : ComponentActivity() {
             }
         }
         setContent { JarvisTheme { ChatSheet() } }
-        if (voiceMode) startListening()
+        val wakeText = intent.getStringExtra(EXTRA_WAKE_TEXT).orEmpty()
+        if (wakeText.isNotBlank()) {
+            voiceMode = true
+            app.conversation.send(wakeText, speak = true)
+        } else if (voiceMode) {
+            startListening()
+        }
     }
 
     override fun onStop() {
@@ -238,8 +248,65 @@ class ChatActivity : ComponentActivity() {
         if (status == "Ouvindo…") status = ""
     }
 
+    private fun setCaption(on: Boolean) {
+        captionOnly = on
+        val w = window
+        if (on) {
+            w.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+            w.setGravity(android.view.Gravity.BOTTOM)
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
+            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        } else {
+            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
+            w.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+    }
+
     @Composable
     private fun ChatSheet() {
+        if (captionOnly) CaptionBar() else FullChat()
+    }
+
+    @Composable
+    private fun CaptionBar() {
+        val entries by app.conversation.entries.collectAsState()
+        val busy by app.conversation.busy.collectAsState()
+        val listening by OverlayBus.listening.collectAsState()
+        val speaking by app.voice.speaking.collectAsState()
+        val last = entries.lastOrNull { !it.note }
+        val line = when {
+            listening -> "Ouvindo…"
+            busy && !speaking -> "Pensando…"
+            speaking -> "Falando…"
+            status.isNotEmpty() -> status
+            else -> ""
+        }
+        Card(Modifier.fillMaxWidth().padding(8.dp).navigationBarsPadding(), shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        listOf(app.settings.displayName, line).filter { it.isNotEmpty() }.joinToString(" · "),
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (busy || speaking) TextButton(onClick = { app.conversation.cancel() }) { Text("Parar") }
+                    TextButton(onClick = { setCaption(false) }) { Text("Expandir") }
+                    TextButton(onClick = ::finish) { Text("Fechar") }
+                }
+                if (partial.isNotEmpty()) {
+                    Text(partial, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else if (last != null) {
+                    Text(
+                        (if (last.role == Role.USER) "Você: " else "") + last.text.ifBlank { "…" },
+                        style = MaterialTheme.typography.bodyMedium, maxLines = 6, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun FullChat() {
         val entries by app.conversation.entries.collectAsState()
         val busy by app.conversation.busy.collectAsState()
         val listening by OverlayBus.listening.collectAsState()
@@ -442,5 +509,7 @@ class ChatActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_FROM_TAP = "from_tap"
+        /** Pedido dito junto com o chamado ("Oi Joca, que horas são"): é enviado direto. */
+        const val EXTRA_WAKE_TEXT = "wake_text"
     }
 }

@@ -84,6 +84,13 @@ class AppSettings(context: Context) {
     var ttsRate by float("ttsRate", 1.0f)
     var ttsPitch by float("ttsPitch", 1.0f)
     var listenOnOpen by boolean("listenOnOpen", true)
+
+    /** Ao tocar nele, conversar só com uma legenda (balão) em vez de abrir a janela de chat. */
+    var captionMode by boolean("captionMode", true)
+
+    /** Chamar pelo nome ("Oi Joca"): o microfone fica atento com o serviço do personagem ativo (gasta bateria). */
+    var wakeWord by boolean("wakeWord", false)
+    var wakeName by string("wakeName", "Joca")
     var continuousVoice by boolean("continuousVoice", true)
     var speakReplies by boolean("speakReplies", true)
 

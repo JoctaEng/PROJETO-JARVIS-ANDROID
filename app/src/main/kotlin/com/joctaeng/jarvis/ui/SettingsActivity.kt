@@ -165,6 +165,9 @@ class SettingsActivity : ComponentActivity() {
         var speakReplies by remember { mutableStateOf(settings.speakReplies) }
         var patience by remember { mutableFloatStateOf(settings.listenPatienceMs / 1000f) }
         var barge by remember { mutableStateOf(settings.bargeIn) }
+        var caption by remember { mutableStateOf(settings.captionMode) }
+        var wake by remember { mutableStateOf(settings.wakeWord) }
+        var wakeName by remember { mutableStateOf(settings.wakeName) }
         var muteBeep by remember { mutableStateOf(settings.muteMicBeep) }
         var reportChat by remember { mutableStateOf(settings.reportIncludeChat) }
         Section("Conversa") {
@@ -173,6 +176,27 @@ class SettingsActivity : ComponentActivity() {
                 settings.listenPatienceMs = (patience * 1000).toInt()
             }, valueRange = 1.2f..6f)
             Hint("Se eu parar no meio para pensar e ele já responder, aumente. Frases que terminam em \"e\", \"mas\", \"porque\" ganham mais tempo sozinhas.")
+            Toggle("Chamar pelo nome (\"Oi $wakeName\")", wake) {
+                wake = it
+                settings.wakeWord = it
+                if (it && androidx.core.content.ContextCompat.checkSelfPermission(this@SettingsActivity, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 7)
+                }
+                // Reinicia o serviço do personagem para aplicar (precisa estar com ele ligado).
+                if (com.joctaeng.jarvis.overlay.OverlayBus.running.value) com.joctaeng.jarvis.overlay.OverlayService.start(this@SettingsActivity)
+            }
+            if (wake) {
+                OutlinedTextField(
+                    value = wakeName, onValueChange = { wakeName = it; settings.wakeName = it.trim().ifBlank { "Joca" } },
+                    label = { Text("Nome que me chama") }, singleLine = true,
+                )
+            }
+            Hint("Experimental. O microfone fica atento com a tela ligada (gasta bateria) e qualquer voz que diga o nome me chama; ainda não reconheço quem fala. Se o Android negar o microfone em segundo plano, o relatório avisa.")
+            Toggle("Conversar só com legenda (sem abrir o chat)", caption) {
+                caption = it
+                settings.captionMode = it
+            }
+            Hint("Ao tocar nele, aparece só um balão com o que ele fala; o app que você usa continua clicável. O botão \"Expandir\" abre o chat completo.")
             Toggle("Começar ouvindo quando eu tocar nele", listenOnOpen) {
                 listenOnOpen = it
                 settings.listenOnOpen = it

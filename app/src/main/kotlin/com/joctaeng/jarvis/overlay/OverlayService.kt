@@ -121,10 +121,37 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
             diagnostics.append(Poc.OVERLAY, "event" to "foreground_denied", "run" to runId, "error" to e.message)
         }
         OverlayBus.running.value = true
+        updateWake()
         return START_STICKY
     }
 
+    /** Liga/desliga a escuta do chamado conforme a opção e o que o sistema permitiu. */
+    private fun updateWake() {
+        if (app.settings.wakeWord && micAllowed) {
+            if (wake == null) wake = WakeWordRunner(this, lifecycleScope, app, ::onWakeWord).also { it.start() }
+        } else {
+            wake?.stop()
+            wake = null
+        }
+    }
+
+    private fun onWakeWord(rest: String) {
+        reactionStartNanos = System.nanoTime()
+        renderer.play(AnimState.WAKING)
+        renderer.setEmotion(Emotion.HAPPY, 0.8f)
+        val intent = Intent(this, ChatActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(ChatActivity.EXTRA_FROM_TAP, true)
+            .putExtra(ChatActivity.EXTRA_WAKE_TEXT, rest)
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            app.events.error("chamado", "não consegui abrir a conversa pelo chamado", e)
+        }
+    }
+
     override fun onDestroy() {
+        wake?.stop()
         diagnostics.append(Poc.OVERLAY, "event" to "stop", "run" to runId, "battery" to DeviceState.batteryPercent(this))
         view?.let { windowManager.removeView(it) }
         view = null
@@ -145,6 +172,9 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         windowManager.updateViewLayout(v, params)
     }
 
+    @Volatile private var micAllowed = false
+    private var wake: WakeWordRunner? = null
+
     private fun startInForeground() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
@@ -161,12 +191,21 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
             .addAction(0, getString(R.string.overlay_stop), stopIntent)
             .build()
         // O tipo specialUse só existe a partir do Android 14; antes disso, sem tipo.
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-        } else {
-            0
+        val special = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
+        // "Oi Joca" precisa do tipo microfone (Android 14+); se o sistema negar, segue sem ele e a escuta fica desligada.
+        val wantMic = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && app.settings.wakeWord &&
+            checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        micAllowed = false
+        if (wantMic) {
+            try {
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, special or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+                micAllowed = true
+                return
+            } catch (e: Exception) {
+                app.events.warn("chamado", "o sistema negou o microfone em segundo plano: ${e.message}")
+            }
         }
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, special)
     }
 
     private fun showOverlay() {
