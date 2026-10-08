@@ -25,3 +25,16 @@ Registro único dos pedidos do Prof. Joctã. Atualize a coluna "Situação" a ca
 Causa provável: cada mensagem enviava ao Qwen3-4B o prompt inteiro (regras, dossiê de até 4.000 caracteres, lista completa de ferramentas e 20 mensagens de histórico). Na primeira palavra, isso é leitura pesada para a CPU do celular.
 Feito na 0.6.1: prompt local com dossiê de até 800 caracteres, histórico de 8 mensagens, ferramentas só quando o pedido sugere ação (`ToolIntent`), e medição por turno no diagnóstico (`poc03_local_llm`: `prompt_chars`, `first_ms`, `total_ms`).
 Próximo passo depende dos números medidos: se `first_ms` continuar alto, testar um modelo menor (Qwen3-1,7B) ou ajustar as threads do motor.
+
+## Anotações do teste da v0.8.0 (08/10/2026) — a corrigir no próximo APK
+Do relatório e do que o usuário contou:
+1. **Cérebro do celular falha em todo turno** (preferência "Celular primeiro" + nuvem): o pedido grande da nuvem (27 ferramentas, 20 mensagens) é mandado também ao modelo local → "conversa longa demais" (código -6) → cai na nuvem. Montar pedido compacto só para o local; não pré-carregar à toa.
+2. **Voz do Android corta frase longa**: `não terminou em 20 s` (frase de 407 caracteres). Tempo-limite proporcional ao tamanho e/ou quebrar trechos longos para a voz do Android.
+3. **Cooldown do Gemini (cota 429) não sobrevive ao reinício do app**: persistir.
+4. **`pesquisar_na_web` com "consulta vazia"**: aceitar variações do nome do argumento (query, pesquisa, busca, texto) e devolver erro útil ao modelo.
+5. **Chat: "quando começo a escrever não consigo mais ver o texto"** — aguardando o print da tela; suspeita: teclado + linha extra de opções espremendo o campo.
+6. **"Ouvir comandos enquanto ele fala" não funcionou** (mesmo com Conversa por voz + a opção ligadas): causa não confirmada. Registrar cada etapa (iniciou, falhou por quê, ouviu o quê) e mostrar na tela "ouvindo comandos…". Pode ser conflito de microfone/áudio com a própria voz dele; avaliar outra estratégia.
+7. **Paciência (espera) difícil de achar**: está em Meu Euno → seção "Voz" (no meio de velocidade/tom). Criar cartão "Conversa" com paciência, fila e ouvir-enquanto-fala, e atalho dentro do chat.
+8. **A conversa não aparece no relatório** (por privacidade só entram medições e o início dos pedidos de ferramentas). Avaliar opção "incluir minhas falas e respostas no relatório" (desligada por padrão).
+9. Fila, "pera aí", "tchau" e contatos: ainda não confirmados em teste.
+10. HyperOS: "Otimização de bateria ignorada: NÃO" persiste; falta o usuário aplicar o ajuste.
