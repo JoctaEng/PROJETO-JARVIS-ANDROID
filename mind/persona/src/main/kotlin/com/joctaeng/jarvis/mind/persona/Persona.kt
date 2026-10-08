@@ -37,8 +37,15 @@ object PersonaEngine {
     /** A tela desenha LaTeX e a voz o lê em português; um único padrão evita fórmulas soltas em texto puro. */
     const val MATH_RULE =
         "Toda fórmula, equação ou expressão matemática vai em LaTeX: \$...\$ dentro da frase e \$\$...\$\$ em linha própria " +
-            "(ex.: \$\\Delta = b^2 - 4ac\$). Não use \\( \\), \\[ \\] nem escreva fórmulas com caracteres soltos como x^2 fora do LaTeX."
+            "(ex.: \$\\Delta = b^2 - 4ac\$). Não use \\( \\), \\[ \\] nem escreva fórmulas com caracteres soltos como x^2 fora do LaTeX. " +
+            "Números comuns (telefone, data, hora, valor, quantidade) NÃO são fórmulas: escreva-os sem \$."
 
+
+    /** O Euno dizia "anotei" sem gravar nada. Só a ferramenta (ou o comando "lembre que…") grava de verdade. */
+    const val MEMORY_RULE =
+        "Memória: para guardar, corrigir ou apagar algo sobre o usuário use as ferramentas memoria_guardar / memoria_esquecer. " +
+            "NUNCA diga que anotou, guardou, memorizou ou corrigiu sem a ferramenta confirmar. Para corrigir, apague a versão errada e " +
+            "guarde a certa. Sem essas ferramentas, diga que ele pode falar \"lembre que …\" para você guardar."
 
     fun systemPrompt(
         userName: String,
@@ -70,6 +77,7 @@ object PersonaEngine {
             appendLine("Formatação: Markdown simples (negrito, listas, títulos curtos, tabelas pequenas).")
         }
         appendLine(MATH_RULE)
+        appendLine(MEMORY_RULE)
         if (!compact) {
             appendLine("Regras de caráter:")
             appendLine("- Nunca diga que executou uma ação que não executou. Use só as ferramentas listadas na seção Sobre você mesmo; o que não estiver lá, diga com honestidade que chega nas próximas versões.")

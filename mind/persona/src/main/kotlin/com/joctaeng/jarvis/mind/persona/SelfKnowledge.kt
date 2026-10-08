@@ -13,13 +13,14 @@ data class SelfInfo(
     val toolNames: List<String>,
     val memoryCount: Int,
     val privateMode: Boolean,
+    /** Recursos de conversa ligados agora (chamado por nome, legenda, fila...), descritos pelo app a partir dos ajustes. */
+    val features: List<String> = emptyList(),
 )
 
 object SelfKnowledge {
     /** O que ainda NÃO existe (fonte: docs/ROTEIRO.md). Evita prometer o que não há. */
     private val notYet = listOf(
-        "ouvir sem eu abrir o app ou tocar em mim (palavra de ativação)",
-        "interromper minha fala falando por cima",
+        "reconhecer QUEM está falando (qualquer voz que diga meu nome me chama)",
         "controlar qualquer tela do celular tocando nela (controle por acessibilidade)",
         "fechar outros apps sozinho",
         "e-mail, arquivos e notificações (Fase 2, em andamento; agenda e contatos já podem ser lidos)",
@@ -36,6 +37,7 @@ object SelfKnowledge {
         } else {
             appendLine("- Ferramentas que você realmente tem: ${info.toolNames.joinToString(", ")}.")
         }
+        if (info.features.isNotEmpty()) appendLine("- Como você conversa agora: ${info.features.joinToString("; ")}.")
         if (!compact) {
             appendLine("- Toda ação sua em ferramentas fica registrada e ações de risco pedem confirmação.")
             appendLine("- Ainda não existe: ${notYet.joinToString("; ")}. Se pedirem, diga que está no roteiro, sem fingir.")

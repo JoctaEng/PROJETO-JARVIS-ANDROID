@@ -211,7 +211,10 @@ class ChatActivity : ComponentActivity() {
         return audio.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).any { it.type in types }
     }
 
-    private fun startListening() {
+    private var listenRetries = 0
+
+    private fun startListening(fromRetry: Boolean = false) {
+        if (!fromRetry) listenRetries = 0
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             micPermission.launch(Manifest.permission.RECORD_AUDIO)
             return
@@ -226,6 +229,7 @@ class ChatActivity : ComponentActivity() {
                 is SpeechListener.Event.Partial -> partial = event.text
                 is SpeechListener.Event.Level -> Unit
                 is SpeechListener.Event.Final -> {
+                    listenRetries = 0
                     OverlayBus.listening.value = false
                     partial = ""
                     status = ""
@@ -234,6 +238,15 @@ class ChatActivity : ComponentActivity() {
                 is SpeechListener.Event.Failed -> {
                     OverlayBus.listening.value = false
                     partial = ""
+                    if (event.transient && voiceMode && listenRetries < MAX_LISTEN_RETRIES) {
+                        // Falha passageira do serviço de voz (ocupado, desconectado): tenta de novo sozinho.
+                        listenRetries++
+                        status = "Reconectando a escuta…"
+                        app.events.warn("escuta", "tentando de novo sozinho (${listenRetries}ª vez) após ${SpeechListener.name(event.code)}")
+                        mainHandler.postDelayed({ if (voiceMode && !app.voice.speaking.value) startListening(fromRetry = true) }, 600L * listenRetries)
+                        return@start
+                    }
+                    if (event.transient) app.events.error("escuta", "desisti após $listenRetries tentativas automáticas; é preciso tocar em Falar")
                     status = if (event.silent) "" else event.message
                     if (event.silent) voiceMode = false
                 }
@@ -404,7 +417,10 @@ class ChatActivity : ComponentActivity() {
                                 input = ""
                             }) { Text(if (busy) "Enviar (fila)" else "Enviar") }
                         } else {
-                            FilledTonalButton(onClick = { if (listening) stopListening() else startListening() }, enabled = !busy) {
+                            FilledTonalButton(onClick = {
+                                app.events.info("escuta", "botão ${if (listening) "Parar" else "Falar"} tocado")
+                                if (listening) stopListening() else startListening()
+                            }, enabled = !busy) {
                                 Text(if (listening) "Parar" else "Falar")
                             }
                         }
@@ -509,6 +525,7 @@ class ChatActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_FROM_TAP = "from_tap"
+        private const val MAX_LISTEN_RETRIES = 3
         /** Pedido dito junto com o chamado ("Oi Joca, que horas são"): é enviado direto. */
         const val EXTRA_WAKE_TEXT = "wake_text"
     }

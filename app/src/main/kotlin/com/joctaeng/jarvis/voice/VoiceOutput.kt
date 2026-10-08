@@ -27,6 +27,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import com.joctaeng.jarvis.settings.AppSettings
+import com.joctaeng.jarvis.system.resources.RetryHint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -109,14 +110,18 @@ class VoiceOutput(
                     used = "gemini/" + (clip?.via ?: "")
                 } else {
                     val error = r.exceptionOrNull()
-                    val quota = error?.message?.contains("HTTP 429") == true
-                    val rest = if (quota) quotaCooldownMs(error?.message.orEmpty()) else GEMINI_COOLDOWN_MS
+                    val message = error?.message.orEmpty()
+                    val quota = message.contains("HTTP 429")
+                    val rest = if (quota) quotaCooldownMs(message) else GEMINI_COOLDOWN_MS
                     geminiSkipUntil = System.currentTimeMillis() + rest
-                    if (quota) settings.geminiTtsSkipUntil = geminiSkipUntil
+                    settings.geminiTtsSkipUntil = if (quota) geminiSkipUntil else 0L
+                    settings.geminiTtsLastError = java.text.SimpleDateFormat("dd/MM HH:mm:ss", java.util.Locale.ROOT).format(java.util.Date()) +
+                        " (pedido nº $used0 do dia): " + message.take(700)
                     events?.warn(
                         "voz",
-                        if (quota) "COTA do Gemini esgotada (pedido nº $used0 hoje): vou usar a voz do Android por ${rest / 60_000} min"
-                        else "Gemini falhou após ${SystemClock.elapsedRealtime() - t0} ms; descansando 2 min e usando o motor seguinte",
+                        if (quota) "COTA do Gemini (${if (RetryHint.isDaily(message)) "diária" else "por minuto/curta"}; pedido nº $used0 hoje): " +
+                            "voz do Android por ${rest / 1000} s. Resposta: ${message.take(500)}"
+                        else "Gemini falhou após ${SystemClock.elapsedRealtime() - t0} ms; descansando ${rest / 1000} s: ${message.take(300)}",
                         error,
                     )
                 }
@@ -148,16 +153,17 @@ class VoiceOutput(
         return n
     }
 
-    /** "retry in 5h48m11s" na resposta de cota → quanto esperar (entre 5 min e 6 h); sem aviso, 1 hora. */
+    /** Espera o que o Google pediu (com folga de 2 s); sem dica: 10 min se a cota diária acabou, senão 1 min. */
     private fun quotaCooldownMs(message: String): Long {
-        val m = Regex("retry in (?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?").find(message)
-        val ms = m?.let {
-            val h = it.groupValues[1].toLongOrNull() ?: 0
-            val min = it.groupValues[2].toLongOrNull() ?: 0
-            val sec = it.groupValues[3].toLongOrNull() ?: 0
-            ((h * 60 + min) * 60 + sec) * 1000
-        } ?: 0L
-        return (if (ms > 0) ms else 3_600_000L).coerceIn(300_000L, 21_600_000L)
+        val hint = RetryHint.millis(message)
+        val ms = hint?.plus(2_000) ?: if (RetryHint.isDaily(message)) 600_000L else 60_000L
+        return ms.coerceIn(15_000L, 21_600_000L)
+    }
+
+    /** Libera a voz do Gemini na hora (botão "Testar voz"): o próximo pedido tenta de novo. */
+    fun resetGeminiCooldown() {
+        geminiSkipUntil = 0L
+        settings.geminiTtsSkipUntil = 0L
     }
 
     private var kokoroWarm = false
@@ -433,7 +439,7 @@ class VoiceOutput(
 
     companion object {
         const val GOOGLE_TTS = "com.google.android.tts"
-        private const val GEMINI_COOLDOWN_MS = 120_000L
+        private const val GEMINI_COOLDOWN_MS = 30_000L
         private const val PAUSE_WARN_MS = 1_200L
         private const val PAUSE_IGNORE_MS = 15_000L
         private const val ANDROID_TTS_TIMEOUT_MS = 20_000L

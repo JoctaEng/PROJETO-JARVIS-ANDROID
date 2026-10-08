@@ -91,6 +91,9 @@ class AppSettings(context: Context) {
     /** Chamar pelo nome ("Oi Joca"): o microfone fica atento com o serviço do personagem ativo (gasta bateria). */
     var wakeWord by boolean("wakeWord", false)
     var wakeName by string("wakeName", "Joca")
+
+    /** Como estavam as chaves antes de "Habilitar tudo para teste completo" (para restaurar). Vazio = nada guardado. */
+    var testSnapshot by string("testSnapshot", "")
     var continuousVoice by boolean("continuousVoice", true)
     var speakReplies by boolean("speakReplies", true)
 
@@ -105,6 +108,8 @@ class AppSettings(context: Context) {
     var geminiTtsCount by int("geminiTtsCount", 0)
     /** Até quando a voz do Gemini descansa (cota esgotada): guardado para valer também depois de reabrir o app. */
     var geminiTtsSkipUntil by long("geminiTtsSkipUntil", 0L)
+    /** Última falha da voz do Gemini (texto do erro, sem a chave), para o relatório mostrar a causa. */
+    var geminiTtsLastError by string("geminiTtsLastError", "")
     /** Inclui o texto da conversa no relatório de erros (desligado por padrão: privacidade). */
     var reportIncludeChat by boolean("reportIncludeChat", false)
     /** Silencia por instantes o "bip" do reconhecimento de voz (volumes de sistema/notificação; não toca na música). */

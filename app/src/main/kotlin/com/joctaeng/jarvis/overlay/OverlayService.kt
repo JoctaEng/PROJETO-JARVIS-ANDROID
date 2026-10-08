@@ -398,6 +398,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     }
 
     private fun onTap() {
+        wake?.pauseNow() // solta o microfone antes de a conversa abrir e começar a ouvir
         reactionStartNanos = System.nanoTime()
         renderer.play(AnimState.WAKING)
         renderer.setEmotion(Emotion.HAPPY, 0.8f)
@@ -429,10 +430,13 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         }
     }
 
+    /** Toque longo: menu com "Abrir Meu Euno" e "Fechar o Euno por completo". */
     private fun onLongPress() {
-        startActivity(
-            packageManager.getLaunchIntentForPackage(packageName)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: return,
-        )
+        try {
+            startActivity(com.joctaeng.jarvis.ui.QuickMenuActivity.intent(this))
+        } catch (e: Exception) {
+            app.events.error("app", "não consegui abrir o menu do toque longo", e)
+        }
     }
 
     private fun onDragEnd() {

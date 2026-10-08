@@ -105,7 +105,9 @@ class SettingsActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text("Meu Euno", style = MaterialTheme.typography.headlineSmall)
-                        ConversationSection()
+                        var refresh by remember { mutableIntStateOf(0) }
+                        FullTestSection { refresh++ }
+                        androidx.compose.runtime.key(refresh) { ConversationSection() }
                         SummariesSection()
                         CharacterSection()
                         ProfileSection()
@@ -155,6 +157,100 @@ class SettingsActivity : ComponentActivity() {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, Modifier.weight(1f))
             Switch(checked = value, onCheckedChange = onChange)
+        }
+    }
+
+    /** Uma chave da área de teste: ligada à configuração real (sem estado duplicado). */
+    private class TestSwitch(val key: String, val label: String, val hint: String, val get: () -> Boolean, val set: (Boolean) -> Unit)
+
+    private fun testSwitches() = listOf(
+        TestSwitch("caption", "Legenda (sem abrir o chat)", "Melhor testada com: Começar ouvindo e Conversa contínua.",
+            { settings.captionMode }, { settings.captionMode = it }),
+        TestSwitch("listen", "Começar ouvindo ao tocar", "Melhor testada com: Conversa contínua e Responder falando.",
+            { settings.listenOnOpen }, { settings.listenOnOpen = it }),
+        TestSwitch("continuous", "Conversa contínua", "Melhor testada com: Começar ouvindo, Responder falando e Ouvir comandos enquanto fala.",
+            { settings.continuousVoice }, { settings.continuousVoice = it }),
+        TestSwitch("speak", "Responder falando", "Melhor testada com: Conversa contínua.",
+            { settings.speakReplies }, { settings.speakReplies = it }),
+        TestSwitch("barge", "Ouvir comandos enquanto ele fala", "Melhor testada com: Conversa contínua e Responder falando; com fone de ouvido funciona melhor (sem fone a voz dele pode ser ouvida).",
+            { settings.bargeIn }, { settings.bargeIn = it }),
+        TestSwitch("beep", "Silenciar o bip do microfone", "Melhor testada com: Conversa contínua e Oi ${settings.wakeName} (que reabre a escuta muitas vezes).",
+            { settings.muteMicBeep }, { settings.muteMicBeep = it }),
+        TestSwitch("wake", "Chamar pelo nome (Oi ${settings.wakeName})", "Melhor testada com: Silenciar o bip e Legenda. Precisa do microfone e do personagem na tela; solta o microfone quando a conversa abre.",
+            { settings.wakeWord }, { settings.wakeWord = it }),
+        TestSwitch("report", "Incluir a conversa no relatório", "Melhor testada com: qualquer teste; o relatório passa a mostrar o que foi dito.",
+            { settings.reportIncludeChat }, { settings.reportIncludeChat = it }),
+    )
+
+    private fun granted(permission: String) =
+        androidx.core.content.ContextCompat.checkSelfPermission(this, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    /** Botão "Habilitar tudo para teste completo" + chaves individuais com dica de quais testar juntas. */
+    @Composable
+    private fun FullTestSection(onChanged: () -> Unit) {
+        var tick by remember { mutableIntStateOf(0) }
+        val switches = remember(tick) { testSwitches() }
+        val pending = remember(tick) {
+            buildList {
+                if (!granted(android.Manifest.permission.RECORD_AUDIO)) add("microfone")
+                if (!granted(android.Manifest.permission.READ_CALENDAR)) add("agenda")
+                if (!granted(android.Manifest.permission.READ_CONTACTS)) add("contatos")
+                if (!com.joctaeng.jarvis.device.SystemSettings.isIgnoringBatteryOptimizations(this@SettingsActivity)) add("bateria sem restrições")
+                if (!com.joctaeng.jarvis.overlay.OverlayBus.running.value) add("personagem na tela (ligue em Meu Euno)")
+            }
+        }
+        fun applied() {
+            tick++
+            onChanged()
+            if (com.joctaeng.jarvis.overlay.OverlayBus.running.value) com.joctaeng.jarvis.overlay.OverlayService.start(this@SettingsActivity)
+        }
+        LaunchedEffect(Unit) {
+            // Volta para esta tela depois de dar uma permissão: atualiza o que ainda falta.
+            while (true) {
+                delay(2_000)
+                tick++
+            }
+        }
+        Section("Teste completo") {
+            Hint("Um toque liga tudo o que é preciso para testar e mostra o que só você pode liberar (permissões e bateria).")
+            Button(onClick = {
+                if (settings.testSnapshot.isBlank()) {
+                    settings.testSnapshot = switches.joinToString(",") { "${it.key}=${if (it.get()) 1 else 0}" }
+                }
+                switches.forEach { it.set(true) }
+                app.events.info("ajustes", "habilitar tudo para teste completo")
+                val ask = listOf(android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.READ_CALENDAR, android.Manifest.permission.READ_CONTACTS)
+                    .filterNot(::granted)
+                if (ask.isNotEmpty()) requestPermissions(ask.toTypedArray(), 11)
+                applied()
+            }, modifier = Modifier.fillMaxWidth()) { Text("Habilitar tudo para teste completo") }
+            if (settings.testSnapshot.isNotBlank()) {
+                OutlinedButton(onClick = {
+                    val saved = settings.testSnapshot.split(',').mapNotNull { it.split('=').takeIf { p -> p.size == 2 }?.let { p -> p[0] to (p[1] == "1") } }.toMap()
+                    switches.forEach { sw -> saved[sw.key]?.let(sw.set) }
+                    settings.testSnapshot = ""
+                    app.events.info("ajustes", "restaurado o que estava antes do teste completo")
+                    applied()
+                }, modifier = Modifier.fillMaxWidth()) { Text("Restaurar como estava antes") }
+            }
+            if (pending.isEmpty()) {
+                Hint("Tudo liberado: microfone, agenda, contatos, bateria e personagem.")
+            } else {
+                Text("Falta você liberar: ${pending.joinToString(", ")}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                if ("bateria sem restrições" in pending) {
+                    TextButton(onClick = { com.joctaeng.jarvis.device.SystemSettings.requestIgnoreBatteryOptimizations(this@SettingsActivity) }) { Text("Liberar bateria") }
+                }
+            }
+            switches.forEach { sw ->
+                Toggle(sw.label, sw.get()) {
+                    sw.set(it)
+                    if (sw.key == "wake" && it && !granted(android.Manifest.permission.RECORD_AUDIO)) {
+                        requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 7)
+                    }
+                    applied()
+                }
+                Hint(sw.hint)
+            }
         }
     }
 
@@ -866,7 +962,7 @@ class SettingsActivity : ComponentActivity() {
                 settings.ttsPitch = pitch
                 restart()
             }, valueRange = 0.6f..1.6f)
-            Button(onClick = { voice.speak("Oi, ${settings.userName}! Eu sou ${settings.displayName}. Assim fica bom?") }) { Text("Testar voz") }
+            Button(onClick = { voice.resetGeminiCooldown(); voice.speak("Oi, ${settings.userName}! Eu sou ${settings.displayName}. Assim fica bom?") }) { Text("Testar voz") }
         }
     }
 

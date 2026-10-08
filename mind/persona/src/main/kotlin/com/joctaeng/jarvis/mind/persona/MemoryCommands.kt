@@ -13,7 +13,8 @@ sealed interface MemoryCommand {
 object MemoryCommands {
     private val ptBr = Locale.forLanguageTag("pt-BR")
     private val rememberPrefixes = listOf(
-        "lembre-se de que", "lembre-se que", "lembre que", "lembra que", "memorize que", "guarde que", "anote que",
+        "lembre-se de que", "lembre-se que", "lembre que", "lembra que", "memorize que", "memoriza que", "guarde que", "guarda que",
+        "anote que", "anota que", "anote aí que", "anota aí que", "anote aí", "anota aí", "grave que", "grava que", "salve que", "salva que",
     )
     private val forgetLast = listOf(
         "esqueça isto", "esqueça isso", "esquece isso", "esquece isto", "esqueça o que eu disse", "esqueça o que eu falei",

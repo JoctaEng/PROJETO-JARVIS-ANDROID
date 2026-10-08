@@ -44,7 +44,7 @@ class GeminiSpeech(private val apiKey: String, private val model: String = DEFAU
                 problems += "${mode.label}: ${e.message ?: e::class.simpleName}"
             }
         }
-        throw IOException(problems.joinToString(" | ").take(1_200))
+        throw IOException(problems.joinToString(" | ").take(3_200))
     }
 
     private fun call(mode: Mode, text: String, voice: String, language: String): Clip {
@@ -79,7 +79,7 @@ class GeminiSpeech(private val apiKey: String, private val model: String = DEFAU
             c.outputStream.use { it.write(body.toString().toByteArray()) }
             val status = c.responseCode
             if (status !in 200..299) {
-                throw IOException("HTTP $status ${c.errorStream?.bufferedReader()?.readText()?.take(300)}")
+                throw IOException("HTTP $status ${c.errorStream?.bufferedReader()?.readText()?.replace(Regex("\\s+"), " ")?.take(1_500)}")
             }
             val json = JSONObject(c.inputStream.bufferedReader().readText())
             val found = findAudioData(json) ?: throw IOException("HTTP $status sem áudio; resposta=${skeleton(json).take(600)}")

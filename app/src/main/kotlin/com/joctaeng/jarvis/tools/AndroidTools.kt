@@ -24,6 +24,7 @@ import com.joctaeng.jarvis.core.contracts.Tool
 import com.joctaeng.jarvis.core.contracts.ToolContext
 import com.joctaeng.jarvis.core.model.RiskLevel
 import com.joctaeng.jarvis.core.model.ToolResult
+import com.joctaeng.jarvis.JarvisApp
 import com.joctaeng.jarvis.ui.PermissionActivity
 import org.json.JSONArray
 import org.json.JSONObject
@@ -36,6 +37,7 @@ object AndroidTools {
         return listOf(
             OpenApp(app), ListApps(app), PhoneStatus(app), SetAlarm(app), SetTimer(app),
             Flashlight(app), ShareText(app), OpenLink(app), WebSearch(app), OpenMap(app), AgendaQuery(app), ContactsSearch(app),
+            MemorySave(app), MemoryForget(app),
         )
     }
 }
@@ -80,6 +82,20 @@ internal fun normalize(text: String): String =
 
 private data class Launchable(val label: String, val packageName: String)
 
+/** Nome falado → pacote, para apps comuns cujo nome na lista pode variar. */
+private val knownPackages = mapOf(
+    "whatsapp" to "com.whatsapp",
+    "zap" to "com.whatsapp",
+    "whatsapp business" to "com.whatsapp.w4b",
+    "whats business" to "com.whatsapp.w4b",
+    "telegram" to "org.telegram.messenger",
+    "instagram" to "com.instagram.android",
+    "youtube" to "com.google.android.youtube",
+    "gmail" to "com.google.android.gm",
+    "chrome" to "com.android.chrome",
+    "maps" to "com.google.android.apps.maps",
+)
+
 private fun launchables(context: Context): List<Launchable> {
     val pm = context.packageManager
     val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -100,7 +116,21 @@ private class OpenApp(context: Context) : AndroidTool(
         val match = apps.firstOrNull { normalize(it.label) == wanted }
             ?: apps.firstOrNull { normalize(it.label).startsWith(wanted) }
             ?: apps.firstOrNull { wanted in normalize(it.label) }
-            ?: return ToolResult.Failure("não encontrei um app chamado \"${args.optString("nome")}\"")
+            ?: knownPackages[wanted]?.let { pkg ->
+                // Apps conhecidos pelo pacote (ex.: WhatsApp Business), caso o nome na lista seja diferente.
+                context.packageManager.getLaunchIntentForPackage(pkg)?.let { Launchable(args.optString("nome"), pkg) }
+            }
+        if (match == null) {
+            val close = apps.map { it.label }.filter { label -> wanted.split(' ').any { w -> w.length >= 3 && w in normalize(label) } }.take(8)
+            JarvisApp.from(context).events.warn(
+                "ferramentas",
+                "abrir_app: \"${args.optString("nome")}\" não encontrado entre ${apps.size} apps; parecidos: ${close.ifEmpty { listOf("nenhum") }.joinToString(", ")}",
+            )
+            return ToolResult.Failure(
+                "não encontrei um app chamado \"${args.optString("nome")}\" (${apps.size} apps visíveis" +
+                    (if (close.isNotEmpty()) "; parecidos: ${close.joinToString(", ")}" else "") + ")",
+            )
+        }
         val intent = context.packageManager.getLaunchIntentForPackage(match.packageName)
             ?: return ToolResult.Failure("${match.label} não pode ser aberto diretamente")
         return if (start(intent)) ok("aberto" to match.label) else ToolResult.Failure("o Android não deixou abrir ${match.label}")
@@ -331,3 +361,39 @@ private class ContactsSearch(context: Context) : AndroidTool(
     }
 }
 
+
+/** Guarda um fato na memória de verdade (o Euno dizia "anotei" sem gravar). */
+private class MemorySave(context: Context) : AndroidTool(
+    context, "memoria_guardar",
+    "Guarda na memória permanente um fato sobre o usuário (nomes, preferências, dados que ele pediu para lembrar). " +
+        "Use quando ele pedir para anotar/lembrar/guardar/corrigir algo. Escreva o fato completo e com a grafia certa.",
+    RiskLevel.WRITE_REVERSIBLE,
+    """"fato":{"type":"string","description":"frase completa, ex.: A esposa de Joctã se chama Thaynara Neves Souza Galvão"}""", listOf("fato"),
+) {
+    override fun run(args: JSONObject): ToolResult {
+        val fact = listOf("fato", "texto", "memoria", "informacao").firstNotNullOfOrNull { args.optString(it).takeIf { v -> v.isNotBlank() } }
+            ?: return ToolResult.Failure("fato vazio")
+        val app = JarvisApp.from(context)
+        if (app.settings.privateMode) return ToolResult.Denied("Modo Privado ativo: nada é memorizado")
+        val item = app.memory.add(fact.trim(), source = "conversa", reason = "pedido do usuário")
+        app.events.info("memoria", "guardado pela ferramenta (${item.text.length} caracteres)")
+        return ok("guardado" to item.text, "total" to app.memory.all().size)
+    }
+}
+
+/** Apaga da memória o fato que mais combina com o trecho (para corrigir: apagar o errado e guardar o certo). */
+private class MemoryForget(context: Context) : AndroidTool(
+    context, "memoria_esquecer",
+    "Apaga da memória o fato que mais combina com o trecho informado (use para corrigir uma informação errada antes de guardar a certa).",
+    RiskLevel.WRITE_REVERSIBLE,
+    """"trecho":{"type":"string","description":"palavras do fato a apagar"}""", listOf("trecho"),
+) {
+    override fun run(args: JSONObject): ToolResult {
+        val query = listOf("trecho", "fato", "texto").firstNotNullOfOrNull { args.optString(it).takeIf { v -> v.isNotBlank() } }
+            ?: return ToolResult.Failure("informe o trecho")
+        val app = JarvisApp.from(context)
+        val gone = app.memory.forget(query) ?: return ToolResult.Failure("nada na memória combina com \"$query\"")
+        app.events.info("memoria", "apagado pela ferramenta (${gone.text.length} caracteres)")
+        return ok("apagado" to gone.text)
+    }
+}

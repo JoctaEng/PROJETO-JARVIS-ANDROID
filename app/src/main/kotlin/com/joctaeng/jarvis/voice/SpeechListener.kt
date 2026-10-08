@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -12,35 +13,47 @@ import com.joctaeng.jarvis.mind.persona.UtteranceEnd
 import com.joctaeng.jarvis.system.resources.EventLog
 
 /**
- * Escuta uma fala por vez, com texto parcial enquanto o usuário fala.
- * Prefere o reconhecedor no aparelho (funcionou na PoC 0.4). Usar na thread principal.
+ * Escuta uma fala por vez, com texto parcial enquanto o usuário fala. Usar na thread principal.
  *
- * Tolerância a pausas: o reconhecedor do Android encerra a fala cedo (e os extras de silêncio
- * são só uma sugestão, que muitos reconhecedores ignoram). Por isso, ao receber um resultado
+ * Tolerância a pausas: o reconhecedor do Android encerra a fala cedo. Ao receber um resultado
  * final, o texto fica guardado por [graceMs] e a escuta recomeça; se a pessoa voltar a falar nesse
  * intervalo, as partes são juntadas numa só frase. Só depois da carência o resultado é entregue.
+ *
+ * Registro completo: cada início, "pronto para ouvir", começo/fim da fala, resultado e erro (com código e nome)
+ * vai para o [events] com a [tag] (ex.: "escuta" na conversa, "chamado" no "Oi Joca").
  */
 class SpeechListener(
     private val context: Context,
     private val events: EventLog? = null,
     /** Consultado a cada início de escuta: silenciar o "bip" de ativação do reconhecedor? */
     private val muteBeep: () -> Boolean = { false },
+    private val tag: String = "escuta",
 ) {
     /** Silêncio (ms) que se espera depois de uma frase reconhecida antes de entregá-la; 0 = entrega na hora (comandos). */
     @Volatile var graceMs: Long = 1100L
+
+    /** Registrar também "pronto para ouvir" e começo/fim de fala (desligado no ouvinte do chamado, que roda em ciclo). */
+    var verbose: Boolean = true
+
+    /** Pôr no registro o texto de falas curtas (≤15 caracteres)? Desligado no "Oi Joca", que ouve o ambiente. */
+    var logShortText: Boolean = true
 
     private var recognizer: SpeechRecognizer? = null
     private val handler = Handler(Looper.getMainLooper())
     private var accumulated = ""
     private var emitFinal: Runnable? = null
+    private var sessionStartedAt = 0L
 
     sealed interface Event {
         data class Partial(val text: String) : Event
         data class Level(val rmsDb: Float) : Event
         data class Final(val text: String) : Event
 
-        /** [silent] = ninguém falou (não é falha real; encerra a conversa por voz). */
-        data class Failed(val message: String, val silent: Boolean) : Event
+        /**
+         * [silent] = ninguém falou (não é falha real). [transient] = falha passageira do serviço (ocupado,
+         * desconectado, cliente): vale tentar de novo sozinho. [code] = código do Android (0 se não houver).
+         */
+        data class Failed(val message: String, val silent: Boolean, val transient: Boolean = false, val code: Int = 0) : Event
     }
 
     val isListening: Boolean get() = recognizer != null
@@ -63,7 +76,7 @@ class SpeechListener(
             }
             handler.removeCallbacks(unmute)
             handler.postDelayed(unmute, 1_100L)
-        }.onFailure { events?.warn("escuta", "não consegui silenciar o bip (${it.message})") }
+        }.onFailure { events?.warn(tag, "não consegui silenciar o bip (${it.message})") }
     }
 
     private fun restoreVolumes() {
@@ -87,30 +100,40 @@ class SpeechListener(
         val text = accumulated
         accumulated = ""
         stopRecognizer()
-        events?.info("escuta", "fala reconhecida: ${text.length} caracteres" + if (text.length <= 15) " «$text»" else "")
+        events?.info(tag, "fala reconhecida: ${text.length} caracteres" + if (logShortText && text.length <= 15) " «$text»" else "")
         if (text.isBlank()) onEvent(Event.Failed("Não entendi", silent = true)) else onEvent(Event.Final(text))
     }
 
     private fun startSession(onEvent: (Event) -> Unit) {
-        val onDevice = SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+        val onDevice = preferOnDevice && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
         if (!onDevice && !SpeechRecognizer.isRecognitionAvailable(context)) {
-            events?.error("escuta", "nenhum reconhecimento de voz instalado ou disponível")
+            events?.error(tag, "nenhum reconhecimento de voz instalado ou disponível")
             onEvent(Event.Failed("Nenhum reconhecimento de voz instalado", silent = false))
             return
         }
-        val r = if (onDevice) {
-            SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-        } else {
-            SpeechRecognizer.createSpeechRecognizer(context)
+        val r = try {
+            if (onDevice) SpeechRecognizer.createOnDeviceSpeechRecognizer(context) else SpeechRecognizer.createSpeechRecognizer(context)
+        } catch (e: Exception) {
+            events?.error(tag, "não consegui criar o reconhecedor (${if (onDevice) "no aparelho" else "padrão"})", e)
+            onEvent(Event.Failed("Reconhecedor indisponível", silent = false, transient = true))
+            return
         }
         recognizer = r
+        sessionStartedAt = SystemClock.elapsedRealtime()
+        if (verbose) events?.info(tag, "início da escuta (reconhecedor ${if (onDevice) "no aparelho" else "padrão"}${if (accumulated.isNotEmpty()) ", continuação" else ""})")
         muteBeepBriefly()
         r.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) = Unit
-            override fun onBeginningOfSpeech() = Unit
+            override fun onReadyForSpeech(params: Bundle?) {
+                if (verbose) events?.info(tag, "pronto para ouvir em ${SystemClock.elapsedRealtime() - sessionStartedAt} ms")
+            }
+            override fun onBeginningOfSpeech() {
+                if (verbose) events?.info(tag, "começou a falar")
+            }
             override fun onRmsChanged(rmsdB: Float) = onEvent(Event.Level(rmsdB))
             override fun onBufferReceived(buffer: ByteArray?) = Unit
-            override fun onEndOfSpeech() = Unit
+            override fun onEndOfSpeech() {
+                if (verbose) events?.info(tag, "parou de falar")
+            }
             override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
             override fun onPartialResults(partialResults: Bundle?) {
@@ -126,8 +149,10 @@ class SpeechListener(
             override fun onResults(results: Bundle?) {
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                 release(r)
+                if (onDevice) onDeviceFailures = 0
                 if (!text.isNullOrBlank()) accumulated = join(accumulated, text)
                 if (accumulated.isBlank()) {
+                    if (verbose) events?.info(tag, "resultado vazio")
                     onEvent(Event.Failed("Não entendi", silent = true))
                 } else if (graceMs <= 0) {
                     deliverFinal(onEvent)
@@ -144,14 +169,26 @@ class SpeechListener(
 
             override fun onError(error: Int) {
                 release(r)
+                val after = SystemClock.elapsedRealtime() - sessionStartedAt
                 if (accumulated.isNotBlank()) {
-                    // Silêncio depois de uma fala válida = a pessoa terminou.
+                    // Silêncio (ou falha) depois de uma fala válida = a pessoa terminou.
+                    if (verbose || error !in SILENT) events?.info(tag, "fim da continuação: ${name(error)} (código $error) após $after ms; entregando o que foi ouvido")
                     deliverFinal(onEvent)
                     return
                 }
-                val silent = error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || error == SpeechRecognizer.ERROR_NO_MATCH
-                if (silent) events?.info("escuta", "sem fala: ${describe(error)}") else events?.error("escuta", "falha no reconhecimento: ${describe(error)} (código $error)")
-                onEvent(Event.Failed(describe(error), silent))
+                val silent = error in SILENT
+                val transient = error in TRANSIENT
+                if (silent) {
+                    if (verbose) events?.info(tag, "sem fala: ${name(error)} (código $error) após $after ms")
+                } else {
+                    events?.error(tag, "falha no reconhecimento: ${name(error)} (código $error) após $after ms, reconhecedor ${if (onDevice) "no aparelho" else "padrão"}")
+                }
+                // O reconhecedor do aparelho que cai seguidas vezes (desconectado/servidor) é trocado pelo padrão nesta execução.
+                if (onDevice && transient && ++onDeviceFailures >= 2) {
+                    preferOnDevice = false
+                    events?.warn(tag, "reconhecedor do aparelho falhou $onDeviceFailures vezes seguidas; usando o reconhecedor padrão a partir de agora")
+                }
+                onEvent(Event.Failed(describe(error), silent, transient, error))
             }
         })
         r.startListening(
@@ -171,6 +208,7 @@ class SpeechListener(
         emitFinal?.let { handler.removeCallbacks(it) }
         emitFinal = null
         accumulated = ""
+        if (recognizer != null && verbose) events?.info(tag, "escuta interrompida pelo app")
         stopRecognizer()
     }
 
@@ -191,12 +229,42 @@ class SpeechListener(
         SpeechRecognizer.ERROR_NO_MATCH -> "Não entendi"
         SpeechRecognizer.ERROR_AUDIO -> "Erro no microfone"
         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Sem permissão de microfone"
-        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Reconhecedor ocupado; tente de novo"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Reconhecedor ocupado; tentando de novo"
+        SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> "O serviço de voz desconectou; tentando de novo"
         SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Erro de rede no reconhecimento"
-        else -> "Erro no reconhecimento ($code)"
+        else -> "Erro no reconhecimento: ${name(code)} ($code)"
     }
 
-    private companion object {
+    companion object {
         const val INCOMPLETE_EXTRA_MS = 1_500L
+        private val SILENT = setOf(SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH)
+        private val TRANSIENT = setOf(
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY, SpeechRecognizer.ERROR_SERVER_DISCONNECTED,
+            SpeechRecognizer.ERROR_CLIENT, SpeechRecognizer.ERROR_SERVER, SpeechRecognizer.ERROR_TOO_MANY_REQUESTS,
+        )
+
+        /** Vale para o processo todo: se o reconhecedor do aparelho cair em sequência, todos passam para o padrão. */
+        @Volatile private var preferOnDevice = true
+        @Volatile private var onDeviceFailures = 0
+
+        /** Nome oficial do código de erro do Android (para o relatório). */
+        fun name(code: Int): String = when (code) {
+            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "ERROR_NETWORK_TIMEOUT"
+            SpeechRecognizer.ERROR_NETWORK -> "ERROR_NETWORK"
+            SpeechRecognizer.ERROR_AUDIO -> "ERROR_AUDIO"
+            SpeechRecognizer.ERROR_SERVER -> "ERROR_SERVER"
+            SpeechRecognizer.ERROR_CLIENT -> "ERROR_CLIENT"
+            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "ERROR_SPEECH_TIMEOUT"
+            SpeechRecognizer.ERROR_NO_MATCH -> "ERROR_NO_MATCH"
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "ERROR_RECOGNIZER_BUSY"
+            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "ERROR_INSUFFICIENT_PERMISSIONS"
+            SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> "ERROR_TOO_MANY_REQUESTS"
+            SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> "ERROR_SERVER_DISCONNECTED"
+            SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED -> "ERROR_LANGUAGE_NOT_SUPPORTED"
+            SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "ERROR_LANGUAGE_UNAVAILABLE"
+            SpeechRecognizer.ERROR_CANNOT_CHECK_SUPPORT -> "ERROR_CANNOT_CHECK_SUPPORT"
+            SpeechRecognizer.ERROR_CANNOT_LISTEN_TO_DOWNLOAD_EVENTS -> "ERROR_CANNOT_LISTEN_TO_DOWNLOAD_EVENTS"
+            else -> "desconhecido"
+        }
     }
 }

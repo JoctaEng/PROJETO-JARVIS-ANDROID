@@ -35,6 +35,7 @@ import com.joctaeng.jarvis.mind.persona.MemoryCommand
 import com.joctaeng.jarvis.mind.persona.MemoryCommands
 import com.joctaeng.jarvis.mind.persona.ConversationSummary
 import com.joctaeng.jarvis.mind.persona.PersonaEngine
+import com.joctaeng.jarvis.mind.persona.TextCleanup
 import com.joctaeng.jarvis.mind.memory.ConversationSummary as ConversationSummaryItem
 import com.joctaeng.jarvis.mind.persona.PromptContext
 import com.joctaeng.jarvis.mind.persona.SelfInfo
@@ -309,6 +310,7 @@ class ConversationController(private val app: JarvisApp) {
                     toolNames = tools.map { it.name },
                     memoryCount = memories.size,
                     privateMode = settings.privateMode,
+                    features = conversationFeatures(),
                 ),
                 compact = compact,
             ),
@@ -326,7 +328,7 @@ class ConversationController(private val app: JarvisApp) {
         OverlayBus.emotion.value = Emotion.THINKING
         val replyId = nextId++
         add(ChatEntry(replyId, Role.ASSISTANT, "", streaming = true))
-        val parser = StreamingEmotionParser()
+        var parser = StreamingEmotionParser()
         val chunker = SentenceChunker()
         val names = providers.associate { it.id to it.displayName }
         var lastNote: String? = null
@@ -373,7 +375,7 @@ class ConversationController(private val app: JarvisApp) {
                             newRound = false
                         }
                         OverlayBus.anim.value = AnimState.IDLE
-                        edit(replyId) { it.copy(text = it.text + visible) }
+                        edit(replyId) { it.copy(text = TextCleanup.clean(it.text + visible)) }
                         if (speak) chunker.feed(visible).forEach(voice::speak)
                     }
                 }
@@ -383,6 +385,9 @@ class ConversationController(private val app: JarvisApp) {
                 }
                 is AgentEvent.ToolFinished -> {
                     newRound = true
+                    // A rodada seguinte começa de novo com a etiqueta de emoção ([confuso]...): ela não pode virar texto.
+                    parser = StreamingEmotionParser()
+                    app.events.info("ferramentas", "${event.call.toolName}: ${describe(event.result).take(200)}")
                     addNoteBefore(replyId, "${event.call.toolName.replace('_', ' ')}: ${describe(event.result)}")
                 }
                 is AgentEvent.Error -> {
@@ -413,8 +418,15 @@ class ConversationController(private val app: JarvisApp) {
         }
         if (speak) chunker.flush()?.let(voice::speak)
 
+        edit(replyId) { it.copy(text = TextCleanup.clean(it.text).trim()) }
         val finalText = _entries.value.firstOrNull { it.id == replyId }?.text.orEmpty()
-        if (failure != null && finalText.isBlank()) {
+        if (failure == null && finalText.isBlank()) {
+            // Antes ficava um balão vazio, sem aviso nem registro.
+            app.events.error("conversa", "o cérebro terminou sem texto (1ª palavra=${if (firstChunkAt == 0L) "nunca" else "sim"}); pedido de ${request.length} caracteres")
+            edit(replyId) { it.copy(text = "Não recebi resposta do cérebro desta vez. Pode repetir?", streaming = false) }
+            OverlayBus.emotion.value = Emotion.CONFUSED
+            if (speak) voice.speak("Não recebi resposta desta vez. Pode repetir?")
+        } else if (failure != null && finalText.isBlank()) {
             edit(replyId) { it.copy(text = "Não consegui responder: $failure", streaming = false, brain = null) }
             OverlayBus.emotion.value = Emotion.CONCERNED
             if (speak) voice.speak("Não consegui responder agora.")
@@ -422,6 +434,17 @@ class ConversationController(private val app: JarvisApp) {
             edit(replyId) { it.copy(streaming = false) }
             if (failure != null) add(ChatEntry(nextId++, Role.SYSTEM, "Resposta interrompida: $failure", note = true))
         }
+    }
+
+    /** O que está ligado agora, para o Euno não negar recursos que tem (ex.: dizia que não podia ser chamado pelo nome). */
+    private fun conversationFeatures(): List<String> = buildList {
+        if (settings.wakeWord) add("o usuário pode te chamar dizendo \"Oi ${settings.wakeName}\" com a tela ligada (você ouve o chamado, não a conversa toda)")
+        else add("chamado por voz (\"Oi ${settings.wakeName}\") existe mas está desligado em Ajustes → Conversa")
+        if (settings.captionMode) add("ao tocar em você, aparece só uma legenda no pé da tela, sem abrir o chat")
+        if (settings.bargeIn) add("você ouve comandos como \"pera aí\" e \"tchau\" enquanto fala")
+        add("mensagens enviadas enquanto você responde entram numa fila e são respondidas juntas")
+        add("o botão Nova guarda um resumo da conversa e começa outra")
+        add("guardar fatos na memória só com as ferramentas memoria_guardar/memoria_esquecer ou quando ele diz \"lembre que…\"")
     }
 
     private fun describe(result: ToolResult): String = when (result) {

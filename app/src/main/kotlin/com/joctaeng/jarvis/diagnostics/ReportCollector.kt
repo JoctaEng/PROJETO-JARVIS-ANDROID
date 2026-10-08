@@ -15,7 +15,7 @@ import java.security.MessageDigest
  * o registro de eventos/erros/quedas, as medições e as últimas ações das ferramentas. Nenhuma conversa é incluída.
  */
 class ReportCollector(private val app: JarvisApp) {
-    fun build(maxChars: Int = 90_000): String {
+    fun build(maxChars: Int = 120_000): String {
         val pkg = runCatching { app.packageManager.getPackageInfo(app.packageName, 0) }.getOrNull()
         val memory = runCatching {
             val info = ActivityManager.MemoryInfo()
@@ -31,12 +31,15 @@ class ReportCollector(private val app: JarvisApp) {
             "Otimização de bateria ignorada" to batteryExempt(),
             "Voz do Gemini hoje" to "${if (s.geminiTtsDay == java.time.LocalDate.now().toString()) s.geminiTtsCount else 0} pedidos (limite diário da conta gratuita: 100)",
             "Voz do Gemini em descanso até" to (s.geminiTtsSkipUntil.takeIf { it > System.currentTimeMillis() }?.let { java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.US).format(java.util.Date(it)) } ?: "não"),
+            "Última falha da voz do Gemini" to s.geminiTtsLastError.ifBlank { "nenhuma registrada" },
             "Bateria" to "${runCatching { DeviceState.batteryPercent(app) }.getOrDefault(-1)}%",
             "Configuração" to "cérebro=${s.brainPreference.name}; nuvem=${s.cloudPreset.name}; voz=${s.voiceEngine.name}; " +
                 "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; kokoroLento=${s.kokoroTooSlow}; paciência=${s.listenPatienceMs} ms; ouvirEnquantoFala=${s.bargeIn}",
         )
         val sections = buildList {
-            add("Eventos, erros e quedas (mais recente no fim)" to app.events.tail(60_000))
+            val log = app.events.tail(1_000_000)
+            add("Resumo de TODOS os avisos, erros e quedas do registro (agrupados)" to ErrorReport.problemSummary(log))
+            add("Eventos, erros e quedas (mais recente no fim)" to log)
             Poc.all.forEach { poc ->
                 val lines = app.diagnostics.read(poc).takeLast(25).joinToString("\n") { rec -> rec.entries.joinToString(" ") { "${it.key}=${it.value}" } }
                 add("Medições $poc" to lines)
@@ -45,10 +48,23 @@ class ReportCollector(private val app: JarvisApp) {
                 add("Conversa atual (incluída porque você ligou em Ajustes → Conversa)" to app.conversation.entries.value.filter { !it.note }
                     .joinToString("\n") { "${if (it.role == com.joctaeng.jarvis.core.model.Role.USER) "Eu" else "Euno"}: ${it.text.take(600)}" })
             }
+            add("Log do Android deste app (logcat)" to androidLog())
             add("Últimas ações das ferramentas" to runCatching { File(app.filesDir, "audit.jsonl").readLines().takeLast(30).joinToString("\n") }.getOrDefault(""))
         }
         return ErrorReport.build(header, sections, maxChars)
     }
+
+    /** O próprio app pode ler as linhas do logcat do seu processo (erros do sistema que o registro não vê). */
+    private fun androidLog(): String = runCatching {
+        val p = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "time", "-t", "1500", "--pid=${android.os.Process.myPid()}"))
+        val text = p.inputStream.bufferedReader().readText()
+        p.waitFor()
+        text.lineSequence().filter { line ->
+            // Só o que interessa para achar erro: avisos/erros e as partes de voz, áudio e reconhecimento.
+            Regex("^\\S+ \\S+ [WEF]/").containsMatchIn(line) ||
+                listOf("Speech", "Recogn", "Audio", "TextToSpeech", "euno", "jarvis").any { line.contains(it, ignoreCase = true) }
+        }.joinToString("\n")
+    }.getOrElse { "não foi possível ler o logcat: ${it.message}" }
 
     /** "não" = o HyperOS pode fechar o app em segundo plano (limpador de memória, economia de bateria). */
     private fun batteryExempt(): String =

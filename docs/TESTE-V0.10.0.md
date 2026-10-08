@@ -134,3 +134,17 @@ Fonte: Google Doc "Relatório em Vídeo do Euno - Análise Pormenorizada e Audio
 
 ### 17.4 Conclusão provisória
 O relatório do Gemini serve como roteiro de tempo e confirma o que o relatório de erros já mostrava, mas **mistura fatos com invenções** (itens 1, 3, 4, 6). Para decidir correções, usar: (a) o relatório de erros, (b) o que o usuário disse, (c) quadros/prints do vídeo quando chegarem. Nada foi corrigido nem codado.
+
+## 18. O que a v0.11.0 faz com cada ponto (implementado; só compila no CI, sem teste no aparelho)
+| Ponto | Mudança |
+|---|---|
+| Relatório incompleto (14) | Espaço dividido de forma justa (antes cada seção tinha a mesma fatia e o registro era cortado com espaço sobrando); seção **Resumo de TODOS os avisos/erros/quedas** agrupados com contagem e horários; registro inteiro (até 1 MB) na entrada; **logcat do próprio app**; "Última falha da voz do Gemini" no cabeçalho. |
+| Erro 11 / "não ouvia" (14) | Cada início, "pronto", começo/fim de fala, erro (código + nome oficial) e reinício registrados, inclusive do "Oi Joca" (antes `events=null`). O "Oi Joca" solta o microfone na hora em que a conversa abre, ele fala ou há toque. A conversa por voz tenta de novo sozinha até 3 vezes em falhas passageiras (ocupado, desconectado, servidor). Se o reconhecedor do aparelho cair 2× seguidas, passa para o padrão. |
+| Voz do Gemini presa (2) | Lê a espera pedida pelo Google ("retry in 23.4s", `retryDelay`) — o leitor antigo não entendia segundos com vírgula e travava 1 h; sem dica: 1 min (10 min se a cota diária acabou). Resposta de erro guardada (até 1.500 car.). "Testar voz" libera na hora. |
+| Memória falsa (8) | Ferramentas `memoria_guardar` e `memoria_esquecer`; regra no prompt proibindo dizer "anotei" sem confirmação; mais frases aceitas ("anota aí", "guarda que", "salve que"…). |
+| Cifrões e [confuso] (8) | Números entre `$…$` viram texto normal (testado); etiqueta de emoção não vaza depois de usar ferramenta; regra no prompt. |
+| WhatsApp (8) | Busca por pacote conhecido (com.whatsapp / com.whatsapp.w4b e outros) + falha registra quantos apps são visíveis e os nomes parecidos. |
+| Resposta vazia (8) | Registrada como erro e avisada na conversa ("Não recebi resposta… pode repetir?"). |
+| Euno não sabia do "Oi Joca" (8) | Retrato de si inclui os recursos ligados (chamado, legenda, fila, Nova, memória). |
+| Habilitar tudo (15) | Seção "Teste completo" no topo: botão geral, chaves com dica de quais testar juntas, o que falta liberar (microfone, agenda, contatos, bateria, personagem) e "Restaurar como estava antes". |
+| Fechar por completo (novo) | Toque longo no personagem abre menu: "Abrir Meu Euno" ou "Fechar o Euno por completo" (para voz, conversa, escuta, tira o personagem e encerra o app). |
