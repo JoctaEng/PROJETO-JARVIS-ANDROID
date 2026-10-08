@@ -102,7 +102,7 @@ class VoiceOutput(
                 val r = runCatching { gemini.synthesize(text, naturalVoiceName()) }
                 clip = r.getOrNull()
                 if (clip != null) {
-                    used = "gemini"
+                    used = "gemini/" + (clip?.via ?: "")
                 } else {
                     geminiSkipUntil = System.currentTimeMillis() + GEMINI_COOLDOWN_MS
                     events?.warn("voz", "Gemini falhou após ${SystemClock.elapsedRealtime() - t0} ms; descansando 2 min e usando o motor seguinte", r.exceptionOrNull())

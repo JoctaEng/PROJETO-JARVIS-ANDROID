@@ -4,6 +4,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Base64
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -15,23 +16,58 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * Voz natural do Gemini (Gemini 3.8 TTS, API Interactions). Formato conferido no SDK oficial google-genai 2.28:
- * POST /v1beta/interactions, chave em x-goog-api-key, speech_config [{voice, language}], áudio em output_audio
- * (WAV 24 kHz mono 16 bits). store=false: o Google não guarda o pedido.
+ * Voz natural do Gemini (modelos TTS). Duas formas de pedir, tentadas em ordem (a que funcionar fica como preferida):
+ *  - generateContent: POST /v1beta/models/{modelo}:generateContent com responseModalities=[AUDIO] e voz pré-configurada;
+ *    o áudio vem em candidates[].content.parts[].inlineData.data (PCM 16 bits, 24 kHz).
+ *  - interactions: POST /v1beta/interactions (formato do SDK google-genai).
+ * O áudio é procurado em qualquer lugar da resposta (texto base64 longo); se não achar, o erro traz o "esqueleto" da
+ * resposta (nomes dos campos, sem o áudio) para o relatório mostrar o formato real. store=false na forma interactions.
  */
 class GeminiSpeech(private val apiKey: String, private val model: String = DEFAULT_MODEL) {
 
-    /** Áudio PCM 16 bits mono pronto para tocar. */
-    class Clip(val pcm: ByteArray, val sampleRate: Int)
+    /** Áudio PCM 16 bits mono pronto para tocar. [via] diz qual forma de pedido funcionou (diagnóstico). */
+    class Clip(val pcm: ByteArray, val sampleRate: Int, val via: String = "")
+
+    private enum class Mode(val label: String) { GENERATE("generateContent"), INTERACTIONS("interactions") }
 
     suspend fun synthesize(text: String, voice: String, language: String = "pt-BR"): Clip = withContext(Dispatchers.IO) {
-        val body = JSONObject()
-            .put("model", model)
-            .put("input", text)
-            .put("store", false)
-            .put("response_format", JSONObject().put("type", "audio"))
-            .put("generation_config", JSONObject().put("speech_config", JSONArray().put(JSONObject().put("voice", voice).put("language", language))))
-        val c = (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {
+        val order = if (preferInteractions) listOf(Mode.INTERACTIONS, Mode.GENERATE) else listOf(Mode.GENERATE, Mode.INTERACTIONS)
+        val problems = mutableListOf<String>()
+        for (mode in order) {
+            try {
+                val clip = call(mode, text, voice, language)
+                preferInteractions = mode == Mode.INTERACTIONS
+                return@withContext clip
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                problems += "${mode.label}: ${e.message ?: e::class.simpleName}"
+            }
+        }
+        throw IOException(problems.joinToString(" | ").take(1_200))
+    }
+
+    private fun call(mode: Mode, text: String, voice: String, language: String): Clip {
+        val (url, body) = when (mode) {
+            Mode.GENERATE -> "$BASE/models/$model:generateContent" to JSONObject()
+                .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", text)))))
+                .put(
+                    "generationConfig",
+                    JSONObject()
+                        .put("responseModalities", JSONArray().put("AUDIO"))
+                        .put(
+                            "speechConfig",
+                            JSONObject().put("voiceConfig", JSONObject().put("prebuiltVoiceConfig", JSONObject().put("voiceName", voice))),
+                        ),
+                )
+            Mode.INTERACTIONS -> "$BASE/interactions" to JSONObject()
+                .put("model", model)
+                .put("input", text)
+                .put("store", false)
+                .put("response_format", JSONObject().put("type", "audio"))
+                .put("generation_config", JSONObject().put("speech_config", JSONArray().put(JSONObject().put("voice", voice).put("language", language))))
+        }
+        val c = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
             connectTimeout = 5_000
@@ -43,28 +79,53 @@ class GeminiSpeech(private val apiKey: String, private val model: String = DEFAU
             c.outputStream.use { it.write(body.toString().toByteArray()) }
             val status = c.responseCode
             if (status !in 200..299) {
-                throw IOException("voz do Gemini respondeu $status: ${c.errorStream?.bufferedReader()?.readText()?.take(200)}")
+                throw IOException("HTTP $status ${c.errorStream?.bufferedReader()?.readText()?.take(300)}")
             }
             val json = JSONObject(c.inputStream.bufferedReader().readText())
-            val audio = json.optJSONObject("output_audio") ?: findAudio(json) ?: throw IOException("resposta sem áudio")
-            val bytes = Base64.decode(audio.getString("data"), Base64.DEFAULT)
-            toClip(bytes, audio.optInt("sample_rate", 24_000))
+            val found = findAudioData(json) ?: throw IOException("HTTP $status sem áudio; resposta=${skeleton(json).take(600)}")
+            val bytes = try {
+                Base64.decode(found.data, Base64.DEFAULT)
+            } catch (e: IllegalArgumentException) {
+                Base64.decode(found.data, Base64.URL_SAFE)
+            }
+            return toClip(bytes, found.rate ?: 24_000).let { Clip(it.pcm, it.sampleRate, mode.label) }
         } finally {
             c.disconnect()
         }
     }
 
-    private fun findAudio(json: JSONObject): JSONObject? {
-        val outputs = json.optJSONArray("outputs") ?: return null
-        for (i in 0 until outputs.length()) {
-            val o = outputs.optJSONObject(i) ?: continue
-            if (o.optString("type") == "audio" && o.has("data")) return o
+    private class Found(val data: String, val rate: Int?)
+
+    /** Procura em qualquer lugar da resposta um texto base64 longo (o áudio) e, ao lado dele, a taxa de amostragem. */
+    private fun findAudioData(node: Any?): Found? = when (node) {
+        is JSONObject -> {
+            val keys = node.keys().asSequence().toList()
+            val big = keys.firstOrNull { ((node.opt(it) as? String)?.length ?: 0) > 2_000 }
+            if (big != null) {
+                val mime = node.optString("mime_type").ifBlank { node.optString("mimeType") }
+                val rate = Regex("rate=(\\d+)").find(mime)?.groupValues?.get(1)?.toIntOrNull()
+                    ?: node.optInt("sample_rate", 0).takeIf { it > 0 }
+                Found(node.getString(big), rate)
+            } else {
+                keys.firstNotNullOfOrNull { findAudioData(node.opt(it)) }
+            }
         }
-        return null
+        is JSONArray -> (0 until node.length()).firstNotNullOfOrNull { findAudioData(node.opt(it)) }
+        else -> null
+    }
+
+    /** Estrutura da resposta sem o conteúdo longo (texto/áudio viram "<N car.>"), para diagnóstico. */
+    private fun skeleton(node: Any?, depth: Int = 0): String = when {
+        depth > 5 -> "…"
+        node is JSONObject -> node.keys().asSequence().joinToString(",", "{", "}") { "$it:" + skeleton(node.opt(it), depth + 1) }
+        node is JSONArray -> "[" + (0 until minOf(node.length(), 3)).joinToString(",") { skeleton(node.opt(it), depth + 1) } + (if (node.length() > 3) ",…" else "") + "]"
+        node is String -> if (node.length > 60) "\"<${node.length} car.>\"" else "\"$node\""
+        else -> node.toString()
     }
 
     companion object {
-        const val ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
+        const val BASE = "https://generativelanguage.googleapis.com/v1beta"
+        @Volatile private var preferInteractions = false
         const val DEFAULT_MODEL = "gemini-3.8-flash-tts"
 
         /** Vozes citadas no guia oficial; cada personagem tem a sua (pode trocar em Meu Euno). */
