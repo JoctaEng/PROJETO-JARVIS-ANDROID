@@ -20,3 +20,8 @@ Registro único dos pedidos do Prof. Joctã. Atualize a coluna "Situação" a ca
 | 14 | Arte: 3 Joctãs, Joctã Casual (`ouvindo`/`preocupado`), regerar Luna/Thor alinhados, 72 imagens do Canva | **Pendente (usuário + download)**; validar com `tools/arte/verificar_alinhamento.py` | 2 |
 | 15 | Chave de assinatura fixa | **Conferir**: o CI agora falha se o determinismo não existir. Comparar a linha "SHA-256 do certificado:" entre dois builds | 1 |
 | 16 | EduMath com ponte do Euno | Código na branch `claude/euno-mcp` do EduMath; falta compilar no Windows com a keystore do professor e testar | 1 |
+
+## Cérebro local lento (v0.6.1)
+Causa provável: cada mensagem enviava ao Qwen3-4B o prompt inteiro (regras, dossiê de até 4.000 caracteres, lista completa de ferramentas e 20 mensagens de histórico). Na primeira palavra, isso é leitura pesada para a CPU do celular.
+Feito na 0.6.1: prompt local com dossiê de até 800 caracteres, histórico de 8 mensagens, ferramentas só quando o pedido sugere ação (`ToolIntent`), e medição por turno no diagnóstico (`poc03_local_llm`: `prompt_chars`, `first_ms`, `total_ms`).
+Próximo passo depende dos números medidos: se `first_ms` continuar alto, testar um modelo menor (Qwen3-1,7B) ou ajustar as threads do motor.
