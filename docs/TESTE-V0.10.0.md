@@ -1,0 +1,83 @@
+# Teste da v0.10.0 (build 42) — registro fiel do relatório
+
+Fonte: relatório "Enviar relatório de erros" do Prof. Joctã, gerado ~18:47 (hora local) de 08/10, mais o vídeo de tela (ainda em upload no Drive; ver a última seção). **Este arquivo só registra. Nenhuma correção foi iniciada**, a pedido do usuário. Marcas: **[DADO]** = está no relatório; **[LEITURA]** = interpretação minha, ainda não confirmada.
+
+## 1. Cabeçalho
+- [DADO] Euno 0.10.0, Fase 2, código 42. Xiaomi 23090RA98G, Android 16 (API 36). Assinatura = a esperada (52:91:A0:…:59:5E), então a atualização entrou por cima.
+- [DADO] Memória 5842 MB livres de 11385 MB. Bateria 39%. Otimização de bateria ignorada: **NÃO** (HyperOS pode fechar o app; pendente do lado do usuário).
+- [DADO] Configuração: cérebro ONLINE_FIRST; nuvem GEMINI; voz AUTO; personagem jocta_casual; autonomia PERSONAL_AGENT; kokoroLento=true; paciência 3049 ms; **ouvirEnquantoFala=false**.
+- [DADO] "Voz do Gemini hoje: 8 pedidos (limite 100)" e **"em descanso até 08/10 21:00"**.
+
+## 2. Voz: toda a sessão saiu na voz do Android
+- [DADO] Todas as frases do trecho visível (18:36–18:44) registram `sem áudio natural (0 ms); usando a voz do Android`. 0 ms = o Gemini nem foi tentado.
+- [DADO] Isso bate com o descanso até 21:00 (guardado entre aberturas do app desde a 0.9.0) e com kokoroLento=true (Kokoro descartado).
+- [DADO] Contador do dia = 8, bem abaixo de 100. O trecho do log em que o descanso foi decidido (a mensagem de erro do Gemini) está **cortado** ("…(início cortado)…"), então a causa exata (HTTP 429 de cota, qual cota, "retry in …") não aparece.
+- [LEITURA] A cota que bloqueou não parece ser a diária de 100 contada pelo app. Pode ser limite por minuto/por modelo da conta, ou uso da mesma chave fora do app. Precisa do trecho inicial do log (ou do relatório logo após a falha) para saber. O app também trava a voz natural por até 6 h mesmo se o limite for curto, o que pode ter tornado a sessão inteira robótica.
+- [DADO] Frases longas na voz do Android funcionaram sem corte (241 car. ≈ 17 s; 279 car. ≈ 19 s).
+
+## 3. Cérebro online (Gemini) — tempos
+- [DADO] 25 turnos em poc03, todos `provider=cloud`, prompt 12385–12845 car., 27 ferramentas, histórico 1→20 mensagens.
+- [DADO] 1ª palavra: 839 ms a 3271 ms; maioria 1,0–1,5 s. Total: 0,96 s a 5,05 s (os mais lentos: 4461, 5049, 3920 ms, em sequência às 18:34–18:35 local).
+- [LEITURA] O cérebro online não é o gargalo da percepção de lentidão; a voz do Android e o ciclo escutar→responder são.
+
+## 4. Escuta (reconhecimento de voz)
+- [DADO] Fala reconhecida várias vezes (3, 12, 13, 17, 21, 23, 31, 55, 70, 72, 94, 105, 291 caracteres). Uma com só «não» (3 car.) às 18:38:37.
+- [DADO] 18:39:04 "sem fala: Não entendi". 18:41:00 idem.
+- [DADO] 18:39:25 **erro de reconhecimento código 11**. [LEITURA] Pelo que conheço da API do Android, 11 = ERROR_SERVER_DISCONNECTED (serviço de reconhecimento desconectou); conferir na documentação antes de agir.
+- [DADO] Ouvir comandos enquanto ele fala: desligado em todo o trecho (`ouvir comandos ao falar=desligado`). **O teste do "pera aí" durante a fala não aconteceu neste relatório.**
+
+## 5. Fila de mensagens
+- [DADO] 18:40:47 "mensagem na fila (1)" e 18:40:48 "respondendo as mensagens da fila juntas"; nova resposta com 1ª palavra em 1310 ms. Funcionou como desenhado.
+
+## 6. Despedida ("tchau")
+- [DADO] 18:41:50 «beleza tchau» → "comando de voz: despedida"; 18:44:48 «tchau» → idem. Ele disse "Até logo!" e a conversa por voz encerrou (falando=true→false em ~1,5 s).
+- [DADO] Isso corrige a falha da 0.7.0.
+
+## 7. "Oi Joca" (chamado)
+- [DADO] 18:42:08 `chamado reconhecido (7 caracteres ouvidos, pedido junto=false)`; 6 s depois a fala «tá me ouvindo» foi reconhecida e respondida. **O chamado funcionou ao menos uma vez.**
+- [DADO] O trecho cortado não mostra "escuta do chamado ligada", nem quantas ativações falsas/perdidas houve. O vídeo deve mostrar quantas tentativas ele precisou.
+- [DADO] Bateria 38→39% durante ~10 min com o chamado ligado (pode estar carregando; não é prova de consumo).
+
+## 8. Conversa (texto do chat incluído no relatório) — pontos observados
+1. [DADO] "Que horas é agora" → "18:35" (hora certa naquele momento).
+2. [DADO] Resumo do dia usou a agenda (UEBs, Ministério Público) corretamente via `agenda_consultar`.
+3. [DADO] "O que você sabe sobre mim e sobre minha esposa": respondeu que não tem info pessoal; menciona "tarefas no EduMath" (origem não verificada).
+4. [DADO] Contatos: achou "Meu Amor ❤️", mas mostrou o número como **`$98987177598$`** (cifrões visíveis). [LEITURA] O prompt manda toda fórmula em `$…$` (Persona.kt), e o número foi tratado como fórmula. O número também não traz DDD (como está no contato? verificar no vídeo).
+5. [DADO] Abrir WhatsApp: ferramenta `abrir_app` falhou duas vezes ("WhatsApp" e "WhatsApp Business": "não encontrei um app chamado …"). O Euno disse "vou abrir agora mesmo" antes do resultado e depois "[confuso]/[pensativo]" — as **marcas de emoção aparecem como texto** na conversa.
+6. [LEITURA] O manifesto já tem `queries` MAIN/LAUNCHER, então a visibilidade de pacotes provavelmente não é a causa. Hipóteses a testar: o app está em outro espaço (Segundo Espaço/clone do HyperOS), o rótulo difere, ou a lista de lançáveis vem incompleta. Não confirmado.
+7. [DADO] "Anote o nome da minha esposa…": respondeu "Anotado!", "Registro mental feito", depois "corrigido… Thythay…", "Thaynára", "Thaynara". O nome só ficou certo no fim. A esposa aparece como **Thaynara Neves Souza Galvão** (grafia final dada pelo usuário). Antes, "Tainara" e "Thythay" foram erros de escuta/escrita.
+8. [LEITURA] **Nada foi realmente gravado na memória.** `MemoryCommands` só salva frases começando com "lembre que / anote que / guarde que / memorize que"; "não eu quero que você Anote aí o nome…" não casa. O Euno **afirmou ter anotado sem anotar**. Depois o usuário: "você esqueceu o nome de Tainara"; a resposta do Euno a essa fala está **vazia** (`Euno: ` sem texto) — turno que não gerou resposta.
+9. [DADO] "Quem sou eu para você" → respondeu bem (Joctã, MP + aulas, grafia da Thaynara) — usando o histórico recente.
+10. [DADO] "Qual a minha formação" → não sabe; o usuário disse que enviará o dossiê depois (Sobre Mim).
+11. [DADO] "Tá me ouvindo" → "Como ainda não tenho a função de ficar escutando o ambiente o tempo todo…" — **o Euno não sabe que agora tem o chamado "Oi Joca"** (SelfKnowledge desatualizado) e disse que "recebe mensagem escrita" ao ser perguntado por escuta de voz.
+12. [DADO] "você foi burrinho" → resposta longa e pedindo desculpas; bom tom, mas repetiu o nome com formatação em negrito (Markdown).
+
+## 9. Ferramentas (audit.jsonl, últimas ações)
+- [DADO] `agenda_consultar` sucesso (inclusive a falha inicial por falta de permissão em horário anterior), `contatos_buscar` sucesso, `estado_do_celular` sucesso, `lanterna` sucesso, `abrir_app` falhou 2×.
+- [DADO] `pesquisar_na_web` falhou com "consulta vazia" (entrada anterior à 0.9.0, que passou a aceitar variações do argumento).
+- [DADO] Uma entrada de `estado_do_celular` traz o texto "quando eu começo escrever, não consigo mais ver o texto" (queixa do layout do teclado, anterior à 0.9.0).
+
+## 10. Overlay e desenho (poc01/poc05)
+- [DADO] Serviço reiniciado às ~18:30 (`event=start reason=user`, run 5c4735a4); não houve queda (heartbeats a cada 60 s, `uptime` contínuo).
+- [DADO] FPS por minuto: 26–30 até as 18:44; **14,3** (18:45), **24,0** (18:46), **0,0** (18:47). [LEITURA] 0 é normal com o personagem recolhido/oculto (tela apagada/portal); o 14,3 e o 22,4 (≈18:41) merecem olhar no vídeo (queda de FPS durante fala/resposta?).
+- [DADO] Reação ao toque: 25, 78, 159, 45, 53, 32, 378, 50 ms. O de **378 ms** e o de 159 ms estão acima da meta (<100 ms).
+- [DADO] `poc02_touch_session` e `poc04_speech` vazios.
+
+## 11. O que o relatório NÃO mostra (precisa do vídeo ou de outro relatório)
+- Se a **legenda** (balão) apareceu, se o app por trás ficou clicável, se "Expandir" funcionou.
+- Se o **teclado** agora deixa ver o texto; botão **Nova** e **Resumos de conversa** (nada deles no relatório).
+- Se o **bip** do microfone diminuiu.
+- Quantas vezes o "Oi Joca" falhou/acionou sem querer.
+- O trecho inicial do log (mensagem do Gemini que gerou o descanso).
+
+## 12. Vídeo
+- Pendente: ~1 GB, em upload no Google Drive. Quando chegar, acrescentar a seção 13 com o que aparece na tela, em ordem de tempo, ligando cada ponto às linhas acima. Se o arquivo não for legível aqui, avisar em vez de supor.
+
+## 13. Lista inicial de pontos para o usuário confirmar/decidir (sem agir ainda)
+1. Voz: o Gemini ficou bloqueado; a sessão toda foi robótica. Causa da cota ainda desconhecida.
+2. Memória: o Euno diz que anotou sem anotar; só gravam as frases com prefixos fixos.
+3. Cifrões em números (LaTeX) e marcas `[confuso]`/`[pensativo]` visíveis.
+4. `abrir_app` não achou WhatsApp/WhatsApp Business.
+5. Resposta vazia em um turno ("você esqueceu o nome…").
+6. O Euno desconhece o próprio chamado "Oi Joca" (SelfKnowledge).
+7. Barge-in (ouvir enquanto fala) ainda não testado (estava desligado).
