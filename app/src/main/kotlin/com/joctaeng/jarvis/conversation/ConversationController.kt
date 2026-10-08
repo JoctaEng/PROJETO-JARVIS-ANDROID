@@ -253,13 +253,12 @@ class ConversationController(private val app: JarvisApp) {
                 AgentEvent.Done -> Unit
             }
         }
-        val rest = parser.finish()
         // Medição para diagnosticar a lentidão: tamanho do prompt, tempo até a 1ª palavra e até o fim.
         app.diagnostics.append(
             Poc.LOCAL_LLM, "event" to "turn", "provider" to (providers.firstOrNull()?.id ?: "none"),
             "prompt_chars" to prompt.length, "history_msgs" to history.size,
             "tools_in_prompt" to (if (tools.isNotEmpty() && prompt.contains("<tools>")) tools.size else 0),
-            "first_ms" to if (firstChunkAt == 0L) -1 else (firstChunkAt - startedAt) / 1_000_000,
+            "first_ms" to (if (firstChunkAt == 0L) -1L else (firstChunkAt - startedAt) / 1_000_000),
             "total_ms" to (System.nanoTime() - startedAt) / 1_000_000,
         )
         val rest = parser.finish()
