@@ -29,9 +29,10 @@ class ReportCollector(private val app: JarvisApp) {
             "Assinatura do APK (SHA-256)" to signatureFingerprint(),
             "Memória" to memory,
             "Otimização de bateria ignorada" to batteryExempt(),
+            "Voz do Gemini hoje" to "${if (s.geminiTtsDay == java.time.LocalDate.now().toString()) s.geminiTtsCount else 0} pedidos (limite diário da conta gratuita: 100)",
             "Bateria" to "${runCatching { DeviceState.batteryPercent(app) }.getOrDefault(-1)}%",
             "Configuração" to "cérebro=${s.brainPreference.name}; nuvem=${s.cloudPreset.name}; voz=${s.voiceEngine.name}; " +
-                "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; kokoroLento=${s.kokoroTooSlow}",
+                "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; kokoroLento=${s.kokoroTooSlow}; paciência=${s.listenPatienceMs} ms; ouvirEnquantoFala=${s.bargeIn}",
         )
         val sections = buildList {
             add("Eventos, erros e quedas (mais recente no fim)" to app.events.tail(60_000))

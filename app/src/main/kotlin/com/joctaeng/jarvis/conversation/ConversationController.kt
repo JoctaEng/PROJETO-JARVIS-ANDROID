@@ -70,6 +70,8 @@ data class ChatEntry(
     val brain: String? = null,
     val streaming: Boolean = false,
     val note: Boolean = false,
+    /** Mensagem recebida durante a resposta: espera na fila para ser respondida junto. */
+    val queued: Boolean = false,
 )
 
 /**
@@ -100,13 +102,52 @@ class ConversationController(private val app: JarvisApp) {
     /** Resposta terminou e a voz terminou de falar — hora de ouvir de novo (modo voz). */
     val turnFinished: SharedFlow<Unit> = _turnFinished.asSharedFlow()
 
+    /** Mensagens recebidas enquanto ele ainda responde: esperam na fila e viram uma resposta só no fim. */
+    private val queue = ArrayDeque<String>()
+    private var queuedSpeak = false
+
     fun send(text: String, speak: Boolean) {
         val clean = text.trim()
-        if (clean.isEmpty() || _busy.value) return
+        if (clean.isEmpty()) return
+        if (_busy.value) {
+            // Ele está pensando ou falando: comandos valem na hora; o resto entra na fila (nada se perde).
+            when (VoiceCommands.parse(clean)) {
+                VoiceCommand.STOP -> {
+                    app.events.info("conversa", "comando de voz: interromper")
+                    cancel()
+                    return
+                }
+                VoiceCommand.STOP_LISTENING -> {
+                    OverlayBus.requestStopListening()
+                    return
+                }
+                VoiceCommand.DISMISS -> {
+                    val old = job
+                    queue.clear()
+                    old?.cancel()
+                    voice.stop()
+                    scope.launch {
+                        old?.join()
+                        start(clean, speak, addEntry = true)
+                    }
+                    return
+                }
+                null -> Unit
+            }
+            queue.addLast(clean)
+            queuedSpeak = speak
+            add(ChatEntry(nextId++, Role.USER, clean, queued = true))
+            app.events.info("conversa", "mensagem na fila (${queue.size}): será respondida junto, ao fim da resposta atual")
+            return
+        }
+        start(clean, speak, addEntry = true)
+    }
+
+    private fun start(clean: String, speak: Boolean, addEntry: Boolean) {
         voice.stop()
         job = scope.launch {
             _busy.value = true
-            add(ChatEntry(nextId++, Role.USER, clean))
+            if (addEntry) add(ChatEntry(nextId++, Role.USER, clean))
             try {
                 when (VoiceCommands.parse(clean)) {
                     VoiceCommand.DISMISS -> {
@@ -116,9 +157,9 @@ class ConversationController(private val app: JarvisApp) {
                         OverlayBus.requestDismiss()
                         return@launch
                     }
-                    VoiceCommand.STOP_LISTENING -> {
+                    VoiceCommand.STOP_LISTENING, VoiceCommand.STOP -> {
                         app.events.info("conversa", "comando de voz: parar de ouvir")
-                        // Para de ouvir já, para a voz continuar a conversa só se a pessoa pedir de novo.
+                        // Para de ouvir já; a conversa por voz só continua se a pessoa pedir de novo.
                         OverlayBus.requestStopListening()
                         say("Tudo bem, parei de ouvir.", Emotion.NEUTRAL, speak)
                         return@launch
@@ -131,16 +172,27 @@ class ConversationController(private val app: JarvisApp) {
             } finally {
                 _busy.value = false
                 relax()
-                _turnFinished.tryEmit(Unit)
+                if (queue.isEmpty()) _turnFinished.tryEmit(Unit) else drainQueue()
             }
         }
+    }
+
+    /** Junta o que chegou durante a resposta e responde de uma vez (a pessoa já viu cada mensagem no chat). */
+    private fun drainQueue() {
+        val merged = queue.joinToString(" ")
+        val speak = queuedSpeak
+        queue.clear()
+        _entries.update { list -> list.map { if (it.queued) it.copy(queued = false) else it } }
+        app.events.info("conversa", "respondendo as mensagens da fila juntas")
+        start(merged, speak, addEntry = false)
     }
 
     /** Interrompe a resposta e a fala. */
     fun cancel() {
         job?.cancel()
         voice.stop()
-        _entries.update { list -> list.map { if (it.streaming) it.copy(streaming = false) else it } }
+        queue.clear()
+        _entries.update { list -> list.filterNot { it.queued }.map { if (it.streaming) it.copy(streaming = false) else it } }
         OverlayBus.anim.value = AnimState.IDLE
     }
 

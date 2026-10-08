@@ -57,6 +57,7 @@ import com.joctaeng.jarvis.character.CharacterView
 import com.joctaeng.jarvis.character.ComposeCharacterRenderer
 import com.joctaeng.jarvis.conversation.ChatEntry
 import com.joctaeng.jarvis.core.model.Role
+import com.joctaeng.jarvis.mind.persona.VoiceCommands
 import com.joctaeng.jarvis.overlay.OverlayBus
 import com.joctaeng.jarvis.ui.JarvisTheme
 import com.joctaeng.jarvis.ui.SettingsActivity
@@ -72,6 +73,9 @@ class ChatActivity : ComponentActivity() {
     private val app get() = JarvisApp.from(this)
     private val renderer = ComposeCharacterRenderer()
     private lateinit var listener: SpeechListener
+    private lateinit var bargeListener: SpeechListener
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var bargeOn by mutableStateOf(false)
     private var partial by mutableStateOf("")
     private var status by mutableStateOf("")
     private var voiceMode by mutableStateOf(false)
@@ -84,6 +88,8 @@ class ChatActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         listener = SpeechListener(this, events = app.events)
+        bargeListener = SpeechListener(this, events = app.events).also { it.graceMs = 0L }
+        bargeOn = app.settings.bargeIn
         app.conversation.preloadLocalModel()
         OverlayBus.sessionActive.value = true
         CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking)
@@ -95,6 +101,12 @@ class ChatActivity : ComponentActivity() {
                 app.conversation.turnFinished.collect {
                     if (voiceMode && app.settings.continuousVoice) startListening()
                 }
+            }
+        }
+        // Ouvir comandos enquanto ele fala ("pera aí", "tchau"...): só liga com a opção marcada e a conversa por voz ativa.
+        lifecycleScope.launch {
+            app.voice.speaking.collect { speaking ->
+                if (speaking && voiceMode && bargeOn) startBarge() else stopBarge()
             }
         }
         // "Tchau": encerra a conversa por voz e fecha a janela; o personagem se recolhe.
@@ -118,6 +130,7 @@ class ChatActivity : ComponentActivity() {
 
     override fun onStop() {
         stopListening()
+        stopBarge()
         super.onStop()
     }
 
@@ -127,11 +140,60 @@ class ChatActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /** Escuta curta enquanto ele fala: só comandos valem (sem fone, o eco da própria voz dele não vira mensagem). */
+    private fun startBarge() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        fun again(delay: Long) {
+            if (app.voice.speaking.value && voiceMode && bargeOn) mainHandler.postDelayed({ startBarge() }, delay)
+        }
+        bargeListener.start { event ->
+            when (event) {
+                is SpeechListener.Event.Final -> {
+                    handleBarge(event.text)
+                    again(250)
+                }
+                is SpeechListener.Event.Failed -> again(700)
+                else -> Unit
+            }
+        }
+    }
+
+    private fun stopBarge() {
+        mainHandler.removeCallbacksAndMessages(null)
+        bargeListener.stop()
+    }
+
+    private fun handleBarge(text: String) {
+        val isCommand = VoiceCommands.parse(text) != null
+        if (!isCommand) {
+            if (!headsetConnected()) return // alto-falante: o que ele ouviu pode ser a própria voz dele
+            val spoken = flat(app.conversation.entries.value.lastOrNull { it.role == Role.ASSISTANT }?.text.orEmpty())
+            val heard = flat(text)
+            if (heard.length >= 4 && spoken.contains(heard)) return // eco
+        }
+        app.events.info("escuta", "fala durante a resposta: ${if (isCommand) "comando" else "mensagem"} (${text.length} caracteres)")
+        app.conversation.send(text, speak = app.settings.speakReplies)
+    }
+
+    private fun flat(text: String): String =
+        java.text.Normalizer.normalize(text.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").replace(Regex("[^a-z0-9 ]"), " ").replace(Regex(" +"), " ").trim()
+
+    private fun headsetConnected(): Boolean {
+        val audio = getSystemService(android.media.AudioManager::class.java) ?: return false
+        val types = setOf(
+            android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET, android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            android.media.AudioDeviceInfo.TYPE_USB_HEADSET, android.media.AudioDeviceInfo.TYPE_BLE_HEADSET,
+        )
+        return audio.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).any { it.type in types }
+    }
+
     private fun startListening() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             micPermission.launch(Manifest.permission.RECORD_AUDIO)
             return
         }
+        listener.graceMs = app.settings.listenPatienceMs.toLong()
         app.voice.stop()
         partial = ""
         status = "Ouvindo…"
@@ -237,6 +299,14 @@ class ChatActivity : ComponentActivity() {
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Ouvir comandos enquanto ele fala (teste)", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        Switch(checked = bargeOn, onCheckedChange = {
+                            bargeOn = it
+                            app.settings.bargeIn = it
+                            if (!it) stopBarge() else if (voiceMode && app.voice.speaking.value) startBarge()
+                        })
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = input,
                             onValueChange = {
@@ -251,7 +321,7 @@ class ChatActivity : ComponentActivity() {
                             Button(onClick = {
                                 app.conversation.send(input, speak = false)
                                 input = ""
-                            }, enabled = !busy) { Text("Enviar") }
+                            }) { Text(if (busy) "Enviar (fila)" else "Enviar") }
                         } else {
                             FilledTonalButton(onClick = { if (listening) stopListening() else startListening() }, enabled = !busy) {
                                 Text(if (listening) "Parar" else "Falar")
@@ -281,6 +351,9 @@ class ChatActivity : ComponentActivity() {
             .padding(horizontal = 12.dp, vertical = 8.dp)
         val textColor = if (mine) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
         Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+            if (entry.queued) {
+                Text("na fila — respondo junto, quando terminar", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             if (!mine && needsFormatting(entry.text)) {
                 Box(bubble) {
                     FormattedText(entry.text, textColor, MaterialTheme.colorScheme.primary, Modifier.fillMaxWidth())

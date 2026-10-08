@@ -13,8 +13,13 @@ class VoiceCommandsTest {
     }
 
     @Test fun stopListening() {
-        listOf("encerrar", "Pra encerrar", "para de ouvir", "chega", "pode encerrar", "Euno, encerra", "desliga o microfone", "silêncio")
+        listOf("encerrar", "Pra encerrar", "para de ouvir", "pode encerrar", "Euno, encerra", "desliga o microfone")
             .forEach { assertEquals(VoiceCommand.STOP_LISTENING, VoiceCommands.parse(it), it) }
+    }
+
+    @Test fun interruptions() {
+        listOf("pera aí", "Espera!", "calma", "um momento", "chega", "silêncio", "para", "Euno, espera aí", "só um momento")
+            .forEach { assertEquals(VoiceCommand.STOP, VoiceCommands.parse(it), it) }
     }
 
     @Test fun normalSentencesAreNotCommands() {

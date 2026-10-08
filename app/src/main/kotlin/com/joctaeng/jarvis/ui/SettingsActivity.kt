@@ -626,6 +626,8 @@ class SettingsActivity : ComponentActivity() {
         var listenOnOpen by remember { mutableStateOf(settings.listenOnOpen) }
         var continuous by remember { mutableStateOf(settings.continuousVoice) }
         var speakReplies by remember { mutableStateOf(settings.speakReplies) }
+        var patience by remember { mutableFloatStateOf(settings.listenPatienceMs / 1000f) }
+        var barge by remember { mutableStateOf(settings.bargeIn) }
         LaunchedEffect(refresh) {
             delay(900)
             if (refresh < 2) refresh++
@@ -744,6 +746,16 @@ class SettingsActivity : ComponentActivity() {
                 restart()
             }, valueRange = 0.6f..1.6f)
             Button(onClick = { voice.speak("Oi, ${settings.userName}! Eu sou ${settings.displayName}. Assim fica bom?") }) { Text("Testar voz") }
+            Text("Paciência: espera ${"%.1f".format(patience)} s de silêncio antes de entender que terminei", style = MaterialTheme.typography.labelLarge)
+            Slider(value = patience, onValueChange = { patience = it }, onValueChangeFinished = {
+                settings.listenPatienceMs = (patience * 1000).toInt()
+            }, valueRange = 1.2f..6f)
+            Hint("Se eu parar no meio para pensar e ele já responder, aumente. Frases que terminam em \"e\", \"mas\", \"porque\" ganham mais tempo sozinhas.")
+            Toggle("Ouvir comandos enquanto ele fala (teste)", barge) {
+                barge = it
+                settings.bargeIn = it
+            }
+            Hint("Com isso ligado, \"pera aí\", \"espera\", \"para\" ou \"tchau\" funcionam enquanto ele fala. Com fone de ouvido ele também recebe frases inteiras e as põe na fila.")
             Toggle("Começar ouvindo quando eu tocar nele", listenOnOpen) {
                 listenOnOpen = it
                 settings.listenOnOpen = it

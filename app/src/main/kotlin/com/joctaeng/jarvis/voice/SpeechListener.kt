@@ -8,6 +8,7 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import com.joctaeng.jarvis.mind.persona.UtteranceEnd
 import com.joctaeng.jarvis.system.resources.EventLog
 
 /**
@@ -21,9 +22,11 @@ import com.joctaeng.jarvis.system.resources.EventLog
  */
 class SpeechListener(
     private val context: Context,
-    private val graceMs: Long = 1100L,
     private val events: EventLog? = null,
 ) {
+    /** Silêncio (ms) que se espera depois de uma frase reconhecida antes de entregá-la; 0 = entrega na hora (comandos). */
+    @Volatile var graceMs: Long = 1100L
+
     private var recognizer: SpeechRecognizer? = null
     private val handler = Handler(Looper.getMainLooper())
     private var accumulated = ""
@@ -54,7 +57,7 @@ class SpeechListener(
         val text = accumulated
         accumulated = ""
         stopRecognizer()
-        events?.info("escuta", "fala reconhecida: ${text.length} caracteres")
+        events?.info("escuta", "fala reconhecida: ${text.length} caracteres" + if (text.length <= 15) " «$text»" else "")
         if (text.isBlank()) onEvent(Event.Failed("Não entendi", silent = true)) else onEvent(Event.Final(text))
     }
 
@@ -100,9 +103,11 @@ class SpeechListener(
                 } else {
                     // Escuta de novo e só entrega se a pessoa ficar em silêncio pela carência.
                     startSession(onEvent)
+                    // Frase que parece inacabada ("...e", "...porque", vírgula) ganha mais tempo.
+                    val wait = graceMs + if (UtteranceEnd.looksIncomplete(accumulated)) INCOMPLETE_EXTRA_MS else 0L
                     val run = Runnable { deliverFinal(onEvent) }
                     emitFinal = run
-                    handler.postDelayed(run, graceMs)
+                    handler.postDelayed(run, wait)
                 }
             }
 
@@ -157,5 +162,9 @@ class SpeechListener(
         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Reconhecedor ocupado; tente de novo"
         SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Erro de rede no reconhecimento"
         else -> "Erro no reconhecimento ($code)"
+    }
+
+    private companion object {
+        const val INCOMPLETE_EXTRA_MS = 1_500L
     }
 }

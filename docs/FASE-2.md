@@ -19,3 +19,7 @@ Critérios de saída (roteiro): "Como está meu dia?" responde com dados reais d
 2. Meu Euno → "O que ... pode fazer" → Permitir ler a agenda.
 3. Pergunte: "como está meu dia?", "tenho algo amanhã?", "o que tenho esta semana?".
 4. Se algo falhar, **Enviar relatório de erros** na tela inicial.
+
+## v0.8.0 — fluidez da conversa (etapa 1 da ordem combinada)
+Paciência ajustável, fila de mensagens (nada se perde enquanto ele responde), interrupção ("pera aí"), escuta de comandos durante a fala (experimental, com opção), voz do Gemini com cota diária contada e frases agrupadas.
+Próximas etapas: (2) conversa por voz sem a janela do chat, com balão de legenda no personagem; (3) controle do celular por acessibilidade.

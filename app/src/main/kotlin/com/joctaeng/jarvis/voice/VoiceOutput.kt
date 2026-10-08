@@ -76,6 +76,9 @@ class VoiceOutput(
 
     val kokoro = KokoroVoice(appContext)
 
+    /** Um pedido de voz: uma ou mais frases juntas ([count] diz quantas, para a fila contar certo). */
+    private class Chunk(val text: String, val offeredAt: Long, val count: Int, val pending: Deferred<Spoken>)
+
     /** Resultado de uma frase: o áudio (null = não deu, cai para a voz do Android), o motor e o tempo gasto. */
     private class Spoken(val clip: GeminiSpeech.Clip?, val engine: String, val synthMs: Long)
 
@@ -99,13 +102,22 @@ class VoiceOutput(
             var used = "nenhum"
             // Gemini com disjuntor: depois de uma falha ele descansa por 2 min, para não atrasar cada frase.
             if (gemini != null && System.currentTimeMillis() >= geminiSkipUntil) {
+                val used0 = countGeminiRequest()
                 val r = runCatching { gemini.synthesize(text, naturalVoiceName()) }
                 clip = r.getOrNull()
                 if (clip != null) {
                     used = "gemini/" + (clip?.via ?: "")
                 } else {
-                    geminiSkipUntil = System.currentTimeMillis() + GEMINI_COOLDOWN_MS
-                    events?.warn("voz", "Gemini falhou após ${SystemClock.elapsedRealtime() - t0} ms; descansando 2 min e usando o motor seguinte", r.exceptionOrNull())
+                    val error = r.exceptionOrNull()
+                    val quota = error?.message?.contains("HTTP 429") == true
+                    val rest = if (quota) quotaCooldownMs(error?.message.orEmpty()) else GEMINI_COOLDOWN_MS
+                    geminiSkipUntil = System.currentTimeMillis() + rest
+                    events?.warn(
+                        "voz",
+                        if (quota) "COTA do Gemini esgotada (pedido nº $used0 hoje): vou usar a voz do Android por ${rest / 60_000} min"
+                        else "Gemini falhou após ${SystemClock.elapsedRealtime() - t0} ms; descansando 2 min e usando o motor seguinte",
+                        error,
+                    )
                 }
             }
             if (clip == null && offline != null) {
@@ -120,6 +132,31 @@ class VoiceOutput(
             }
             Spoken(clip, used, SystemClock.elapsedRealtime() - t0)
         }
+    }
+
+    /** Conta pedidos do dia à voz do Gemini (a conta gratuita tem limite diário) e avisa perto do limite. */
+    private fun countGeminiRequest(): Int {
+        val today = java.time.LocalDate.now().toString()
+        if (settings.geminiTtsDay != today) {
+            settings.geminiTtsDay = today
+            settings.geminiTtsCount = 0
+        }
+        val n = settings.geminiTtsCount + 1
+        settings.geminiTtsCount = n
+        if (n == 80) events?.warn("voz", "Voz do Gemini: 80 pedidos hoje; o limite da conta gratuita costuma ser 100 por dia")
+        return n
+    }
+
+    /** "retry in 5h48m11s" na resposta de cota → quanto esperar (entre 5 min e 6 h); sem aviso, 1 hora. */
+    private fun quotaCooldownMs(message: String): Long {
+        val m = Regex("retry in (?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?").find(message)
+        val ms = m?.let {
+            val h = it.groupValues[1].toLongOrNull() ?: 0
+            val min = it.groupValues[2].toLongOrNull() ?: 0
+            val sec = it.groupValues[3].toLongOrNull() ?: 0
+            ((h * 60 + min) * 60 + sec) * 1000
+        } ?: 0L
+        return (if (ms > 0) ms else 3_600_000L).coerceIn(300_000L, 21_600_000L)
     }
 
     private var kokoroWarm = false
@@ -156,22 +193,40 @@ class VoiceOutput(
     private inner class CloudPipeline(private val speech: Synth) {
         @Volatile var stopped = false
         private val sentences = Channel<Pair<String, Long>>(Channel.UNLIMITED)
-        private val clips = Channel<Triple<String, Long, Deferred<Spoken>>>(3)
+        private val clips = Channel<Chunk>(3)
         private val jobs = listOf(
             scope.launch {
-                for ((text, offeredAt) in sentences) {
-                    clips.send(Triple(text, offeredAt, scope.async { speech.clip(text) }))
+                var first = true
+                while (true) {
+                    val (head, offeredAt) = sentences.receiveCatching().getOrNull() ?: break
+                    var joined = head
+                    var count = 1
+                    // A 1ª frase sai sozinha (começa a falar logo); as seguintes que já esperam na fila viram um só pedido:
+                    // menos pedidos à voz (a cota diária do Gemini é pequena) e fala mais contínua.
+                    if (!first) {
+                        while (joined.length < MERGE_MAX_CHARS) {
+                            val next = sentences.tryReceive().getOrNull() ?: break
+                            joined += " " + next.first
+                            count++
+                        }
+                    }
+                    first = false
+                    val text = joined
+                    clips.send(Chunk(text, offeredAt, count, scope.async { speech.clip(text) }))
                 }
             },
             scope.launch(Dispatchers.IO) {
-                for ((text, offeredAt, pending) in clips) {
-                    val spoken = pending.await()
+                for (chunk in clips) {
+                    val text = chunk.text
+                    val offeredAt = chunk.offeredAt
+                    val spoken = chunk.pending.await()
                     if (stopped) break
                     val clip = spoken.clip
                     if (clip == null) {
                         // Falhou (rede, cota): esta frase sai na voz do Android, NA ORDEM, sem sobrepor a seguinte.
                         events?.warn("voz", "frase de ${text.length} caracteres sem áudio natural (${spoken.synthMs} ms); usando a voz do Android")
                         speakWithAndroidInOrder(text)
+                        repeat(chunk.count) { finishedOne() }
                         lastClipEndAt = SystemClock.elapsedRealtime()
                         continue
                     }
@@ -184,7 +239,7 @@ class VoiceOutput(
                     val note = "frase ${text.length} car.; motor=${spoken.engine}; síntese=${spoken.synthMs} ms; áudio=$audioMs ms; " +
                         "esperou=${start - offeredAt} ms; pausa antes=$gap ms"
                     if (gap in PAUSE_WARN_MS..PAUSE_IGNORE_MS) events?.warn("voz", "PAUSA entre frases: $note") else events?.info("voz", note)
-                    finishedOne()
+                    repeat(chunk.count) { finishedOne() }
                 }
             },
         )
@@ -327,7 +382,6 @@ class VoiceOutput(
         if (!posted.await()) {
             androidWaiters.remove(id)
             events?.error("voz", "voz do Android indisponível; frase de ${text.length} caracteres não foi falada")
-            finishedOne()
             return
         }
         _speaking.value = true
@@ -335,7 +389,6 @@ class VoiceOutput(
             androidWaiters.remove(id)
             events?.error("voz", "voz do Android não terminou em ${ANDROID_TTS_TIMEOUT_MS / 1000} s")
         }
-        finishedOne()
     }
 
     private fun finishedOne() {
@@ -381,5 +434,6 @@ class VoiceOutput(
         private const val PAUSE_WARN_MS = 1_200L
         private const val PAUSE_IGNORE_MS = 15_000L
         private const val ANDROID_TTS_TIMEOUT_MS = 20_000L
+        private const val MERGE_MAX_CHARS = 280
     }
 }

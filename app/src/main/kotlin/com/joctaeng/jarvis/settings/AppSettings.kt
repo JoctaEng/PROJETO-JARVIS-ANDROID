@@ -86,6 +86,16 @@ class AppSettings(context: Context) {
     var listenOnOpen by boolean("listenOnOpen", true)
     var continuousVoice by boolean("continuousVoice", true)
     var speakReplies by boolean("speakReplies", true)
+
+    /** Quanto silêncio (ms) ele espera antes de considerar que você terminou de falar. */
+    var listenPatienceMs by int("listenPatienceMs", 2800)
+
+    /** Ouvir comandos (e, com fone, mensagens) enquanto ele fala. Experimental: o microfone pode competir com o áudio no alto-falante. */
+    var bargeIn by boolean("bargeIn", false)
+
+    /** Contador diário de pedidos à voz do Gemini (a conta gratuita tem limite por dia). */
+    var geminiTtsDay by string("geminiTtsDay", "")
+    var geminiTtsCount by int("geminiTtsCount", 0)
     var privateMode by boolean("privateMode", false)
     /** Marcado sozinho quando o Kokoro sintetiza bem mais devagar que o tempo real neste aparelho (modo Automático o evita). */
     var kokoroTooSlow by boolean("kokoroTooSlow", false)

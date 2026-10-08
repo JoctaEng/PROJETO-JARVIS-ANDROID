@@ -7,8 +7,14 @@ enum class VoiceCommand {
     /** "tchau", "até logo", "pode ir": fala um adeus, encerra a conversa por voz e se recolhe. */
     DISMISS,
 
-    /** "para de ouvir", "encerrar", "chega": para de ouvir, mas continua na tela. */
+    /** "para de ouvir", "encerrar": para de ouvir, mas continua na tela. */
     STOP_LISTENING,
+
+    /**
+     * "pera aí", "espera", "para", "chega", "silêncio": se ele está falando ou pensando, interrompe; se está parado,
+     * equivale a parar de ouvir. Quem usa decide pelo contexto.
+     */
+    STOP,
 }
 
 object VoiceCommands {
@@ -25,10 +31,14 @@ object VoiceCommands {
         "ir", "ir embora", "se esconder", "sumir", "descansar", "se recolher", "some dai", "se esconde", "esconde", "vai descansar", "descansa",
         "e so isso", "so isso", "isso e tudo", "e tudo", "e so",
     )
-    private val stopExact = setOf(
-        "para de ouvir", "pare de ouvir", "parar de ouvir", "chega", "silencio", "encerrar", "encerra", "encerrar conversa", "encerrar a conversa",
-        "terminar", "termina", "finalizar", "finaliza", "para", "pare", "parar", "pode parar", "para por aqui", "desliga o microfone",
+    private val stopListeningExact = setOf(
+        "para de ouvir", "pare de ouvir", "parar de ouvir", "encerrar", "encerra", "encerrar conversa", "encerrar a conversa",
+        "terminar", "termina", "finalizar", "finaliza", "para por aqui", "desliga o microfone",
         "desligar microfone", "desligar o microfone", "nao precisa mais ouvir", "chega de ouvir", "pode encerrar", "vamos encerrar",
+    )
+    private val stopExact = setOf(
+        "para", "pare", "parar", "chega", "silencio", "pode parar", "pera ai", "pera", "espera", "espere", "espera ai", "calma",
+        "um momento", "so um momento", "um minuto", "so um minuto", "aguarda", "aguarde", "para de falar", "pare de falar", "ja chega",
     )
 
     fun parse(utterance: String): VoiceCommand? {
@@ -43,7 +53,8 @@ object VoiceCommands {
         val coreText = core.joinToString(" ")
         val coreNoPode = words.filterNot { it in fillers }.joinToString(" ")
         if (coreText in dismissExact || coreNoPode in dismissExact) return VoiceCommand.DISMISS
-        if (coreText in stopExact || coreNoPode in stopExact) return VoiceCommand.STOP_LISTENING
+        if (coreText in stopListeningExact || coreNoPode in stopListeningExact) return VoiceCommand.STOP_LISTENING
+        if (coreText in stopExact || coreNoPode in stopExact) return VoiceCommand.STOP
         return null
     }
 

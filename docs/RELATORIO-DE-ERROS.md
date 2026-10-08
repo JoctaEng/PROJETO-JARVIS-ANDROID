@@ -34,3 +34,9 @@ O CI só publica o APK se a assinatura for igual à de `tools/assinatura/impress
   2. Na tela de apps recentes, **travar o Euno** (segurar o cartão do app e tocar no cadeado) para a "limpeza com um toque" não o encerrar.
   3. No app Segurança → Acelerar/Limpar: não incluir o Euno.
 - **Agenda sem permissão**: a ferramenta agora abre sozinha o pedido de permissão (v0.7.1) em vez de mandar procurar em Meu Euno. Contatos usam o mesmo caminho.
+
+## Quarto relatório (v0.7.0) e v0.8.0
+- **Cota da voz do Gemini**: `HTTP 429 … limit: 100 requests per day on Tier 1`. Cada frase falada é 1 pedido; o limite diário da conta é pequeno. v0.8.0: frases seguidas viram **um só pedido** (a 1ª sai sozinha para falar logo), o app **conta os pedidos do dia** (aparece no relatório e avisa aos 80), e ao esgotar a cota usa a voz do Android por quanto tempo o Google informar (mín. 5 min, máx. 6 h). Para falar sempre com a voz do Gemini, é preciso um plano com cota maior na conta do Google AI Studio.
+- **Kokoro** foi marcado como lento (757% do tempo do áudio) e o Automático o evita.
+- **Fila e paciência** (v0.8.0): o que você fala ou escreve enquanto ele responde entra numa fila ("na fila"), e ele responde tudo junto no fim; a paciência (silêncio antes de enviar) é ajustável em Meu Euno → Voz (padrão 2,8 s, +1,5 s se a frase parece inacabada). "Pera aí", "espera", "para", "chega", "silêncio" interrompem; com **Ouvir comandos enquanto ele fala (teste)** ligado, funcionam por voz durante a fala dele.
+- **Privacidade do registro:** falas reconhecidas de até 15 caracteres (prováveis comandos como "tchau") aparecem no relatório entre « »; frases maiores só têm o tamanho.
