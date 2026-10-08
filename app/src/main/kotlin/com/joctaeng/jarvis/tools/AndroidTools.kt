@@ -14,7 +14,7 @@ import android.os.BatteryManager
 import android.os.StatFs
 import android.provider.AlarmClock
 import android.provider.CalendarContract
-import android.provider.ContactsContract
+import android.provider.ContactsContract.CommonDataKinds.Phone
 import com.joctaeng.jarvis.system.resources.AgendaEvent
 import com.joctaeng.jarvis.system.resources.AgendaFormatter
 import com.joctaeng.jarvis.system.resources.AgendaPeriod
@@ -308,15 +308,14 @@ private class ContactsSearch(context: Context) : AndroidTool(
         missingPermission(Manifest.permission.READ_CONTACTS, "ler os contatos")?.let { return it }
         val query = args.optString("nome").trim()
         if (query.isBlank()) return ToolResult.Failure("informe o nome do contato")
-        val phone = ContactsContract.CommonDataKinds.Phone
         val found = linkedMapOf<String, MutableList<String>>()
         runCatching {
             context.contentResolver.query(
-                phone.CONTENT_URI,
-                arrayOf(phone.DISPLAY_NAME, phone.NUMBER),
-                "${phone.DISPLAY_NAME} LIKE ?",
+                Phone.CONTENT_URI,
+                arrayOf(Phone.DISPLAY_NAME, Phone.NUMBER),
+                "${Phone.DISPLAY_NAME} LIKE ?",
                 arrayOf("%$query%"),
-                "${phone.DISPLAY_NAME} ASC",
+                "${Phone.DISPLAY_NAME} ASC",
             )?.use { c ->
                 while (c.moveToNext() && found.size <= 8) {
                     val name = c.getString(0).orEmpty()
