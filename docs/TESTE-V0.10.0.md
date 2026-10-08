@@ -81,3 +81,15 @@ Fonte: relatório "Enviar relatório de erros" do Prof. Joctã, gerado ~18:47 (h
 5. Resposta vazia em um turno ("você esqueceu o nome…").
 6. O Euno desconhece o próprio chamado "Oi Joca" (SelfKnowledge).
 7. Barge-in (ouvir enquanto fala) ainda não testado (estava desligado).
+
+## 14. Correção do usuário sobre o relatório (anotada a pedido; nada codado)
+Palavras do Prof. Joctã: o relatório **não registra tudo nem em tempo real**; com tudo registrado "ele iria encontrar vários e vários erros". Ele precisa de um **identificador de erros completo, log por log**, que pegue **todos** os erros e não alguns. O captador de áudio ("Oi Joca") estava ligado e depois foi desligado por atrapalhar: **na hora que ele falava, o Euno não ouvia; a conversa não ficou fluida; a cada vez era preciso apertar "Falar" de novo porque aparecia a falha nº 11.**
+
+O que isso confirma/contradiz no relatório (fatos do código e do relatório, sem agir):
+1. [DADO] O relatório mostra **um único** "código 11" (18:39:25). O usuário relata que apareceu **a cada vez**. Logo, o registro não captou a maioria das falhas.
+2. [LEITURA, verificar no código] O ouvinte do chamado (`WakeWordRunner`) cria o `SpeechListener` com `events = null`: **tudo o que ele ouve e todos os seus erros (inclusive o 11) não vão para o registro**. Uma das causas prováveis do "não ouvia": dois reconhecedores disputando o mesmo microfone/serviço (chamado × conversa), o que explicaria falhas como 11 ou "ocupado".
+3. [DADO] O relatório inclui só o fim do registro (últimos 60.000 caracteres) e o início aparece cortado ("…(início cortado)…"); a causa da cota do Gemini (HTTP 429) foi justamente perdida por isso.
+4. [DADO] O registro só tem o que o código manda escrever (info/warn/error em pontos escolhidos). Não há captura do logcat do Android nem de erros que o app não trata, nem registro de cada evento do reconhecedor (início, fim, erro com código e nome, reinício), nem de cada toque do botão "Falar".
+5. [DADO] `poc02_touch_session` e `poc04_speech` ficaram vazios: partes da medição nunca são gravadas.
+
+Requisito anotado para a próxima fase (do usuário): **detector de erros completo**, que registre cada evento e cada falha em ordem, em tempo real, sem perder o começo, incluindo o ouvinte do chamado, os códigos de erro do reconhecedor (com nome), cada reinício, cada toque, e capture exceções e o logcat do próprio app. Não iniciar até o usuário mandar.
