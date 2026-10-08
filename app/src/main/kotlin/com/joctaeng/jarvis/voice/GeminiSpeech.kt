@@ -34,8 +34,8 @@ class GeminiSpeech(private val apiKey: String, private val model: String = DEFAU
         val c = (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
-            connectTimeout = 8_000
-            readTimeout = 30_000
+            connectTimeout = 5_000
+            readTimeout = 12_000
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("x-goog-api-key", apiKey.trim())
         }

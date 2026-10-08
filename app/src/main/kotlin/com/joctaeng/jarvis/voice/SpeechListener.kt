@@ -8,6 +8,7 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import com.joctaeng.jarvis.system.resources.EventLog
 
 /**
  * Escuta uma fala por vez, com texto parcial enquanto o usuário fala.
@@ -18,7 +19,11 @@ import android.speech.SpeechRecognizer
  * final, o texto fica guardado por [graceMs] e a escuta recomeça; se a pessoa voltar a falar nesse
  * intervalo, as partes são juntadas numa só frase. Só depois da carência o resultado é entregue.
  */
-class SpeechListener(private val context: Context, private val graceMs: Long = 1100L) {
+class SpeechListener(
+    private val context: Context,
+    private val graceMs: Long = 1100L,
+    private val events: EventLog? = null,
+) {
     private var recognizer: SpeechRecognizer? = null
     private val handler = Handler(Looper.getMainLooper())
     private var accumulated = ""
@@ -49,12 +54,14 @@ class SpeechListener(private val context: Context, private val graceMs: Long = 1
         val text = accumulated
         accumulated = ""
         stopRecognizer()
+        events?.info("escuta", "fala reconhecida: ${text.length} caracteres")
         if (text.isBlank()) onEvent(Event.Failed("Não entendi", silent = true)) else onEvent(Event.Final(text))
     }
 
     private fun startSession(onEvent: (Event) -> Unit) {
         val onDevice = SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
         if (!onDevice && !SpeechRecognizer.isRecognitionAvailable(context)) {
+            events?.error("escuta", "nenhum reconhecimento de voz instalado ou disponível")
             onEvent(Event.Failed("Nenhum reconhecimento de voz instalado", silent = false))
             return
         }
@@ -107,6 +114,7 @@ class SpeechListener(private val context: Context, private val graceMs: Long = 1
                     return
                 }
                 val silent = error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || error == SpeechRecognizer.ERROR_NO_MATCH
+                if (silent) events?.info("escuta", "sem fala: ${describe(error)}") else events?.error("escuta", "falha no reconhecimento: ${describe(error)} (código $error)")
                 onEvent(Event.Failed(describe(error), silent))
             }
         })

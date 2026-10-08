@@ -158,3 +158,4 @@ Regras: encerrar **só o que o Euno abriu agora** (a ferramenta `abrir_app` deve
 
 **Falhas 3 e 4 do relatório (tocar sem abrir o chat; modo trabalho "de costas"):** pedidos de funcionalidade válidos e ainda não feitos. A 4 exige arte nova (personagem de costas): decidir se vale o custo antes.
 - 2026-10-07 (sessão Claude): limpeza de dados pessoais e limite de 4.000 caracteres do dossiê; assinatura sem fallback; tolerância a pausas na escuta; conhecimento de si; "tchau"; risquinho + toque que aproxima; v0.6.0. Pedidos e fases em `docs/PEDIDOS-DO-USUARIO.md`.
+- 2026-10-08 (sessão Claude): registro único de eventos/erros/quedas + botão "Enviar relatório de erros" (`docs/RELATORIO-DE-ERROS.md`); voz: motor/tempos/pausas registrados, Gemini com disjuntor e timeout menor, fallback do Android na ordem; CI confere a assinatura do APK contra `tools/assinatura/impressao_esperada.txt`; v0.6.2.

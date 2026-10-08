@@ -12,6 +12,11 @@ import com.joctaeng.jarvis.poc.ModelStore
 import com.joctaeng.jarvis.settings.AppSettings
 import com.joctaeng.jarvis.settings.SecretStore
 import com.joctaeng.jarvis.voice.VoiceOutput
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
+import android.os.Build
+import com.joctaeng.jarvis.system.resources.EventLog
+import com.joctaeng.jarvis.system.resources.LogLevel
 import java.io.File
 
 /**
@@ -19,6 +24,8 @@ import java.io.File
  */
 class JarvisApp : Application() {
     lateinit var diagnostics: Diagnostics
+        private set
+    lateinit var events: EventLog
         private set
     lateinit var modelStore: ModelStore
     lateinit var modelDownload: ModelDownload
@@ -28,17 +35,55 @@ class JarvisApp : Application() {
     lateinit var secrets: SecretStore
         private set
     val memory: MemoryStore by lazy { MemoryStore(File(filesDir, "memory/memory.json")) }
-    val voice: VoiceOutput by lazy { VoiceOutput(this, settings) { secrets.get(SecretStore.CLOUD_API_KEY) }.also { it.start() } }
+    val voice: VoiceOutput by lazy { VoiceOutput(this, settings, events) { secrets.get(SecretStore.CLOUD_API_KEY) }.also { it.start() } }
     val conversation: ConversationController by lazy { ConversationController(this) }
     val toolbox: Toolbox by lazy { Toolbox(this) }
 
     override fun onCreate() {
         super.onCreate()
         diagnostics = Diagnostics(this)
+        events = EventLog(File(filesDir, "logs/euno-eventos.log"))
+        installCrashLogging()
         modelStore = ModelStore(this)
         modelDownload = ModelDownload(this, modelStore)
         settings = AppSettings(this)
         secrets = SecretStore(this)
+    }
+
+    /** Registra quedas do app e, na próxima abertura, por que o sistema encerrou o processo (memória, travamento, falha nativa). */
+    private fun installCrashLogging() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            events.log(LogLevel.CRASH, "app", "queda na thread ${thread.name}", error)
+            previous?.uncaughtException(thread, error)
+        }
+        val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?"
+        events.info("app", "iniciado: versão $version, Android ${Build.VERSION.RELEASE}, ${Build.MANUFACTURER} ${Build.MODEL}")
+        runCatching {
+            val prefs = getSharedPreferences("euno_log", MODE_PRIVATE)
+            val lastSeen = prefs.getLong("lastExitTs", 0L)
+            val exits = getSystemService(ActivityManager::class.java).getHistoricalProcessExitReasons(packageName, 0, 8)
+            exits.filter { it.timestamp > lastSeen }.sortedBy { it.timestamp }.forEach {
+                events.warn("sistema", "processo anterior encerrado: ${exitReason(it.reason)} (${it.description.orEmpty()}), importância ${it.importance}, memória ${it.pss / 1024} MB")
+            }
+            exits.maxOfOrNull { it.timestamp }?.let { prefs.edit().putLong("lastExitTs", it).apply() }
+        }
+    }
+
+    private fun exitReason(code: Int): String = when (code) {
+        ApplicationExitInfo.REASON_ANR -> "ANR (app travado)"
+        ApplicationExitInfo.REASON_CRASH -> "queda (exceção)"
+        ApplicationExitInfo.REASON_CRASH_NATIVE -> "queda nativa (motor de IA/voz)"
+        ApplicationExitInfo.REASON_LOW_MEMORY -> "pouca memória (sistema fechou o app)"
+        ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "falha ao iniciar"
+        ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "mudança de permissão"
+        ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "uso excessivo de recursos"
+        ApplicationExitInfo.REASON_USER_REQUESTED -> "fechado pelo usuário"
+        ApplicationExitInfo.REASON_USER_STOPPED -> "parado pelo usuário"
+        ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "dependência morreu"
+        ApplicationExitInfo.REASON_SIGNALED -> "encerrado por sinal"
+        ApplicationExitInfo.REASON_EXIT_SELF -> "saiu sozinho"
+        else -> "outro ($code)"
     }
 
     @Suppress("DEPRECATION") // TRIM_MEMORY_RUNNING_LOW: ainda entregue em Android 13/14.

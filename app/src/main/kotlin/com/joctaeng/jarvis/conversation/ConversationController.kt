@@ -210,11 +210,18 @@ class ConversationController(private val app: JarvisApp) {
                     when (event) {
                         is OrchestratorEvent.Notice -> if (event.text != lastNote) {
                             lastNote = event.text
+                            app.events.info("conversa", "aviso: ${event.text}")
                             addNoteBefore(replyId, event.text)
                         }
                         is OrchestratorEvent.RoutedTo -> edit(replyId) { it.copy(brain = names[event.providerId]) }
-                        is OrchestratorEvent.FellBack -> addNoteBefore(replyId, "${names[event.fromProviderId]} falhou (${event.reason}). Tentando outro cérebro…")
-                        is OrchestratorEvent.Failed -> emit(LlmChunk.Error(event.reason))
+                        is OrchestratorEvent.FellBack -> {
+                            app.events.warn("conversa", "${names[event.fromProviderId]} falhou (${event.reason}); tentando outro cérebro")
+                            addNoteBefore(replyId, "${names[event.fromProviderId]} falhou (${event.reason}). Tentando outro cérebro…")
+                        }
+                        is OrchestratorEvent.Failed -> {
+                            app.events.error("conversa", "nenhum cérebro respondeu: ${event.reason}")
+                            emit(LlmChunk.Error(event.reason))
+                        }
                         is OrchestratorEvent.Chunk -> emit(event.chunk)
                     }
                 }
@@ -249,7 +256,10 @@ class ConversationController(private val app: JarvisApp) {
                     newRound = true
                     addNoteBefore(replyId, "${event.call.toolName.replace('_', ' ')}: ${describe(event.result)}")
                 }
-                is AgentEvent.Error -> failure = event.message
+                is AgentEvent.Error -> {
+                    failure = event.message
+                    app.events.error("conversa", "erro no agente: ${event.message}")
+                }
                 AgentEvent.Done -> Unit
             }
         }
@@ -260,6 +270,12 @@ class ConversationController(private val app: JarvisApp) {
             "tools_in_prompt" to (if (tools.isNotEmpty() && prompt.contains("<tools>")) tools.size else 0),
             "first_ms" to (if (firstChunkAt == 0L) -1L else (firstChunkAt - startedAt) / 1_000_000),
             "total_ms" to (System.nanoTime() - startedAt) / 1_000_000,
+        )
+        app.events.info(
+            "conversa",
+            "turno: cérebro=${providers.firstOrNull()?.id ?: "nenhum"}; prompt=${prompt.length} car.; histórico=${history.size}; " +
+                "ferramentas no prompt=${if (prompt.contains("<tools>")) tools.size else 0}; " +
+                "1ª palavra=${if (firstChunkAt == 0L) "nunca" else "${(firstChunkAt - startedAt) / 1_000_000} ms"}; total=${(System.nanoTime() - startedAt) / 1_000_000} ms",
         )
         val rest = parser.finish()
         if (rest.isNotEmpty()) {

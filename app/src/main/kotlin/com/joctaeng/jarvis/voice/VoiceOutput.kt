@@ -6,7 +6,13 @@ import android.net.NetworkCapabilities
 import com.joctaeng.jarvis.settings.CloudPreset
 import com.joctaeng.jarvis.settings.VoiceEngine
 import com.joctaeng.jarvis.mind.persona.Gender
+import android.os.SystemClock
+import com.joctaeng.jarvis.system.resources.EventLog
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,13 +43,21 @@ data class VoiceOption(val name: String, val label: String, val needsNetwork: Bo
  * quando instalado — no HyperOS o padrão costuma ser um motor mais robótico — e
  * escolhe a voz pt-BR de maior qualidade, salvo escolha do usuário.
  */
-class VoiceOutput(context: Context, private val settings: AppSettings, private val geminiKey: () -> String? = { null }) {
+class VoiceOutput(
+    context: Context,
+    private val settings: AppSettings,
+    private val events: EventLog? = null,
+    private val geminiKey: () -> String? = { null },
+) {
     private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private var tts: TextToSpeech? = null
     private var ready = false
     private val waiting = ArrayDeque<String>()
-    private var counter = 0
+    private val counter = AtomicInteger()
+    @Volatile private var geminiSkipUntil = 0L
+    @Volatile private var lastClipEndAt = 0L
+    private val androidWaiters = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
 
     private val _queued = MutableStateFlow(0)
 
@@ -62,9 +76,12 @@ class VoiceOutput(context: Context, private val settings: AppSettings, private v
 
     val kokoro = KokoroVoice(appContext)
 
-    /** Gera uma frase em áudio; null = não deu (cai para a próxima voz). */
+    /** Resultado de uma frase: o áudio (null = não deu, cai para a voz do Android), o motor e o tempo gasto. */
+    private class Spoken(val clip: GeminiSpeech.Clip?, val engine: String, val synthMs: Long)
+
+    /** Gera uma frase em áudio. */
     private fun interface Synth {
-        suspend fun clip(text: String): GeminiSpeech.Clip?
+        suspend fun clip(text: String): Spoken
     }
 
     /** Ordem: Gemini (online) → Kokoro (offline, se instalado) → voz do Android. */
@@ -77,8 +94,26 @@ class VoiceOutput(context: Context, private val settings: AppSettings, private v
         val offline = if (engine != VoiceEngine.GEMINI && kokoro.installed) kokoro else null
         if (gemini == null && offline == null) return null
         return Synth { text ->
-            gemini?.let { g -> runCatching { g.synthesize(text, naturalVoiceName()) }.getOrNull() }
-                ?: offline?.let { k -> runCatching { k.synthesize(text, kokoroSpeaker(), settings.ttsRate) }.getOrNull() }
+            val t0 = SystemClock.elapsedRealtime()
+            var clip: GeminiSpeech.Clip? = null
+            var engine = "nenhum"
+            // Gemini com disjuntor: depois de uma falha ele descansa por 2 min, para não atrasar cada frase.
+            if (gemini != null && System.currentTimeMillis() >= geminiSkipUntil) {
+                val r = runCatching { gemini.synthesize(text, naturalVoiceName()) }
+                clip = r.getOrNull()
+                if (clip != null) {
+                    engine = "gemini"
+                } else {
+                    geminiSkipUntil = System.currentTimeMillis() + GEMINI_COOLDOWN_MS
+                    events?.warn("voz", "Gemini falhou após ${SystemClock.elapsedRealtime() - t0} ms; descansando 2 min e usando o motor seguinte", r.exceptionOrNull())
+                }
+            }
+            if (clip == null && offline != null) {
+                val r = runCatching { offline.synthesize(text, kokoroSpeaker(), settings.ttsRate) }
+                clip = r.getOrNull()
+                if (clip != null) engine = "kokoro" else events?.error("voz", "Kokoro falhou após ${SystemClock.elapsedRealtime() - t0} ms", r.exceptionOrNull())
+            }
+            Spoken(clip, engine, SystemClock.elapsedRealtime() - t0)
         }
     }
 
@@ -95,32 +130,42 @@ class VoiceOutput(context: Context, private val settings: AppSettings, private v
     /** Fila do Gemini: produtor sintetiza (até 2 frases adiante), consumidor toca em ordem. */
     private inner class CloudPipeline(private val speech: Synth) {
         @Volatile var stopped = false
-        private val sentences = Channel<String>(Channel.UNLIMITED)
-        private val clips = Channel<Pair<String, Deferred<GeminiSpeech.Clip?>>>(2)
+        private val sentences = Channel<Pair<String, Long>>(Channel.UNLIMITED)
+        private val clips = Channel<Triple<String, Long, Deferred<Spoken>>>(3)
         private val jobs = listOf(
             scope.launch {
-                for (text in sentences) {
-                    clips.send(text to scope.async { speech.clip(text) })
+                for ((text, offeredAt) in sentences) {
+                    clips.send(Triple(text, offeredAt, scope.async { speech.clip(text) }))
                 }
             },
             scope.launch(Dispatchers.IO) {
-                for ((text, pending) in clips) {
-                    val clip = pending.await()
+                for ((text, offeredAt, pending) in clips) {
+                    val spoken = pending.await()
                     if (stopped) break
+                    val clip = spoken.clip
                     if (clip == null) {
-                        // Falhou (rede, cota): esta frase sai na voz do Android, sem perder a fala.
-                        main.post { if (ready) enqueue(text) else finishedOne() }
+                        // Falhou (rede, cota): esta frase sai na voz do Android, NA ORDEM, sem sobrepor a seguinte.
+                        events?.warn("voz", "frase de ${text.length} caracteres sem áudio natural (${spoken.synthMs} ms); usando a voz do Android")
+                        speakWithAndroidInOrder(text)
+                        lastClipEndAt = SystemClock.elapsedRealtime()
                         continue
                     }
+                    val start = SystemClock.elapsedRealtime()
+                    val gap = if (lastClipEndAt == 0L) 0L else start - lastClipEndAt
                     _speaking.value = true
                     PcmPlayer.play(clip) { stopped }
+                    lastClipEndAt = SystemClock.elapsedRealtime()
+                    val audioMs = clip.pcm.size * 1000L / (clip.sampleRate * 2L)
+                    val note = "frase ${text.length} car.; motor=${spoken.engine}; síntese=${spoken.synthMs} ms; áudio=$audioMs ms; " +
+                        "esperou=${start - offeredAt} ms; pausa antes=$gap ms"
+                    if (gap in PAUSE_WARN_MS..PAUSE_IGNORE_MS) events?.warn("voz", "PAUSA entre frases: $note") else events?.info("voz", note)
                     finishedOne()
                 }
             },
         )
 
         fun offer(text: String) {
-            sentences.trySend(text)
+            sentences.trySend(text to SystemClock.elapsedRealtime())
         }
 
         fun stop() {
@@ -169,6 +214,9 @@ class VoiceOutput(context: Context, private val settings: AppSettings, private v
         cloud?.stop()
         cloud = null
         waiting.clear()
+        androidWaiters.values.forEach { it.complete(Unit) }
+        androidWaiters.clear()
+        lastClipEndAt = 0L
         tts?.stop()
         _queued.value = 0
         _speaking.value = false
@@ -204,6 +252,7 @@ class VoiceOutput(context: Context, private val settings: AppSettings, private v
     private fun onReady(engine: TextToSpeech?, status: Int) {
         if (engine == null || engine !== tts) return
         if (status != TextToSpeech.SUCCESS) {
+            events?.error("voz", "motor de voz do Android não iniciou (status $status, motor ${activeEngine ?: "padrão"})")
             _queued.value = 0
             return
         }
@@ -218,17 +267,50 @@ class VoiceOutput(context: Context, private val settings: AppSettings, private v
                 _speaking.value = true
             }
 
-            override fun onDone(utteranceId: String?) = finishedOne()
+            override fun onDone(utteranceId: String?) = ended(utteranceId)
 
             @Deprecated("Exigido pela API.")
-            override fun onError(utteranceId: String?) = finishedOne()
+            override fun onError(utteranceId: String?) = ended(utteranceId)
 
-            override fun onError(utteranceId: String?, errorCode: Int) = finishedOne()
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                events?.error("voz", "voz do Android falhou (código $errorCode)")
+                ended(utteranceId)
+            }
 
-            override fun onStop(utteranceId: String?, interrupted: Boolean) = finishedOne()
+            override fun onStop(utteranceId: String?, interrupted: Boolean) = ended(utteranceId)
         })
         ready = true
         while (waiting.isNotEmpty()) enqueue(waiting.removeFirst())
+    }
+
+    /** Fim de uma fala do Android: se alguém está esperando por ela (fila ordenada), avisa; senão conta como frase concluída. */
+    private fun ended(utteranceId: String?) {
+        val waiter = utteranceId?.let { androidWaiters.remove(it) }
+        if (waiter != null) waiter.complete(Unit) else finishedOne()
+    }
+
+    /** Fala uma frase com a voz do Android e só retorna quando ela terminar (mantém a ordem com os áudios naturais). */
+    private suspend fun speakWithAndroidInOrder(text: String) {
+        val id = "jarvis-fb-${counter.getAndIncrement()}"
+        val done = CompletableDeferred<Unit>()
+        androidWaiters[id] = done
+        val posted = CompletableDeferred<Boolean>()
+        main.post {
+            val engine = tts
+            posted.complete(ready && engine != null && engine.speak(text, TextToSpeech.QUEUE_ADD, null, id) == TextToSpeech.SUCCESS)
+        }
+        if (!posted.await()) {
+            androidWaiters.remove(id)
+            events?.error("voz", "voz do Android indisponível; frase de ${text.length} caracteres não foi falada")
+            finishedOne()
+            return
+        }
+        _speaking.value = true
+        if (withTimeoutOrNull(ANDROID_TTS_TIMEOUT_MS) { done.await() } == null) {
+            androidWaiters.remove(id)
+            events?.error("voz", "voz do Android não terminou em ${ANDROID_TTS_TIMEOUT_MS / 1000} s")
+        }
+        finishedOne()
     }
 
     private fun finishedOne() {
@@ -238,7 +320,7 @@ class VoiceOutput(context: Context, private val settings: AppSettings, private v
 
     private fun enqueue(text: String) {
         val engine = tts ?: return
-        val result = engine.speak(text, TextToSpeech.QUEUE_ADD, null, "jarvis-${counter++}")
+        val result = engine.speak(text, TextToSpeech.QUEUE_ADD, null, "jarvis-${counter.getAndIncrement()}")
         if (result != TextToSpeech.SUCCESS) finishedOne()
     }
 
@@ -270,5 +352,9 @@ class VoiceOutput(context: Context, private val settings: AppSettings, private v
 
     companion object {
         const val GOOGLE_TTS = "com.google.android.tts"
+        private const val GEMINI_COOLDOWN_MS = 120_000L
+        private const val PAUSE_WARN_MS = 1_200L
+        private const val PAUSE_IGNORE_MS = 15_000L
+        private const val ANDROID_TTS_TIMEOUT_MS = 20_000L
     }
 }

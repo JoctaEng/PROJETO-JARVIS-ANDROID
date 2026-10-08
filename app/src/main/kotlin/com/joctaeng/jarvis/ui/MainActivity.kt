@@ -133,6 +133,24 @@ class MainActivity : ComponentActivity() {
                 onClick = { startActivity(Intent(this@MainActivity, DiagnosticsActivity::class.java)) },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Diagnóstico (Fase 0)") }
+            OutlinedButton(
+                onClick = { shareErrorReport() },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Enviar relatório de erros") }
         }
+    }
+
+    /** Junta o registro de erros, quedas e medições em texto e abre o menu de compartilhar (sem chaves nem conversas). */
+    private fun shareErrorReport() {
+        val text = com.joctaeng.jarvis.diagnostics.ReportCollector(JarvisApp.from(this)).build()
+        startActivity(
+            Intent.createChooser(
+                Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_SUBJECT, "Relatório do Euno")
+                    .putExtra(Intent.EXTRA_TEXT, text),
+                "Enviar relatório",
+            ),
+        )
     }
 }
