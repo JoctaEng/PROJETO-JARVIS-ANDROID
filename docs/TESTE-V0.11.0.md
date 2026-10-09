@@ -1,0 +1,57 @@
+# Teste da v0.11.0 (build 48) — análise do relatório do usuário (09/10/2026)
+
+Status: **análise apenas**. Nenhuma correção foi iniciada; aguardando a ordem do Prof. Joctã.
+Marcas: **[DADO]** = está no relatório; **[HIPÓTESE]** = interpretação a verificar no código ou no aparelho.
+
+## 1. O que funcionou
+- [DADO] O relatório agora traz o resumo de todos os erros (773 ocorrências em 25 tipos), com contagem e horários. O detector de erros completo está funcionando.
+- [DADO] A área "Teste completo" está ligada: `ouvirEnquantoFala=true`, "Otimização de bateria ignorada: sim".
+- [DADO] A escuta se recupera sozinha: "tentando de novo sozinho (1ª vez)" e, depois de 2 falhas do reconhecedor do aparelho, passou para o padrão. Em 00:10:48–00:11:25 a conversa continuou depois das falhas.
+- [DADO] O relatório mostra a causa da cota do Gemini (HTTP 429, "retry in 20h49m", limite 100 por dia no modelo gemini-3.8-flash-tts).
+
+## 2. Problemas, por impacto
+1. **Voz natural bloqueada pela cota diária do Gemini (o problema maior).**
+   - [DADO] Google registrou o limite de 100 pedidos por dia; o app contava 28. Divergência de 72.
+   - [HIPÓTESE] O contador do app não conta as tentativas que falham. A falha tenta `generateContent` e depois `interactions`, então cada frase pode gastar 2 pedidos no Google, e o app conta só 1. Também pode haver uso da mesma chave fora do app (testes no AI Studio, outro projeto).
+   - [DADO] Eram 299 frases com "sem áudio natural (0 ms)": a voz do Android fez quase toda a leitura.
+   - [HIPÓTESE, bug] O descanso de 6 h começou às 22:26, mas houve pedidos reais ao Gemini às 00:10 (pedidos 27 e 28). O descanso não foi respeitado nesse intervalo. Verificar a leitura de `geminiTtsSkipUntil` na inicialização do `VoiceOutput`.
+   - [DADO] Kokoro marcado como lento: 757% do tempo do áudio. Não é uma alternativa neste aparelho.
+2. **Cérebro de texto na nuvem bloqueado pelo teto de gasto mensal do projeto Google.**
+   - [DADO] 18:53 e 20:51: "Your project has exceeded its monthly spending cap" (gemini-3.1-flash-lite). O app caiu para outro modelo.
+   - [DADO] Ação do usuário: revisar o teto em AI Studio (spend cap). Mudar o plano ou o teto tem custo; decisão do usuário.
+3. **Mute do bip não funciona (375 avisos).**
+   - [DADO] "não consegui silenciar o bip (Not allowed to change Do Not Disturb state)". No Android 16, mudar o volume de notificação/sistema exige acesso de "Não perturbe". A função está inerte e polui o relatório.
+   - [HIPÓTESE] O bip não é de notificação. Para testar, é preciso saber qual fluxo o reconhecedor usa neste aparelho.
+4. **Reconhecedor em conflito: BUSY (8) e SERVER_DISCONNECTED (11).**
+   - [DADO] BUSY ×11 e SERVER_DISCONNECTED ×2 no reconhecedor padrão (11 = ERROR_SERVER_DISCONNECTED; 8 = ERROR_RECOGNIZER_BUSY).
+   - [HIPÓTESE] Há mais de um `SpeechRecognizer` ativo ao mesmo tempo: o "Oi Joca" (solta o microfone, mas o destroy é assíncrono), a conversa e o "ouvir comandos enquanto fala", que recria o reconhecedor a cada ~0,7 s quando dá erro.
+5. **"Oi Joca" rodou 3,5 h (20:54 → 00:25) e a bateria caiu para 43%.**
+   - [DADO] 305 avisos de bip durante a escuta do chamado.
+   - [DADO] Não há "chamado reconhecido" nas linhas visíveis do relatório. Não dá para dizer se alguém chamou o Euno nesse período.
+   - Gasto de bateria sem medição; é preciso medir antes de concluir.
+6. **Cérebro local (Qwen3-4B) ainda estoura o contexto.**
+   - [DADO] "A conversa ficou longa demais para a IA do celular" ×14, entre 16:31 e 16:42.
+   - [HIPÓTESE] Corte por número de mensagens não basta; o corte precisa ser por tokens, com um resumo da parte cortada.
+7. **OneKeyClean encerrou o app duas vezes (14:42 e 21:35), mesmo com bateria "sim".**
+   - [DADO] "processo anterior encerrado: OneKeyClean". A isenção de bateria não impede o limpador do HyperOS.
+   - Ação do usuário: "Sem restrições", início automático e trava do app nos recentes.
+8. **WhatsApp não encontrado entre 145 apps, sem nomes parecidos.**
+   - [DADO] `abrir_app: "WhatsApp" não encontrado entre 145 apps; parecidos: nenhum`.
+   - [HIPÓTESE] O WhatsApp não aparece na lista de apps lançáveis (pode ser clone, "Segundo espaço" ou nome diferente). Precisa de confirmação do usuário: o que aparece na gaveta de apps?
+9. **Frases longas e tempos.**
+   - [DADO] "voz do Android não terminou em 20 s" ×1 (16:41). O limite proporcional da v0.9.0 já deveria cobrir isso; conferir.
+
+## 3. Perguntas que dependem do usuário
+1. Quer revisar o teto de gasto do Google (AI Studio) ou aceitar a voz do Android até a cota renovar?
+2. Quer dar acesso de "Não perturbe" ao Euno para o mute do bip, ou tirar essa função?
+3. O WhatsApp aparece na gaveta com qual nome? Está instalado como clone ou em outro espaço?
+4. "Ouvir comandos enquanto ele fala": manter ligado para teste, ou desligar até o conflito do reconhecedor ser corrigido?
+5. "Oi Joca": manter ligado (gasta bateria) ou desligar nos próximos testes?
+
+## 4. Próxima versão (v0.12.0), só depois da ordem do usuário
+- Um único reconhecedor por vez, com liberação antes de qualquer novo início; barge-in e "Oi Joca" usam a mesma fila.
+- Contador da voz do Gemini contando cada tentativa HTTP; respeitar o descanso na inicialização; mostrar no relatório a divergência com a cota do Google.
+- Mute do bip: remover ou pedir o acesso de "Não perturbe".
+- Corte do histórico local por tokens, com resumo do trecho cortado.
+- Medição de bateria da escuta do chamado no relatório (tempo ligado e ciclos).
+- Diagnóstico do WhatsApp: listar pacotes que contenham "whatsapp".
