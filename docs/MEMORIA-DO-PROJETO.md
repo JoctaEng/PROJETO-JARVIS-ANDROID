@@ -69,3 +69,4 @@ Lista completa e com situação: `docs/PEDIDOS-DO-USUARIO.md`. Diário de sessõ
 - Pedidos: `docs/PEDIDOS-DO-USUARIO.md` · Histórico por versão: `docs/FASE-2.md` · Testes e relatórios: `docs/TESTE-V0.10.0.md`, `docs/TESTE-V0.11.0.md`, `docs/RELATORIO-DE-ERROS.md`
 - Versão/fase do app: `gradle.properties` (`euno.phase`, `euno.version`). APK: aba Actions → artefato `Euno-fase<N>-v<versão>-build<run>.apk`.
 - Testes de lógica: `./gradlew -Pjarvis.jvmOnly=true test` (o app Android só compila no CI).
+- 09/10/2026: o usuário mostrou que o Euno não aparecia na lista de Não perturbe; faltava a permissão `ACCESS_NOTIFICATION_POLICY` no manifesto (corrigido na 0.13.2). **Lição:** toda permissão especial que o app pede ao usuário precisa estar declarada no manifesto; conferir o manifesto antes de dizer "liberar em Configurações".

@@ -82,3 +82,8 @@ Novidades:
 - [DADO] O CI da build 51 passou, inclusive "Conferir assinatura do APK (atualizar por cima, sem desinstalar)".
 - [HIPÓTESE] O que mudou de 50 para 51 no manifesto é a declaração do serviço de acessibilidade (`EunoAccessibilityService`, permissão BIND_ACCESSIBILITY_SERVICE, `res/xml/euno_accessibility.xml`). O Android só devolve "não foi instalado" genérico; o motivo real não aparece.
 - Experimento (v0.13.1, build seguinte): igual à 0.13.0 mas **sem declarar o serviço** no manifesto. Se instalar, a causa está na declaração do serviço; se não, está em outro ponto da 0.13.0 (ou no espaço/armazenamento do aparelho).
+
+## 8. "Não perturbe": o Euno não aparecia na lista (09/10, prints do usuário)
+- [DADO] Em Configurações → Acesso aos modos (Não perturbe), a lista mostra Telefone, Gmail, Google… mas **não o Euno**; o aviso "falta liberar o acesso a Não perturbe" fica para sempre em Teste completo.
+- Causa (erro meu): o manifesto não declarava `android.permission.ACCESS_NOTIFICATION_POLICY`; só apps que a declaram aparecem na lista.
+- v0.13.2: permissão declarada. Depois de instalar, o Euno deve aparecer na lista. (Continua sem o serviço de acessibilidade, por causa do teste de instalação da 0.13.1.)
