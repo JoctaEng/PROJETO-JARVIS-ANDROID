@@ -16,10 +16,10 @@ data class UiNode(
 
 /** Texto da tela para o cérebro, busca do elemento pelo nome e lista de ações que pedem confirmação. */
 object ScreenText {
-    /** Palavras de botões que têm efeito real (dinheiro, mensagem enviada, coisa apagada): pedem confirmação do usuário. */
+    /** Botões que pedem confirmação do usuário (pedido dele): desinstalar, excluir/apagar, enviar mensagem, Pix e pagamento. O resto é autônomo. */
     private val sensitive = listOf(
-        "enviar", "pagar", "pagamento", "comprar", "finalizar", "confirmar compra", "transferir", "transferencia", "pix",
-        "excluir", "apagar", "deletar", "remover", "sair da conta", "encerrar conta", "assinar", "contratar", "aceitar", "autorizar",
+        "desinstalar", "excluir", "apagar", "deletar", "remover", "enviar", "mandar", "pix",
+        "pagar", "pagamento", "transferir", "transferencia", "comprar", "finalizar compra", "confirmar compra",
     )
 
     fun normalize(s: String): String =

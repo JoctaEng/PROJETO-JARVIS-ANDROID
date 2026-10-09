@@ -51,6 +51,9 @@ class ScreenTextTest {
         assertTrue(ScreenText.isSensitive("Enviar"))
         assertTrue(ScreenText.isSensitive("Pagar com Pix"))
         assertTrue(ScreenText.isSensitive("Excluir conversa"))
+        assertTrue(ScreenText.isSensitive("Desinstalar"))
+        assertFalse(ScreenText.isSensitive("Aceitar"))
+        assertFalse(ScreenText.isSensitive("Sair"))
         assertFalse(ScreenText.isSensitive("Pesquisar"))
         assertFalse(ScreenText.isSensitive("Nova conversa"))
     }

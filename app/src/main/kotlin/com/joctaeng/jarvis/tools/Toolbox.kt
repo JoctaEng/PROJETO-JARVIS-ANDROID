@@ -57,6 +57,10 @@ class Toolbox(private val app: JarvisApp) {
             critical = tool.risk == RiskLevel.CRITICAL,
         )
         _pending.value = request
+        // Garante que o pedido apareça mesmo se a conversa não estiver aberta (o personagem tem permissão de abrir sobre apps).
+        runCatching {
+            app.startActivity(android.content.Intent(app, com.joctaeng.jarvis.chat.ChatActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
         return try {
             withTimeoutOrNull(90_000) { request.answer.await() } ?: false
         } finally {

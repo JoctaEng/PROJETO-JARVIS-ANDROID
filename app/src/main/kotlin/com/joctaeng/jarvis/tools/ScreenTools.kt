@@ -43,7 +43,7 @@ private abstract class ScreenTool(
         }
         if (service == null) {
             runCatching {
-                this.context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                this.context.startActivity(com.joctaeng.jarvis.control.AccessibilityLink.intent(this.context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             return ToolResult.Failure(
                 "O serviço de acessibilidade do Euno ainda não está ligado no Android. Abri as configurações de acessibilidade: " +
@@ -54,14 +54,12 @@ private abstract class ScreenTool(
         return run(service, args)
     }
 
-    protected abstract fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult
+    protected abstract suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult
 
     protected fun result(o: Outcome): ToolResult = when (o) {
         is Outcome.Done -> ToolResult.Success(JSONObject().put("feito", o.what).toString())
         is Outcome.Failed -> ToolResult.Failure(o.why)
-        is Outcome.NeedsConfirmation -> ToolResult.Failure(
-            "\"${o.label}\" tem efeito real (enviar, pagar, apagar...). Pergunte ao usuário se pode e só então repita com confirmado=true.",
-        )
+        is Outcome.NeedsConfirmation -> ToolResult.Failure("\"${o.label}\" precisa de confirmação do usuário.")
     }
 }
 
@@ -71,21 +69,26 @@ private class ScreenRead(context: Context) : ScreenTool(
         "e para 'o que está na minha tela?'.",
     RiskLevel.READ,
 ) {
-    override fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult = ToolResult.Success(service.readScreen())
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult = ToolResult.Success(service.readScreen())
 }
 
 private class ScreenTap(context: Context) : ScreenTool(
     context, "tela_tocar",
-    "Toca no botão ou item da tela pelo nome que aparece nele (veja os nomes com tela_ler). Para botões como enviar, pagar, comprar, " +
-        "apagar, o usuário precisa confirmar antes: pergunte e só então use confirmado=true.",
+    "Toca no botão ou item da tela pelo nome que aparece nele (veja os nomes com tela_ler). Em botões como enviar, " +
+        "pagar/Pix, excluir ou desinstalar, o Euno mostra um pedido de confirmação ao usuário sozinho; os demais toques são diretos.",
     RiskLevel.WRITE_REVERSIBLE,
-    """"nome":{"type":"string","description":"texto do botão/item"},"confirmado":{"type":"boolean","description":"true só depois de o usuário confirmar uma ação sensível"}""",
+    """"nome":{"type":"string","description":"texto do botão/item"}""",
     listOf("nome"),
 ) {
-    override fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult {
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult {
         val name = listOf("nome", "texto", "alvo", "botao").firstNotNullOfOrNull { args.optString(it).takeIf { v -> v.isNotBlank() } }
             ?: return ToolResult.Failure("informe o nome do botão")
-        return result(service.tap(name, args.optBoolean("confirmado")))
+        val first = service.tap(name, confirmed = false)
+        if (first !is Outcome.NeedsConfirmation) return result(first)
+        // Pedido real na tela: o modelo não consegue "se confirmar" sozinho.
+        val call = com.joctaeng.jarvis.core.model.ToolCall("tela", this.name, JSONObject().put("tocar no botão", first.label).toString())
+        val yes = JarvisApp.from(context).toolbox.confirm(this@ScreenTap, call)
+        return if (yes) result(service.tap(name, confirmed = true)) else ToolResult.Denied("o usuário não confirmou \"${first.label}\"")
     }
 }
 
@@ -96,7 +99,7 @@ private class ScreenType(context: Context) : ScreenTool(
     RiskLevel.WRITE_REVERSIBLE,
     """"texto":{"type":"string"}""", listOf("texto"),
 ) {
-    override fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult {
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult {
         val text = args.optString("texto")
         if (text.isBlank()) return ToolResult.Failure("informe o texto")
         return result(service.type(text))
@@ -107,7 +110,7 @@ private class ScreenScroll(context: Context) : ScreenTool(
     context, "tela_rolar", "Rola a tela para baixo ou para cima.", RiskLevel.WRITE_REVERSIBLE,
     """"direcao":{"type":"string","enum":["baixo","cima"]}""",
 ) {
-    override fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult =
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult =
         result(service.scroll(forward = !args.optString("direcao").startsWith("c", ignoreCase = true)))
 }
 
@@ -117,5 +120,5 @@ private class ScreenNav(context: Context) : ScreenTool(
     RiskLevel.WRITE_REVERSIBLE,
     """"acao":{"type":"string","enum":["voltar","inicio","recentes","notificacoes","configuracoes_rapidas"]}""", listOf("acao"),
 ) {
-    override fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult = result(service.system(args.optString("acao")))
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult = result(service.system(args.optString("acao")))
 }

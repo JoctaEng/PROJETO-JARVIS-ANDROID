@@ -33,3 +33,4 @@ Próximas etapas: (2) conversa por voz sem a janela do chat, com balão de legen
 - **0.13.1** (teste de instalação): igual à 0.13.0 sem declarar o serviço de acessibilidade.
 - **0.13.2**: declara `ACCESS_NOTIFICATION_POLICY` para o Euno aparecer em "Acesso aos modos" (Não perturbe). Ainda sem o serviço de acessibilidade (teste de instalação).
 - **0.13.3** (teste): serviço de acessibilidade com declaração mínima + permissão de Não perturbe.
+- **0.14.0** (teste): registro por dia sem corte; exportar relatório completo (.txt/PDF) e relatório curto; conversas gravadas e exportáveis; tela **Testar funções**; `abrir_app` com nome flexível; confirmação real só para desinstalar/excluir/enviar/Pix/pagamento; botão direto para a acessibilidade do Euno.

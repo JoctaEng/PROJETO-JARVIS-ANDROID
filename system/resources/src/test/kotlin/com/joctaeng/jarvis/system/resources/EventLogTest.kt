@@ -67,3 +67,28 @@ class ErrorReportTest {
         assertTrue(r.length < 6_000)
     }
 }
+
+class EventLogDailyTest {
+    private val day = 86_400_000L
+
+    @Test
+    fun um_arquivo_por_dia_e_apaga_os_antigos() {
+        val dir = kotlin.io.path.createTempDirectory("logs").toFile()
+        var t = 1_000_000_000_000L
+        val log = EventLog.daily(dir, keepDays = 3, clock = { t })
+        repeat(5) { log.info("t", "dia $it"); t += day }
+        assertEquals(3, log.stats().first)
+        val all = log.readAll()
+        assertTrue(!all.contains("dia 0") && all.contains("dia 2") && all.contains("dia 4"))
+        assertTrue(all.indexOf("dia 2") < all.indexOf("dia 4"))
+    }
+
+    @Test
+    fun rotaciona_dentro_do_dia_sem_perder_ordem() {
+        val dir = kotlin.io.path.createTempDirectory("logs").toFile()
+        val log = EventLog.daily(dir, maxBytes = 100, clock = { 1_000_000_000_000L })
+        repeat(10) { log.info("t", "linha numero $it") }
+        val all = log.readAll()
+        assertTrue(all.indexOf("numero 8") < all.indexOf("numero 9"))
+    }
+}

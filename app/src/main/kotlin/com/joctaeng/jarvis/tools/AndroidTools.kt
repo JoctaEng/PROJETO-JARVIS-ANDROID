@@ -16,6 +16,7 @@ import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.provider.ContactsContract.CommonDataKinds.Phone
 import com.joctaeng.jarvis.system.resources.AgendaEvent
+import com.joctaeng.jarvis.system.resources.AppNameMatch
 import com.joctaeng.jarvis.system.resources.AgendaFormatter
 import com.joctaeng.jarvis.system.resources.AgendaPeriod
 import java.time.Instant
@@ -116,9 +117,7 @@ private class OpenApp(context: Context) : AndroidTool(
         val wanted = normalize(args.optString("nome"))
         if (wanted.isBlank()) return ToolResult.Failure("informe o nome do app")
         val apps = launchables(context)
-        val match = apps.firstOrNull { normalize(it.label) == wanted }
-            ?: apps.firstOrNull { normalize(it.label).startsWith(wanted) }
-            ?: apps.firstOrNull { wanted in normalize(it.label) }
+        val match = AppNameMatch.best(args.optString("nome"), apps.map { it.label }).takeIf { it >= 0 }?.let { apps[it] }
             ?: knownPackages[wanted]?.let { pkg ->
                 // Apps conhecidos pelo pacote (ex.: WhatsApp Business), caso o nome na lista seja diferente.
                 context.packageManager.getLaunchIntentForPackage(pkg)?.let { Launchable(args.optString("nome"), pkg) }

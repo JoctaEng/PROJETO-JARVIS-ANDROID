@@ -15,7 +15,22 @@ import java.security.MessageDigest
  * o registro de eventos/erros/quedas, as medições e as últimas ações das ferramentas. Nenhuma conversa é incluída.
  */
 class ReportCollector(private val app: JarvisApp) {
-    fun build(maxChars: Int = 120_000): String {
+    /** Relatório completo, sem corte: todos os dias de registro guardados (para exportar como arquivo). */
+    fun buildFull(): String = build(maxChars = 50_000_000, full = true)
+
+    /** Relatório curto para colar numa conversa: resumo dos problemas + as últimas linhas, a mais nova primeiro. */
+    fun buildShort(lines: Int = 150): String {
+        val header = build(maxChars = 1, full = false, headerOnly = true)
+        val log = app.events.readAll()
+        val newest = log.lineSequence().filter { it.isNotBlank() && !it.startsWith("    ") }.toList().takeLast(lines).asReversed().joinToString("\n")
+        val audit = runCatching { File(app.filesDir, "audit.jsonl").readLines().takeLast(10).asReversed().joinToString("\n") }.getOrDefault("")
+        return header + "\n\n== Resumo dos problemas ==\n" + ErrorReport.problemSummary(log) +
+            "\n\n== Últimos eventos (o MAIS NOVO primeiro) ==\n" + newest +
+            "\n\n== Últimas ações das ferramentas (a mais nova primeiro) ==\n" + audit +
+            "\n\n(Relatório curto. O completo está no arquivo exportado.)"
+    }
+
+    fun build(maxChars: Int = 120_000, full: Boolean = false, headerOnly: Boolean = false): String {
         val pkg = runCatching { app.packageManager.getPackageInfo(app.packageName, 0) }.getOrNull()
         val memory = runCatching {
             val info = ActivityManager.MemoryInfo()
@@ -36,8 +51,9 @@ class ReportCollector(private val app: JarvisApp) {
             "Configuração" to "cérebro=${s.brainPreference.name}; nuvem=${s.cloudPreset.name}; voz=${s.voiceEngine.name}; " +
                 "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; kokoroLento=${s.kokoroTooSlow}; paciência=${s.listenPatienceMs} ms; ouvirEnquantoFala=${s.bargeIn}",
         )
+        if (headerOnly) return header.joinToString("\n") { "${it.first}: ${it.second}" }
         val sections = buildList {
-            val log = app.events.tail(1_000_000)
+            val log = if (full) app.events.readAll() else app.events.tail(1_000_000)
             add("Resumo de TODOS os avisos, erros e quedas do registro (agrupados)" to ErrorReport.problemSummary(log))
             add("Eventos, erros e quedas (mais recente no fim)" to log)
             Poc.all.forEach { poc ->

@@ -38,12 +38,13 @@ class JarvisApp : Application() {
     val summaries: com.joctaeng.jarvis.mind.memory.SummaryStore by lazy { com.joctaeng.jarvis.mind.memory.SummaryStore(File(filesDir, "memory/resumos.json")) }
     val voice: VoiceOutput by lazy { VoiceOutput(this, settings, events) { secrets.get(SecretStore.CLOUD_API_KEY) }.also { it.start() } }
     val conversation: ConversationController by lazy { ConversationController(this) }
+    val transcripts: com.joctaeng.jarvis.system.resources.TranscriptStore by lazy { com.joctaeng.jarvis.system.resources.TranscriptStore(File(filesDir, "conversas")) }
     val toolbox: Toolbox by lazy { Toolbox(this) }
 
     override fun onCreate() {
         super.onCreate()
         diagnostics = Diagnostics(this)
-        events = EventLog(File(filesDir, "logs/euno-eventos.log"))
+        events = EventLog.daily(File(filesDir, "logs"))
         installCrashLogging()
         modelStore = ModelStore(this)
         modelDownload = ModelDownload(this, modelStore)

@@ -133,23 +133,40 @@ class MainActivity : ComponentActivity() {
                 onClick = { startActivity(Intent(this@MainActivity, DiagnosticsActivity::class.java)) },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Diagnóstico (Fase 0)") }
-            OutlinedButton(
-                onClick = { shareErrorReport() },
+            Button(
+                onClick = { startActivity(Intent(this@MainActivity, TestsActivity::class.java)) },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Enviar relatório de erros") }
+            ) { Text("Testar funções") }
+            Text("Relatório e conversa", style = MaterialTheme.typography.titleSmall)
+            OutlinedButton(onClick = { exportReport(pdf = false) }, modifier = Modifier.fillMaxWidth()) { Text("Exportar relatório completo (.txt)") }
+            OutlinedButton(onClick = { exportReport(pdf = true) }, modifier = Modifier.fillMaxWidth()) { Text("Exportar relatório completo (PDF)") }
+            OutlinedButton(onClick = { shareShortReport() }, modifier = Modifier.fillMaxWidth()) { Text("Enviar relatório curto (texto)") }
+            OutlinedButton(onClick = { exportConversation(pdf = false) }, modifier = Modifier.fillMaxWidth()) { Text("Exportar toda a conversa (.txt)") }
+            OutlinedButton(onClick = { exportConversation(pdf = true) }, modifier = Modifier.fillMaxWidth()) { Text("Exportar toda a conversa (PDF)") }
         }
     }
 
-    /** Junta o registro de erros, quedas e medições em texto e abre o menu de compartilhar (sem chaves nem conversas). */
-    private fun shareErrorReport() {
-        val text = com.joctaeng.jarvis.diagnostics.ReportCollector(JarvisApp.from(this)).build()
+    private fun exportReport(pdf: Boolean) {
+        val text = com.joctaeng.jarvis.diagnostics.ReportCollector(JarvisApp.from(this)).buildFull()
+        com.joctaeng.jarvis.diagnostics.Exporter.exportAndShare(this, "euno-relatorio", "Relatório do Euno", text, pdf)
+    }
+
+    private fun exportConversation(pdf: Boolean) {
+        val text = JarvisApp.from(this).transcripts.readAll()
+        if (text.isBlank()) {
+            android.widget.Toast.makeText(this, "Ainda não há conversa guardada (ela passa a ser guardada a partir desta versão; o modo Privado não guarda).", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        com.joctaeng.jarvis.diagnostics.Exporter.exportAndShare(this, "euno-conversa", "Conversa com o Euno", text, pdf)
+    }
+
+    /** Resumo + últimas linhas (mais novas primeiro), curto o bastante para colar numa conversa sem perder o final. */
+    private fun shareShortReport() {
+        val text = com.joctaeng.jarvis.diagnostics.ReportCollector(JarvisApp.from(this)).buildShort()
         startActivity(
             Intent.createChooser(
-                Intent(Intent.ACTION_SEND)
-                    .setType("text/plain")
-                    .putExtra(Intent.EXTRA_SUBJECT, "Relatório do Euno")
-                    .putExtra(Intent.EXTRA_TEXT, text),
-                "Enviar relatório",
+                Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, "Relatório curto do Euno").putExtra(Intent.EXTRA_TEXT, text),
+                "Enviar relatório curto",
             ),
         )
     }

@@ -287,6 +287,7 @@ class ChatActivity : ComponentActivity() {
         val listening by OverlayBus.listening.collectAsState()
         val speaking by app.voice.speaking.collectAsState()
         val last = entries.lastOrNull { !it.note }
+        val pendingAction by app.toolbox.pending.collectAsState()
         val line = when {
             listening -> "Ouvindo…"
             busy && !speaking -> "Pensando…"
@@ -306,6 +307,7 @@ class ChatActivity : ComponentActivity() {
                     TextButton(onClick = { setCaption(false) }) { Text("Expandir") }
                     TextButton(onClick = ::finish) { Text("Fechar") }
                 }
+                pendingAction?.let { ConfirmationCard(it) }
                 if (partial.isNotEmpty()) {
                     Text(partial, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else if (last != null) {

@@ -432,6 +432,7 @@ class ConversationController(private val app: JarvisApp) {
 
         edit(replyId) { it.copy(text = TextCleanup.clean(it.text).trim()) }
         val finalText = _entries.value.firstOrNull { it.id == replyId }?.text.orEmpty()
+        record(Role.ASSISTANT, finalText)
         if (failure == null && finalText.isBlank()) {
             // Antes ficava um balão vazio, sem aviso nem registro.
             app.events.error("conversa", "o cérebro terminou sem texto (1ª palavra=${if (firstChunkAt == 0L) "nunca" else "sim"}); pedido de ${request.length} caracteres")
@@ -542,7 +543,20 @@ class ConversationController(private val app: JarvisApp) {
         return local
     }
 
-    private fun add(entry: ChatEntry) = _entries.update { it + entry }
+    private fun add(entry: ChatEntry) {
+        _entries.update { it + entry }
+        if (!entry.streaming) record(entry.role, entry.text, entry.note)
+    }
+
+    /** Grava o turno em disco (um arquivo por dia) para poder exportar a conversa inteira; o modo privado não grava. */
+    private fun record(role: Role, text: String, note: Boolean = false) {
+        if (note || settings.privateMode || text.isBlank()) return
+        when (role) {
+            Role.USER -> app.transcripts.append("Eu", text)
+            Role.ASSISTANT -> app.transcripts.append("Euno", text)
+            else -> Unit
+        }
+    }
 
     private fun addNoteBefore(id: Long, text: String) = _entries.update { list ->
         val index = list.indexOfFirst { it.id == id }.let { if (it < 0) list.size else it }

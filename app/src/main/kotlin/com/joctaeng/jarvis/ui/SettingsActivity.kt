@@ -245,7 +245,7 @@ class SettingsActivity : ComponentActivity() {
                 Text("Falta você liberar: ${pending.joinToString(", ")}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                 if (pending.any { it.startsWith("serviço de acessibilidade") }) {
                     TextButton(onClick = {
-                        startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        startActivity(com.joctaeng.jarvis.control.AccessibilityLink.intent(this))
                     }) { Text("Abrir acessibilidade do Android") }
                 }
                 if (pending.any { it.startsWith("acesso a Não perturbe") }) {
@@ -418,7 +418,7 @@ class SettingsActivity : ComponentActivity() {
             if (!com.joctaeng.jarvis.control.EunoAccessibilityService.isDeclared(this@SettingsActivity)) {
                 Text("Este APK não inclui o serviço de acessibilidade.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             } else if (!enabled) {
-                Button(onClick = { startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) { Text("Ligar em Acessibilidade") }
+                Button(onClick = { startActivity(com.joctaeng.jarvis.control.AccessibilityLink.intent(this)) }) { Text("Ligar em Acessibilidade") }
                 Hint("Na tela que abrir, procure \"Euno - controle do celular\" (pode estar em Apps instalados/Serviços) e ative. O Android mostra um aviso: é normal.")
             }
         }
