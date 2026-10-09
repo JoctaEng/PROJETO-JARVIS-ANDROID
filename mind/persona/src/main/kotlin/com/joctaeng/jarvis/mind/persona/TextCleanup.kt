@@ -6,7 +6,7 @@ object TextCleanup {
     private val wrappedNumber = Regex("(?<!\\$)\\$\\s*(\\+?\\(?\\d[\\d\\s().,/:\\-]*\\d|\\d)\\s*\\$(?!\\$)")
     private val emotionTag = Regex("\\[(neutro|feliz|pensativo|surpreso|preocupado|sonolento|comemorando|confuso|brincalh[aã]o)\\]\\s*", RegexOption.IGNORE_CASE)
 
-    /** "$98987177598$" → "98987177598": número comum não é fórmula (os cifrões apareciam na tela). */
+    /** "$91912345678$" → "91912345678": número comum não é fórmula (os cifrões apareciam na tela). */
     fun unwrapPlainNumbers(text: String): String = text.replace(wrappedNumber) { it.groupValues[1] }
 
     /** Tira etiquetas de emoção que escaparam no meio do texto (ex.: depois de usar uma ferramenta). */

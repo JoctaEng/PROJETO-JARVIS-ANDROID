@@ -6,8 +6,8 @@ import kotlin.test.assertEquals
 class TextCleanupTest {
     @Test
     fun unwrapsPhoneNumbersButKeepsFormulas() {
-        assertEquals("o número 98987177598 está salvo", TextCleanup.unwrapPlainNumbers("o número \$98987177598\$ está salvo"))
-        assertEquals("(98) 98717-7598", TextCleanup.unwrapPlainNumbers("\$(98) 98717-7598\$"))
+        assertEquals("o número 91912345678 está salvo", TextCleanup.unwrapPlainNumbers("o número \$91912345678\$ está salvo"))
+        assertEquals("(91) 91234-5678", TextCleanup.unwrapPlainNumbers("\$(91) 91234-5678\$"))
         assertEquals("às 18:35", TextCleanup.unwrapPlainNumbers("às \$18:35\$"))
         assertEquals("\$x^2 + 1\$", TextCleanup.unwrapPlainNumbers("\$x^2 + 1\$"))
         assertEquals("\$\$\\Delta = 4\$\$", TextCleanup.unwrapPlainNumbers("\$\$\\Delta = 4\$\$"))

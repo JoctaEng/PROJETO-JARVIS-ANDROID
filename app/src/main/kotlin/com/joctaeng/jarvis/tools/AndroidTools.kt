@@ -327,7 +327,7 @@ private class MemorySave(context: Context) : AndroidTool(
     "Guarda na memória permanente um fato sobre o usuário (nomes, preferências, dados que ele pediu para lembrar). " +
         "Use quando ele pedir para anotar/lembrar/guardar/corrigir algo. Escreva o fato completo e com a grafia certa.",
     RiskLevel.WRITE_REVERSIBLE,
-    """"fato":{"type":"string","description":"frase completa, ex.: A esposa de Joctã se chama Thaynara Neves Souza Galvão"},"categoria":{"type":"string","enum":["família","pessoas","trabalho","preferências","saúde","casa","geral"]}""", listOf("fato"),
+    """"fato":{"type":"string","description":"frase completa, ex.: A esposa do usuário se chama Maria Souza"},"categoria":{"type":"string","enum":["família","pessoas","trabalho","preferências","saúde","casa","geral"]}""", listOf("fato"),
 ) {
     override fun run(args: JSONObject): ToolResult {
         val fact = listOf("fato", "texto", "memoria", "informacao").firstNotNullOfOrNull { args.optString(it).takeIf { v -> v.isNotBlank() } }
@@ -410,7 +410,7 @@ internal fun findContacts(context: Context, query: String): Map<String, List<Str
 private class WhatsAppMessage(context: Context) : AndroidTool(
     context, "whatsapp_mensagem",
     "Abre o WhatsApp na conversa com um contato, com a mensagem já escrita (o usuário toca em enviar). " +
-        "Use para 'manda mensagem para a Thaynara dizendo que já saí'. Escreva a mensagem na voz do usuário, pronta para enviar.",
+        "Use para 'manda mensagem para a Maria dizendo que já saí'. Escreva a mensagem na voz do usuário, pronta para enviar.",
     RiskLevel.WRITE_REVERSIBLE,
     """"contato":{"type":"string","description":"nome do contato na agenda"},"mensagem":{"type":"string"},"business":{"type":"boolean","description":"true = usar o WhatsApp Business"}""",
     listOf("contato", "mensagem"),

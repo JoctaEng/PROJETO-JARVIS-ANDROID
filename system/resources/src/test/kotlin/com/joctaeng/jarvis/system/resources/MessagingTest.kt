@@ -9,9 +9,9 @@ import kotlin.test.assertNull
 class MessagingTest {
     @Test
     fun brazilianNumbersGetCountryCode() {
-        assertEquals("5598987177598", PhoneNumber.forWhatsApp("98987177598"))
-        assertEquals("5598987177598", PhoneNumber.forWhatsApp("(98) 98717-7598"))
-        assertEquals("5598987177598", PhoneNumber.forWhatsApp("+55 98 98717-7598"))
+        assertEquals("5591912345678", PhoneNumber.forWhatsApp("91912345678"))
+        assertEquals("5591912345678", PhoneNumber.forWhatsApp("(91) 91234-5678"))
+        assertEquals("5591912345678", PhoneNumber.forWhatsApp("+55 91 91234-5678"))
         assertEquals("559832215566", PhoneNumber.forWhatsApp("098 3221-5566"))
         assertNull(PhoneNumber.forWhatsApp("123"))
     }
