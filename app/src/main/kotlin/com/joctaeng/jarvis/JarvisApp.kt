@@ -44,6 +44,8 @@ class JarvisApp : Application() {
     override fun onCreate() {
         super.onCreate()
         diagnostics = Diagnostics(this)
+        // O registro antigo (um arquivo só) vira o dia mais antigo, para não ficar fora de ordem no relatório.
+        File(filesDir, "logs/euno-eventos.log").takeIf { it.isFile }?.renameTo(File(filesDir, "logs/euno-2000-01-01.log"))
         events = EventLog.daily(File(filesDir, "logs"))
         installCrashLogging()
         modelStore = ModelStore(this)

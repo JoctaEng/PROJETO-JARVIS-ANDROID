@@ -91,4 +91,13 @@ class EventLogDailyTest {
         val all = log.readAll()
         assertTrue(all.indexOf("numero 8") < all.indexOf("numero 9"))
     }
+
+    @Test
+    fun ignora_arquivos_que_nao_sao_de_um_dia() {
+        val dir = kotlin.io.path.createTempDirectory("logs").toFile()
+        java.io.File(dir, "euno-eventos.log").writeText("velho\n")
+        val log = EventLog.daily(dir, clock = { 1_000_000_000_000L })
+        log.info("t", "novo")
+        assertTrue(!log.readAll().contains("velho"))
+    }
 }

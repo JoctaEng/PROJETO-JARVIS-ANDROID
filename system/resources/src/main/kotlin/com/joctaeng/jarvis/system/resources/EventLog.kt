@@ -73,9 +73,11 @@ class EventLog private constructor(
     /** Arquivos em ordem do mais antigo ao mais novo (o ".1" de um dia vem antes do arquivo do dia). */
     private fun allFiles(): List<File> {
         if (single != null) return listOf(File(single.path + ".1"), single).filter { it.isFile }
-        val all = dir?.listFiles { f -> f.isFile && f.name.startsWith("euno-") && (f.name.endsWith(".log") || f.name.endsWith(".log.1")) }.orEmpty()
+        val all = dir?.listFiles { f -> f.isFile && dayFile.matches(f.name) }.orEmpty()
         return all.sortedWith(compareBy({ it.name.removeSuffix(".1") }, { !it.name.endsWith(".1") }))
     }
+
+    private val dayFile = Regex("euno-\\d{4}-\\d{2}-\\d{2}\\.log(\\.1)?")
 
     private fun pruneOldDays() {
         val limit = keepDays.coerceAtLeast(1)
