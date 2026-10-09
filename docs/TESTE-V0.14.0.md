@@ -14,7 +14,7 @@ Fonte: arquivo "Conversa com o Euno" exportado pelo próprio app (primeira expor
 5. **Responde a áudio ambiente** (17:47:55): o texto longo captado era outra pessoa/vídeo falando ("design craft… amanhã vai ter ônibus") e o Euno respondeu como se fosse com ele, sugerindo lembrete. Sem identificação de quem fala.
 6. **Não age até o fim** (17:43): `whatsapp_mensagem` só abre a conversa com o texto preenchido; ele não tocou em Enviar (que exige confirmação do usuário) nem ofereceu o pedido de confirmação; mandou o usuário "tocar no botão".
 7. **Não tenta outra via** (18:15): `tela_tocar` falhou com nome contendo emoji; chamou `tela_ler` e `abrir_app`, estourou o limite de ferramentas ("Parei: muitas ferramentas seguidas") e depois escreveu "agora sim! deve ter carregado" sem verificar (afirmação sem prova). Pedidos 40 e 41.
-8. **Pedido de preferência virou conversa** (17:56): usuário sugeriu ficar no canto superior esquerdo, legenda menor e voz; o Euno só ofereceu "lembre que…". Falta ferramenta/ajuste para mover/ocultar o personagem e a legenda.
+8. **Sugestão-chave ignorada** (17:56): o usuário propôs que, ao ler/agir na tela, o Euno se encolha para o canto superior esquerdo, diminua a legenda e responda por áudio para conseguir ler a tela. É a solução da falha 1 (pedido 39b); o Euno e a primeira análise trataram como preferência simples.
 
 ## Dados
 - Voz do Gemini: 190 pedidos hoje (limite do modelo de voz: 100); voz do Android assumiu.
