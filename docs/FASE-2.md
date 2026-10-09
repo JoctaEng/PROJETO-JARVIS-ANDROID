@@ -23,3 +23,11 @@ Critérios de saída (roteiro): "Como está meu dia?" responde com dados reais d
 ## v0.8.0 — fluidez da conversa (etapa 1 da ordem combinada)
 Paciência ajustável, fila de mensagens (nada se perde enquanto ele responde), interrupção ("pera aí"), escuta de comandos durante a fala (experimental, com opção), voz do Gemini com cota diária contada e frases agrupadas.
 Próximas etapas: (2) conversa por voz sem a janela do chat, com balão de legenda no personagem; (3) controle do celular por acessibilidade.
+
+## Histórico por versão (a partir da v0.9.0)
+- **0.9.0** (build 41): cérebro do celular com prompt/histórico enxutos; botão **Nova** e **Resumos de conversa**; seção **Conversa** nos Ajustes (paciência, ouvir comandos, bip, conversa no relatório); chat com teclado aberto usa a tela toda; descanso por cota persistente.
+- **0.10.0** (build 42): modo **legenda** (balão sem abrir o chat); chamado **"Oi Joca"** (opcional).
+- **0.11.0** (build 48): relatório com resumo de todos os erros e log do Android; escuta registrada passo a passo; "Oi Joca" solta o microfone; tentativa automática em falhas do reconhecedor; espera da cota do Gemini lida do que o Google diz; ferramentas de memória; limpeza de cifrões e etiquetas de emoção; WhatsApp por pacote; **Teste completo**; toque longo → **fechar por completo**.
+- **0.12.0** (build 50): cérebro local só quando escolhido ou sem internet; voz do Gemini com menos pedidos e contador real; um reconhecedor por vez; mute do bip com acesso a Não perturbe; **whatsapp_mensagem**, **agenda_criar**, **resumo_do_dia**.
+- **0.13.0** (build 51, **não instala** no aparelho do usuário): controle do celular por acessibilidade; memória com categorias, edição e busca.
+- **0.13.1** (teste de instalação): igual à 0.13.0 sem declarar o serviço de acessibilidade.
