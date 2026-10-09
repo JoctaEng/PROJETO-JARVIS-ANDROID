@@ -19,3 +19,13 @@ Fonte: arquivo "Conversa com o Euno" exportado pelo próprio app (primeira expor
 ## Dados
 - Voz do Gemini: 190 pedidos hoje (limite do modelo de voz: 100); voz do Android assumiu.
 - Bip: "não consegui silenciar o bip" continua (acesso a Não perturbe não liberado para o Euno).
+
+# Resultado de "Testar funções" (09/10/2026, ~18:42 e 18:49 locais; 2 arquivos iguais no Drive)
+
+PASSOU: estado do celular; listar apps; abrir app "Google Agenda" (abriu "Agenda": correção do `abrir_app` confirmada); agenda de hoje; buscar contato; memória (guardar/buscar/esquecer); lanterna; voz (só vale se ouvida); microfone/reconhecedor; **acesso ao Não perturbe liberado**; cérebro (Gemini respondeu "ok" em ~1,5 s); relatório completo (~640 KB em <1 s; 2 dias de registro).
+
+FALHOU:
+1. **Acessibilidade: no APK=sim, ligado no Android=sim, conectado=NÃO.** Por isso `tela_ler/tocar/digitar/rolar` falharam. A mensagem das ferramentas diz "ainda não está ligado no Android", o que é **enganoso** neste caso (está ligado, só não conectou neste processo). Hipótese (não verificada): depois de "Fechar por completo" o HyperOS não reconecta o serviço sozinho; desligar e ligar de novo o serviço costuma resolver. Correção prevista: distinguir "desligado" de "ligado mas desconectado" e orientar o passo certo (e mostrar isso no teste).
+2. **WhatsApp visível?** nenhum app com "whats" no nome. O WhatsApp Business abre por pacote (`com.whatsapp.w4b`), então o rótulo do app provavelmente não contém "whats" (hipótese: "WA Business"). O teste procura só por nome; deve procurar também pelos pacotes conhecidos.
+
+Observações: o teste "Buscar contato" grava telefones reais no arquivo exportado; no futuro mostrar só a contagem. O teste de voz e o de tocar/digitar só provam algo com o serviço conectado.
