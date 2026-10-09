@@ -34,6 +34,7 @@ import com.joctaeng.jarvis.diagnostics.Poc
 import com.joctaeng.jarvis.mind.persona.MemoryCommand
 import com.joctaeng.jarvis.mind.persona.MemoryCommands
 import com.joctaeng.jarvis.mind.persona.ConversationSummary
+import com.joctaeng.jarvis.mind.persona.HistoryTrim
 import com.joctaeng.jarvis.mind.persona.PersonaEngine
 import com.joctaeng.jarvis.mind.persona.TextCleanup
 import com.joctaeng.jarvis.mind.memory.ConversationSummary as ConversationSummaryItem
@@ -250,7 +251,7 @@ class ConversationController(private val app: JarvisApp) {
      * acontecer enquanto ela fala. Só quando o cérebro local pode ser usado (evita ocupar memória à toa).
      */
     fun preloadLocalModel() {
-        if (settings.brainPreference == BrainPreference.ONLINE_FIRST) return
+        if (settings.brainPreference == BrainPreference.ONLINE_FIRST || settings.brainPreference == BrainPreference.AUTO) return
         val provider = localProvider() as? LlamaCppProvider ?: return
         if (provider.isLoaded) return
         scope.launch { runCatching { provider.load() }.onFailure { app.events.warn("llama", "pré-carga do modelo falhou", it) } }
@@ -262,7 +263,17 @@ class ConversationController(private val app: JarvisApp) {
         scope.launch { provider.unload() }
     }
 
-    fun configuredProviders(): List<LlmProvider> = listOfNotNull(cloudProvider(), localProvider())
+    /**
+     * O cérebro do celular é lento; ele só entra quando a pessoa o escolheu (local primeiro/somente), quando não há
+     * cérebro online configurado ou quando não há internet. Antes ele virava a reserva de qualquer erro da nuvem
+     * (cota, limite de gasto) e a resposta demorava muito.
+     */
+    fun configuredProviders(): List<LlmProvider> {
+        val cloud = cloudProvider()
+        val localWanted = cloud == null || settings.brainPreference == BrainPreference.LOCAL_FIRST ||
+            settings.brainPreference == BrainPreference.LOCAL_ONLY || !DeviceState.snapshot(app, privateMode = false).online
+        return listOfNotNull(cloud, if (localWanted) localProvider() else null)
+    }
 
     private suspend fun respond(speak: Boolean) {
         val startedAt = System.nanoTime()
@@ -321,7 +332,8 @@ class ConversationController(private val app: JarvisApp) {
             // Cérebro do celular no meio da lista (fallback): recebe prompt/histórico enxutos, não os da nuvem.
             if (p.location == ProviderLocation.ON_DEVICE) CompactProvider(p, buildPrompt(true), LOCAL_HISTORY) else p
         }
-        val history = _entries.value.filter { !it.note && !it.streaming }.takeLast(if (onlyLocal) LOCAL_HISTORY else HISTORY).map { ChatMessage(it.role, it.text) }
+        val allHistory = _entries.value.filter { !it.note && !it.streaming }.map { ChatMessage(it.role, it.text) }
+        val history = if (onlyLocal) localHistory(allHistory) else allHistory.takeLast(HISTORY)
         val maxTokens = if (onlyLocal) 512 else null
 
         OverlayBus.anim.value = AnimState.THINKING
@@ -545,9 +557,13 @@ class ConversationController(private val app: JarvisApp) {
     }
 }
 
+/** Histórico do cérebro do celular: por tamanho (≈3.000 caracteres), não só por número de mensagens. */
+private fun localHistory(messages: List<ChatMessage>, keep: Int = 8): List<ChatMessage> =
+    HistoryTrim.keepRecent(messages, { it.text.length }, 3_000, keep)
+
 /** Troca prompt e histórico do pedido por versões enxutas quando o cérebro é o do celular (leitura rápida). */
 private class CompactProvider(private val inner: LlmProvider, private val compactPrompt: String, private val keep: Int) : LlmProvider by inner {
     override fun generate(request: LlmRequest): Flow<LlmChunk> = inner.generate(
-        LlmRequest(compactPrompt, request.messages.takeLast(keep), request.maxOutputTokens ?: 512),
+        LlmRequest(compactPrompt, localHistory(request.messages, keep), request.maxOutputTokens ?: 512),
     )
 }

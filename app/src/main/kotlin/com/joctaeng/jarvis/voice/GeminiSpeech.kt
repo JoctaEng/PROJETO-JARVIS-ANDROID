@@ -42,6 +42,8 @@ class GeminiSpeech(private val apiKey: String, private val model: String = DEFAU
                 throw e
             } catch (e: Exception) {
                 problems += "${mode.label}: ${e.message ?: e::class.simpleName}"
+                // Cota esgotada vale para as duas formas de pedido: tentar a segunda só gastaria mais um pedido.
+                if (e.message?.contains("HTTP 429") == true) break
             }
         }
         throw IOException(problems.joinToString(" | ").take(3_200))
@@ -67,6 +69,7 @@ class GeminiSpeech(private val apiKey: String, private val model: String = DEFAU
                 .put("response_format", JSONObject().put("type", "audio"))
                 .put("generation_config", JSONObject().put("speech_config", JSONArray().put(JSONObject().put("voice", voice).put("language", language))))
         }
+        httpCalls.incrementAndGet()
         val c = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
@@ -126,6 +129,9 @@ class GeminiSpeech(private val apiKey: String, private val model: String = DEFAU
     companion object {
         const val BASE = "https://generativelanguage.googleapis.com/v1beta"
         @Volatile private var preferInteractions = false
+
+        /** Pedidos HTTP feitos desde que o app abriu (cada tentativa conta na cota do Google, mesmo a que falha). */
+        val httpCalls = java.util.concurrent.atomic.AtomicInteger()
         const val DEFAULT_MODEL = "gemini-3.8-flash-tts"
 
         /** Vozes citadas no guia oficial; cada personagem tem a sua (pode trocar em Meu Euno). */

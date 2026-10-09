@@ -28,6 +28,8 @@ class SpeechListener(
     /** Consultado a cada início de escuta: silenciar o "bip" de ativação do reconhecedor? */
     private val muteBeep: () -> Boolean = { false },
     private val tag: String = "escuta",
+    /** Quem manda no microfone: conversa (2) > ouvir comandos enquanto fala (1) > "Oi Joca" (0). Só um reconhecedor ativo por vez. */
+    private val priority: Int = 1,
 ) {
     /** Silêncio (ms) que se espera depois de uma frase reconhecida antes de entregá-la; 0 = entrega na hora (comandos). */
     @Volatile var graceMs: Long = 1100L
@@ -43,6 +45,7 @@ class SpeechListener(
     private var accumulated = ""
     private var emitFinal: Runnable? = null
     private var sessionStartedAt = 0L
+    private var pendingStart: Runnable? = null
 
     sealed interface Event {
         data class Partial(val text: String) : Event
@@ -68,6 +71,14 @@ class SpeechListener(
      */
     private fun muteBeepBriefly() {
         if (!muteBeep()) return
+        val nm = context.getSystemService(android.app.NotificationManager::class.java)
+        if (nm == null || !nm.isNotificationPolicyAccessGranted) {
+            if (!muteWarned) {
+                muteWarned = true
+                events?.warn(tag, "silenciar o bip precisa do acesso a Não perturbe (Ajustes → Conversa → Teste completo); sem ele o bip continua")
+            }
+            return
+        }
         runCatching {
             if (savedVolumes == null) {
                 val streams = listOf(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.STREAM_SYSTEM)
@@ -89,7 +100,27 @@ class SpeechListener(
     fun start(onEvent: (Event) -> Unit) {
         stop()
         accumulated = ""
-        startSession(onEvent)
+        val current = active
+        if (current != null && current !== this && current.isListening) {
+            if (current.priority > priority) {
+                // Um ouvinte mais importante está usando o microfone: este espera a vez.
+                events?.info(tag, "microfone em uso por outro ouvinte (${current.tag}); não vou disputar")
+                handler.post { onEvent(Event.Failed("Microfone em uso", silent = false, transient = true, code = SpeechRecognizer.ERROR_RECOGNIZER_BUSY)) }
+                return
+            }
+            events?.info(tag, "pedindo o microfone: soltando o ouvinte de ${current.tag}")
+            current.stop()
+        }
+        active = this
+        // O Android recusa (ocupado/desconectado) um reconhecedor criado logo depois de outro ser destruído.
+        val wait = (RELEASE_GAP_MS - (SystemClock.elapsedRealtime() - lastReleaseAt)).coerceIn(0L, RELEASE_GAP_MS)
+        if (wait == 0L) {
+            startSession(onEvent)
+        } else {
+            val run = Runnable { pendingStart = null; startSession(onEvent) }
+            pendingStart = run
+            handler.postDelayed(run, wait)
+        }
     }
 
     private fun join(a: String, b: String) = if (a.isBlank()) b else "$a $b"
@@ -148,17 +179,27 @@ class SpeechListener(
 
             override fun onResults(results: Bundle?) {
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                release(r)
                 if (onDevice) onDeviceFailures = 0
                 if (!text.isNullOrBlank()) accumulated = join(accumulated, text)
                 if (accumulated.isBlank()) {
+                    release(r)
                     if (verbose) events?.info(tag, "resultado vazio")
                     onEvent(Event.Failed("Não entendi", silent = true))
                 } else if (graceMs <= 0) {
+                    release(r)
                     deliverFinal(onEvent)
                 } else {
-                    // Escuta de novo e só entrega se a pessoa ficar em silêncio pela carência.
-                    startSession(onEvent)
+                    // Escuta de novo NO MESMO reconhecedor (recriar logo em seguida causava ERROR_SERVER_DISCONNECTED).
+                    val again = runCatching {
+                        sessionStartedAt = SystemClock.elapsedRealtime()
+                        r.startListening(listenIntent())
+                    }.isSuccess
+                    if (again) {
+                        if (verbose) events?.info(tag, "continuação (mesmo reconhecedor)")
+                    } else {
+                        release(r)
+                        startSession(onEvent)
+                    }
                     // Frase que parece inacabada ("...e", "...porque", vírgula) ganha mais tempo.
                     val wait = graceMs + if (UtteranceEnd.looksIncomplete(accumulated)) INCOMPLETE_EXTRA_MS else 0L
                     val run = Runnable { deliverFinal(onEvent) }
@@ -191,19 +232,23 @@ class SpeechListener(
                 onEvent(Event.Failed(describe(error), silent, transient, error))
             }
         })
-        r.startListening(
-            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
-                .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                // Sugestões de tolerância a pausas (nem todo reconhecedor respeita; a carência acima cobre).
-                .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
-                .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L),
-        )
+        r.startListening(listenIntent())
     }
 
+    private fun listenIntent(): Intent =
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
+            .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // Sugestões de tolerância a pausas (nem todo reconhecedor respeita; a carência acima cobre).
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+
     fun stop() {
+        pendingStart?.let { handler.removeCallbacks(it) }
+        pendingStart = null
+        if (active === this) active = null
         restoreVolumes()
         emitFinal?.let { handler.removeCallbacks(it) }
         emitFinal = null
@@ -221,6 +266,7 @@ class SpeechListener(
 
     private fun release(r: SpeechRecognizer) {
         if (recognizer === r) recognizer = null
+        lastReleaseAt = SystemClock.elapsedRealtime()
         r.destroy()
     }
 
@@ -237,6 +283,12 @@ class SpeechListener(
 
     companion object {
         const val INCOMPLETE_EXTRA_MS = 1_500L
+        private const val RELEASE_GAP_MS = 350L
+
+        /** O ouvinte que está com o microfone neste processo (só um por vez). */
+        @Volatile private var active: SpeechListener? = null
+        @Volatile private var lastReleaseAt = 0L
+        @Volatile private var muteWarned = false
         private val SILENT = setOf(SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH)
         private val TRANSIENT = setOf(
             SpeechRecognizer.ERROR_RECOGNIZER_BUSY, SpeechRecognizer.ERROR_SERVER_DISCONNECTED,

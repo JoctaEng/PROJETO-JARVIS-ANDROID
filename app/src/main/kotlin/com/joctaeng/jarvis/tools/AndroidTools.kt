@@ -26,6 +26,9 @@ import com.joctaeng.jarvis.core.model.RiskLevel
 import com.joctaeng.jarvis.core.model.ToolResult
 import com.joctaeng.jarvis.JarvisApp
 import com.joctaeng.jarvis.ui.PermissionActivity
+import com.joctaeng.jarvis.device.DeviceState
+import com.joctaeng.jarvis.system.resources.EventTime
+import com.joctaeng.jarvis.system.resources.PhoneNumber
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.Normalizer
@@ -37,7 +40,7 @@ object AndroidTools {
         return listOf(
             OpenApp(app), ListApps(app), PhoneStatus(app), SetAlarm(app), SetTimer(app),
             Flashlight(app), ShareText(app), OpenLink(app), WebSearch(app), OpenMap(app), AgendaQuery(app), ContactsSearch(app),
-            MemorySave(app), MemoryForget(app),
+            MemorySave(app), MemoryForget(app), WhatsAppMessage(app), AgendaCreate(app), DaySummary(app),
         )
     }
 }
@@ -295,37 +298,8 @@ private class AgendaQuery(context: Context) : AndroidTool(
         val zone = ZoneId.systemDefault()
         val now = Instant.now()
         val (from, to) = AgendaFormatter.range(period, zone, now)
-        val events = runCatching { readEvents(from, to) }.getOrElse { return ToolResult.Failure("Não consegui ler a agenda: ${it.message}") }
+        val events = runCatching { readAgenda(context, from, to) }.getOrElse { return ToolResult.Failure("Não consegui ler a agenda: ${it.message}") }
         return ToolResult.Success(AgendaFormatter.format(events, period, zone, now))
-    }
-
-    private fun readEvents(from: Long, to: Long): List<AgendaEvent> {
-        val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().also {
-            ContentUris.appendId(it, from)
-            ContentUris.appendId(it, to)
-        }.build()
-        val projection = arrayOf(
-            CalendarContract.Instances.TITLE,
-            CalendarContract.Instances.BEGIN,
-            CalendarContract.Instances.END,
-            CalendarContract.Instances.ALL_DAY,
-            CalendarContract.Instances.EVENT_LOCATION,
-            CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
-        )
-        val out = mutableListOf<AgendaEvent>()
-        context.contentResolver.query(uri, projection, null, null, "${CalendarContract.Instances.BEGIN} ASC")?.use { c ->
-            while (c.moveToNext() && out.size < 200) {
-                out += AgendaEvent(
-                    title = c.getString(0).orEmpty().ifBlank { "(sem título)" },
-                    startMillis = c.getLong(1),
-                    endMillis = c.getLong(2),
-                    allDay = c.getInt(3) == 1,
-                    location = c.getString(4)?.ifBlank { null },
-                    calendar = c.getString(5),
-                )
-            }
-        }
-        return out
     }
 }
 
@@ -340,22 +314,7 @@ private class ContactsSearch(context: Context) : AndroidTool(
         missingPermission(Manifest.permission.READ_CONTACTS, "ler os contatos")?.let { return it }
         val query = args.optString("nome").trim()
         if (query.isBlank()) return ToolResult.Failure("informe o nome do contato")
-        val found = linkedMapOf<String, MutableList<String>>()
-        runCatching {
-            context.contentResolver.query(
-                Phone.CONTENT_URI,
-                arrayOf(Phone.DISPLAY_NAME, Phone.NUMBER),
-                "${Phone.DISPLAY_NAME} LIKE ?",
-                arrayOf("%$query%"),
-                "${Phone.DISPLAY_NAME} ASC",
-            )?.use { c ->
-                while (c.moveToNext() && found.size <= 8) {
-                    val name = c.getString(0).orEmpty()
-                    val number = c.getString(1).orEmpty()
-                    if (name.isNotBlank() && number.isNotBlank()) found.getOrPut(name) { mutableListOf() }.let { if (number !in it) it += number }
-                }
-            }
-        }.onFailure { return ToolResult.Failure("Não consegui ler os contatos: ${it.message}") }
+        val found = runCatching { findContacts(context, query) }.getOrElse { return ToolResult.Failure("Não consegui ler os contatos: ${it.message}") }
         if (found.isEmpty()) return ToolResult.Success("Nenhum contato encontrado com \"$query\".")
         return ToolResult.Success(found.entries.take(8).joinToString("\n") { (name, numbers) -> "- $name: ${numbers.joinToString(", ")}" })
     }
@@ -395,5 +354,138 @@ private class MemoryForget(context: Context) : AndroidTool(
         val gone = app.memory.forget(query) ?: return ToolResult.Failure("nada na memória combina com \"$query\"")
         app.events.info("memoria", "apagado pela ferramenta (${gone.text.length} caracteres)")
         return ok("apagado" to gone.text)
+    }
+}
+
+/** Lê os compromissos da agenda do celular entre [from] e [to] (milissegundos). Exige READ_CALENDAR. */
+internal fun readAgenda(context: Context, from: Long, to: Long): List<AgendaEvent> {
+    val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().also {
+        ContentUris.appendId(it, from)
+        ContentUris.appendId(it, to)
+    }.build()
+    val projection = arrayOf(
+        CalendarContract.Instances.TITLE,
+        CalendarContract.Instances.BEGIN,
+        CalendarContract.Instances.END,
+        CalendarContract.Instances.ALL_DAY,
+        CalendarContract.Instances.EVENT_LOCATION,
+        CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
+    )
+    val out = mutableListOf<AgendaEvent>()
+    context.contentResolver.query(uri, projection, null, null, "${CalendarContract.Instances.BEGIN} ASC")?.use { c ->
+        while (c.moveToNext() && out.size < 200) {
+            out += AgendaEvent(
+                title = c.getString(0).orEmpty().ifBlank { "(sem título)" },
+                startMillis = c.getLong(1),
+                endMillis = c.getLong(2),
+                allDay = c.getInt(3) == 1,
+                location = c.getString(4)?.ifBlank { null },
+                calendar = c.getString(5),
+            )
+        }
+    }
+    return out
+}
+
+/** Contatos cujo nome contém [query]: nome → telefones. Exige READ_CONTACTS. */
+internal fun findContacts(context: Context, query: String): Map<String, List<String>> {
+    val found = linkedMapOf<String, MutableList<String>>()
+    context.contentResolver.query(
+        Phone.CONTENT_URI,
+        arrayOf(Phone.DISPLAY_NAME, Phone.NUMBER),
+        "${Phone.DISPLAY_NAME} LIKE ?",
+        arrayOf("%$query%"),
+        "${Phone.DISPLAY_NAME} ASC",
+    )?.use { c ->
+        while (c.moveToNext() && found.size <= 8) {
+            val name = c.getString(0).orEmpty()
+            val number = c.getString(1).orEmpty()
+            if (name.isNotBlank() && number.isNotBlank()) found.getOrPut(name) { mutableListOf() }.let { if (number !in it) it += number }
+        }
+    }
+    return found
+}
+
+/** Abre a conversa do WhatsApp com o texto já escrito; quem toca em enviar é o usuário. */
+private class WhatsAppMessage(context: Context) : AndroidTool(
+    context, "whatsapp_mensagem",
+    "Abre o WhatsApp na conversa com um contato, com a mensagem já escrita (o usuário toca em enviar). " +
+        "Use para 'manda mensagem para a Thaynara dizendo que já saí'. Escreva a mensagem na voz do usuário, pronta para enviar.",
+    RiskLevel.WRITE_REVERSIBLE,
+    """"contato":{"type":"string","description":"nome do contato na agenda"},"mensagem":{"type":"string"},"business":{"type":"boolean","description":"true = usar o WhatsApp Business"}""",
+    listOf("contato", "mensagem"),
+) {
+    override fun run(args: JSONObject): ToolResult {
+        missingPermission(Manifest.permission.READ_CONTACTS, "ler os contatos")?.let { return it }
+        val name = args.optString("contato").trim()
+        val text = args.optString("mensagem").trim()
+        if (name.isBlank() || text.isBlank()) return ToolResult.Failure("informe o contato e a mensagem")
+        val found = runCatching { findContacts(context, name) }.getOrElse { return ToolResult.Failure("Não consegui ler os contatos: ${it.message}") }
+        if (found.isEmpty()) return ToolResult.Failure("Nenhum contato com \"$name\".")
+        if (found.size > 1) return ToolResult.Failure("Mais de um contato combina com \"$name\": ${found.keys.joinToString(", ")}. Pergunte qual.")
+        val (contact, numbers) = found.entries.first()
+        val number = numbers.firstNotNullOfOrNull { PhoneNumber.forWhatsApp(it) } ?: return ToolResult.Failure("O contato $contact não tem um telefone válido.")
+        val pm = context.packageManager
+        val installed = listOf("com.whatsapp", "com.whatsapp.w4b").filter { pm.getLaunchIntentForPackage(it) != null }
+        val wanted = if (args.optBoolean("business")) "com.whatsapp.w4b" else "com.whatsapp"
+        val pkg = installed.firstOrNull { it == wanted } ?: installed.firstOrNull()
+        val uri = Uri.parse("https://wa.me/$number?text=" + Uri.encode(text))
+        val intent = Intent(Intent.ACTION_VIEW, uri).also { if (pkg != null) it.setPackage(pkg) }
+        JarvisApp.from(context).events.info("ferramentas", "whatsapp_mensagem: abrindo conversa (app=${pkg ?: "padrão"}, texto ${text.length} caracteres)")
+        return if (start(intent)) ok("aberto" to "conversa com $contact", "app" to (pkg ?: "navegador/padrão"), "obs" to "o usuário toca em enviar")
+        else ToolResult.Failure("O Android não deixou abrir o WhatsApp.")
+    }
+}
+
+/** Abre a tela de novo compromisso da agenda já preenchida; o usuário toca em salvar. */
+private class AgendaCreate(context: Context) : AndroidTool(
+    context, "agenda_criar",
+    "Cria um compromisso na agenda: abre a agenda com título, data e hora preenchidos para o usuário salvar. " +
+        "Descubra a data/hora absolutas a partir de 'Agora' do prompt (ex.: amanhã às 15h → data de amanhã).",
+    RiskLevel.WRITE_REVERSIBLE,
+    """"titulo":{"type":"string"},"inicio":{"type":"string","description":"AAAA-MM-DD HH:mm (hora local)"},"duracao_min":{"type":"integer","minimum":5,"maximum":1440},"local":{"type":"string"}""",
+    listOf("titulo", "inicio"),
+) {
+    override fun run(args: JSONObject): ToolResult {
+        val title = args.optString("titulo").trim()
+        if (title.isBlank()) return ToolResult.Failure("informe o título")
+        val start = EventTime.parseMillis(args.optString("inicio"), ZoneId.systemDefault())
+            ?: return ToolResult.Failure("data/hora inválida; use AAAA-MM-DD HH:mm")
+        val minutes = args.optInt("duracao_min", 60).coerceIn(5, 1440)
+        val intent = Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI)
+            .putExtra(CalendarContract.Events.TITLE, title)
+            .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
+            .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, start + minutes * 60_000L)
+        args.optString("local").takeIf { it.isNotBlank() }?.let { intent.putExtra(CalendarContract.Events.EVENT_LOCATION, it) }
+        return if (start(intent)) ok("aberto" to "novo compromisso", "titulo" to title, "obs" to "o usuário toca em salvar")
+        else ToolResult.Failure("Nenhum app de agenda disponível.")
+    }
+}
+
+/** "Bom dia" e "Fechar o dia": reúne agenda, bateria e memórias do dia para o Euno narrar. */
+private class DaySummary(context: Context) : AndroidTool(
+    context, "resumo_do_dia",
+    "Reúne os dados para 'bom dia' (manha) ou 'fechar o dia' (noite): hora, bateria, compromissos de hoje e de amanhã e " +
+        "memórias recentes. Depois narre em poucas frases: na manhã, o que vem pela frente e o que merece atenção; à noite, " +
+        "o que foi o dia, o que fica para amanhã, e pergunte se quer anotar pendências ou criar lembretes.",
+    RiskLevel.READ,
+    """"tipo":{"type":"string","enum":["manha","noite"]}""",
+) {
+    override fun run(args: JSONObject): ToolResult {
+        missingPermission(Manifest.permission.READ_CALENDAR, "ler a agenda")?.let { return it }
+        val zone = ZoneId.systemDefault()
+        val now = Instant.now()
+        val night = args.optString("tipo").startsWith("n", ignoreCase = true)
+        val parts = mutableListOf<String>()
+        parts += "Tipo: ${if (night) "fechar o dia" else "bom dia"}"
+        parts += "Bateria: ${DeviceState.batteryPercent(context)}%"
+        for (period in listOf(AgendaPeriod.HOJE, AgendaPeriod.AMANHA)) {
+            val (from, to) = AgendaFormatter.range(period, zone, now)
+            val events = runCatching { readAgenda(context, from, to) }.getOrElse { return ToolResult.Failure("Não consegui ler a agenda: ${it.message}") }
+            parts += AgendaFormatter.format(events, period, zone, now)
+        }
+        val memories = JarvisApp.from(context).memory.all().takeLast(5).map { it.text }
+        if (memories.isNotEmpty()) parts += "Memórias recentes: " + memories.joinToString(" | ")
+        return ToolResult.Success(parts.joinToString("\n\n"))
     }
 }

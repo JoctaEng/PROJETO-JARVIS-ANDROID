@@ -55,3 +55,18 @@ Marcas: **[DADO]** = está no relatório; **[HIPÓTESE]** = interpretação a ve
 - Corte do histórico local por tokens, com resumo do trecho cortado.
 - Medição de bateria da escuta do chamado no relatório (tempo ligado e ciclos).
 - Diagnóstico do WhatsApp: listar pacotes que contenham "whatsapp".
+
+## 5. v0.12.0 — Etapa A (implementada; só compila no CI)
+Decisões do usuário: **sem paciência para o cérebro local** (muito lento); **dar acesso a Não perturbe**; manter tudo ligado; quer **melhorias e funções novas**, não só correções. Conta Google: **Tier 1** (a mensagem de erro do Google diz isso), com limite de 100 pedidos/dia no modelo de voz.
+
+Correções (curtas):
+- Cérebro do celular só entra se escolhido (local primeiro/somente), se não houver cérebro online ou se não houver internet; deixa de ser a reserva de qualquer erro da nuvem. Histórico local cortado por tamanho (~3.000 caracteres), não só por mensagens.
+- Voz do Gemini: frases juntas em até 700 caracteres por pedido (antes 280); não tenta a 2ª forma de pedido quando a 1ª dá 429; o contador conta cada pedido HTTP real; "Testar voz" não reabre a cota diária (cada teste gastava mais um pedido).
+- Reconhecedor de voz: um ouvinte por vez (conversa > ouvir comandos > "Oi Joca"); a continuação reaproveita o mesmo reconhecedor (recriar logo depois dava ERROR_SERVER_DISCONNECTED em ~42 ms); espera de 350 ms antes de criar outro depois de destruir um; "Oi Joca" tem tempo limite de 20 s.
+- Silenciar o bip só tenta com o acesso a Não perturbe; botão "Dar acesso a Não perturbe" em Teste completo; sem o acesso, avisa uma vez em vez de 375 vezes.
+
+Novidades:
+- `whatsapp_mensagem`: abre a conversa do contato (WhatsApp ou Business) com o texto escrito; o usuário toca em enviar.
+- `agenda_criar`: abre a agenda com título, data e hora preenchidos; o usuário salva.
+- `resumo_do_dia` ("bom dia" / "fechar o dia"): agenda de hoje e de amanhã, bateria e memórias recentes, para o Euno narrar.
+- Lógica pura nova com testes: `PhoneNumber`, `EventTime`, `HistoryTrim`.

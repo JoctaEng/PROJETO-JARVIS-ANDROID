@@ -196,6 +196,7 @@ class SettingsActivity : ComponentActivity() {
                 if (!granted(android.Manifest.permission.READ_CALENDAR)) add("agenda")
                 if (!granted(android.Manifest.permission.READ_CONTACTS)) add("contatos")
                 if (!com.joctaeng.jarvis.device.SystemSettings.isIgnoringBatteryOptimizations(this@SettingsActivity)) add("bateria sem restrições")
+                if (!getSystemService(android.app.NotificationManager::class.java).isNotificationPolicyAccessGranted) add("acesso a Não perturbe (para silenciar o bip)")
                 if (!com.joctaeng.jarvis.overlay.OverlayBus.running.value) add("personagem na tela (ligue em Meu Euno)")
             }
         }
@@ -237,6 +238,11 @@ class SettingsActivity : ComponentActivity() {
                 Hint("Tudo liberado: microfone, agenda, contatos, bateria e personagem.")
             } else {
                 Text("Falta você liberar: ${pending.joinToString(", ")}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                if (pending.any { it.startsWith("acesso a Não perturbe") }) {
+                    TextButton(onClick = {
+                        startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                    }) { Text("Dar acesso a Não perturbe") }
+                }
                 if ("bateria sem restrições" in pending) {
                     TextButton(onClick = { com.joctaeng.jarvis.device.SystemSettings.requestIgnoreBatteryOptimizations(this@SettingsActivity) }) { Text("Liberar bateria") }
                 }

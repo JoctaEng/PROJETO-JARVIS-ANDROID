@@ -103,8 +103,8 @@ class VoiceOutput(
             var used = "nenhum"
             // Gemini com disjuntor: depois de uma falha ele descansa por 2 min, para não atrasar cada frase.
             if (gemini != null && System.currentTimeMillis() >= geminiSkipUntil) {
-                val used0 = countGeminiRequest()
                 val r = runCatching { gemini.synthesize(text, naturalVoiceName()) }
+                val used0 = countGeminiRequests()
                 clip = r.getOrNull()
                 if (clip != null) {
                     used = "gemini/" + (clip?.via ?: "")
@@ -140,16 +140,22 @@ class VoiceOutput(
         }
     }
 
-    /** Conta pedidos do dia à voz do Gemini (a conta gratuita tem limite diário) e avisa perto do limite. */
-    private fun countGeminiRequest(): Int {
+    private var countedCalls = 0
+
+    /** Soma ao contador do dia os pedidos HTTP reais feitos desde a última conta (inclui tentativas que falharam). */
+    @Synchronized
+    private fun countGeminiRequests(): Int {
         val today = java.time.LocalDate.now().toString()
         if (settings.geminiTtsDay != today) {
             settings.geminiTtsDay = today
             settings.geminiTtsCount = 0
         }
-        val n = settings.geminiTtsCount + 1
+        val total = GeminiSpeech.httpCalls.get()
+        val delta = (total - countedCalls).coerceAtLeast(1)
+        countedCalls = total
+        val n = settings.geminiTtsCount + delta
         settings.geminiTtsCount = n
-        if (n == 80) events?.warn("voz", "Voz do Gemini: 80 pedidos hoje; o limite da conta gratuita costuma ser 100 por dia")
+        if (n in 80..(80 + delta - 1).coerceAtLeast(80)) events?.warn("voz", "Voz do Gemini: $n pedidos hoje; o limite do modelo de voz na sua camada é 100 por dia")
         return n
     }
 
@@ -162,6 +168,8 @@ class VoiceOutput(
 
     /** Libera a voz do Gemini na hora (botão "Testar voz"): o próximo pedido tenta de novo. */
     fun resetGeminiCooldown() {
+        // Cota DIÁRIA esgotada não se resolve tentando de novo: cada teste só gastaria mais um pedido.
+        if (geminiSkipUntil > System.currentTimeMillis() && RetryHint.isDaily(settings.geminiTtsLastError)) return
         geminiSkipUntil = 0L
         settings.geminiTtsSkipUntil = 0L
     }
@@ -443,6 +451,6 @@ class VoiceOutput(
         private const val PAUSE_WARN_MS = 1_200L
         private const val PAUSE_IGNORE_MS = 15_000L
         private const val ANDROID_TTS_TIMEOUT_MS = 20_000L
-        private const val MERGE_MAX_CHARS = 280
+        private const val MERGE_MAX_CHARS = 700
     }
 }

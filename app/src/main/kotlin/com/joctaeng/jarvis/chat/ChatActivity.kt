@@ -96,8 +96,8 @@ class ChatActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        listener = SpeechListener(this, events = app.events, muteBeep = { app.settings.muteMicBeep })
-        bargeListener = SpeechListener(this, events = app.events, muteBeep = { app.settings.muteMicBeep }).also { it.graceMs = 0L }
+        listener = SpeechListener(this, events = app.events, muteBeep = { app.settings.muteMicBeep }, priority = 2)
+        bargeListener = SpeechListener(this, events = app.events, muteBeep = { app.settings.muteMicBeep }, priority = 1).also { it.graceMs = 0L }
         app.conversation.preloadLocalModel()
         OverlayBus.sessionActive.value = true
         CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking)

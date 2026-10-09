@@ -20,3 +20,13 @@ class TextCleanupTest {
         assertEquals("ok [nota]", TextCleanup.stripEmotionTags("[Pensativo] ok [nota]"))
     }
 }
+
+class HistoryTrimTest {
+    @Test
+    fun keepsNewestWithinBudget() {
+        val msgs = listOf("a".repeat(2000), "b".repeat(1500), "c".repeat(1000), "d".repeat(100))
+        assertEquals(listOf("c".repeat(1000), "d".repeat(100)), HistoryTrim.keepRecent(msgs, { it.length }, 2_000, 8))
+        assertEquals(listOf("d".repeat(100)), HistoryTrim.keepRecent(msgs, { it.length }, 2_000, 1))
+        assertEquals(listOf("x".repeat(9000)), HistoryTrim.keepRecent(listOf("y", "x".repeat(9000)), { it.length }, 2_000, 8))
+    }
+}

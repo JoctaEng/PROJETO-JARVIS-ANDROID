@@ -102,7 +102,8 @@ class WakeWordRunner(
             listen.cancel()
         }
         try {
-            listen.await()
+            // Se outro ouvinte tomou o microfone, esta escuta nunca responde: 20 s e recomeça.
+            kotlinx.coroutines.withTimeoutOrNull(20_000) { listen.await() }.also { if (it == null) listen.cancel() }
         } catch (e: CancellationException) {
             if (!isActive) throw e
             null
@@ -112,7 +113,7 @@ class WakeWordRunner(
     }
 
     private suspend fun listenOnce(): String? = suspendCancellableCoroutine { cont ->
-        val l = SpeechListener(context, events = app.events, muteBeep = { app.settings.muteMicBeep }, tag = "chamado").also {
+        val l = SpeechListener(context, events = app.events, muteBeep = { app.settings.muteMicBeep }, tag = "chamado", priority = 0).also {
             it.graceMs = 0L
             it.verbose = false
             it.logShortText = false

@@ -15,6 +15,7 @@ object ToolIntent {
         "wifi", "wi-fi", "bluetooth", "tela", "ligar", "desligar", "mensagem", "ferramenta",
         "mcp", "edumath", "configur", "volume", "brilho", "notifica", "instal", "toque", "tocar",
         "agenda", "arquivo", "pasta", "foto", "câmera", "camera",
+        "whatsapp", "zap", "manda", "mande", "marcar", "agendar", "bom dia", "boa noite", "fechar o dia", "encerrar o dia", "resumo do dia", "dia de hoje",
         "anot", "lembr", "guard", "memori", "corrig", "esquec",
         "contato", "telefone", "numero", "número", "meu dia", "compromiss", "reuni", "hoje", "amanh", "semana", "evento",
     )
