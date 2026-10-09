@@ -95,3 +95,7 @@ Novidades:
 
 ## 10. Dados do aparelho (09/10/2026)
 HyperOS 3.0.302.0 (WNOMIXM.C07) · Android 16 (BP2A.250605.031.A3) · patch de segurança 2026-08-01 · armazenamento 260,1 GB livres de 512 GB. Falta de espaço descartada como causa da falha de instalação da 0.13.0.
+
+## 11. v0.13.3 — teste da declaração mínima do serviço de acessibilidade (a pedido do usuário, 09/10)
+- Mudanças em relação à 0.13.0 (que não instalou): `exported="true"` no serviço (forma da documentação); `euno_accessibility.xml` sem `isAccessibilityTool` e sem `accessibilityFlags`. Além disso inclui a permissão `ACCESS_NOTIFICATION_POLICY` (0.13.2) e está sem outras mudanças.
+- Resultado esperado: se instalar, a causa estava nesses atributos. Se **não** instalar, a causa é a própria presença de um serviço de acessibilidade (provável restrição do instalador/sistema do aparelho) ou, menos provável, a permissão nova; nesse caso separar as duas mudanças e/ou ler o erro com `adb install`.

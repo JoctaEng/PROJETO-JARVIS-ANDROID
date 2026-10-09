@@ -416,7 +416,7 @@ class SettingsActivity : ComponentActivity() {
                 color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
             )
             if (!com.joctaeng.jarvis.control.EunoAccessibilityService.isDeclared(this@SettingsActivity)) {
-                Text("Este APK de teste (0.13.1) não inclui o serviço de acessibilidade. Ele existe só para descobrir por que a 0.13.0 não instalou.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                Text("Este APK não inclui o serviço de acessibilidade.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             } else if (!enabled) {
                 Button(onClick = { startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) { Text("Ligar em Acessibilidade") }
                 Hint("Na tela que abrir, procure \"Euno - controle do celular\" (pode estar em Apps instalados/Serviços) e ative. O Android mostra um aviso: é normal.")
