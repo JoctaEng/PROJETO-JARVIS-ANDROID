@@ -1,6 +1,6 @@
 # Euno — instruções para agentes de IA (Antigravity, Claude Code, outros)
 
-**Antes de qualquer coisa leia `docs/HANDOFF.md`**: contexto completo, estado atual, decisões que não se desfazem, próximos passos e a revisão mais recente (seção 12). No fim da sessão, acrescente uma linha ao Diário (seção 11).
+**Antes de qualquer coisa leia `docs/MEMORIA-DO-PROJETO.md` (visão, regras com o usuário, fases, ajustes e pendências; atualize-a a cada fase e pedido) e depois `docs/HANDOFF.md`**: contexto completo, estado atual, decisões que não se desfazem, próximos passos e a revisão mais recente (seção 12). No fim da sessão, acrescente uma linha ao Diário (seção 11).
 
 Regras curtas:
 - Português do Brasil, mensagens curtas e honestas. Diga o que foi verificado e o que não foi; **CI verde não é "funciona no aparelho"**.
