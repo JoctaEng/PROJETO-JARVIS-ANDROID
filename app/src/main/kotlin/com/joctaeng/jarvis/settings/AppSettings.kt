@@ -92,6 +92,9 @@ class AppSettings(context: Context) {
     var wakeWord by boolean("wakeWord", false)
     var wakeName by string("wakeName", "Joca")
 
+    /** Controle do celular por acessibilidade (ler a tela, tocar, digitar). Além desta chave, o usuário liga o serviço no Android. */
+    var phoneControl by boolean("phoneControl", false)
+
     /** Como estavam as chaves antes de "Habilitar tudo para teste completo" (para restaurar). Vazio = nada guardado. */
     var testSnapshot by string("testSnapshot", "")
     var continuousVoice by boolean("continuousVoice", true)

@@ -70,3 +70,9 @@ Novidades:
 - `agenda_criar`: abre a agenda com título, data e hora preenchidos; o usuário salva.
 - `resumo_do_dia` ("bom dia" / "fechar o dia"): agenda de hoje e de amanhã, bateria e memórias recentes, para o Euno narrar.
 - Lógica pura nova com testes: `PhoneNumber`, `EventTime`, `HistoryTrim`.
+
+## 6. v0.13.0 — Etapa B (implementada; só compila no CI)
+- **Controle do celular por acessibilidade** (`EunoAccessibilityService`, desligado até o usuário ligar em Ajustes → Controle do celular e no Android): ferramentas `tela_ler`, `tela_tocar`, `tela_digitar`, `tela_rolar`, `tela_navegar`. Senhas nunca são lidas nem preenchidas; botões enviar/pagar/comprar/apagar etc. exigem `confirmado=true` depois de o usuário confirmar; Modo Privado nega. Lógica pura testada em `ScreenText`.
+- **Memória completa:** categorias (família, pessoas, trabalho, preferências, saúde, casa, geral), editar e acrescentar à mão em Minha Memória, busca, ferramenta `memoria_buscar`, memórias agrupadas por assunto no prompt.
+- **Teste completo** inclui o controle do celular e mostra o que falta ligar no Android.
+- O Euno passa a saber se o controle do celular está ligado.

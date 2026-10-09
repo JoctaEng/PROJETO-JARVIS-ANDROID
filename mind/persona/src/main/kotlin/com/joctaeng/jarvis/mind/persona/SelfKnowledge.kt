@@ -21,7 +21,7 @@ object SelfKnowledge {
     /** O que ainda NÃO existe (fonte: docs/ROTEIRO.md). Evita prometer o que não há. */
     private val notYet = listOf(
         "reconhecer QUEM está falando (qualquer voz que diga meu nome me chama)",
-        "controlar qualquer tela do celular tocando nela (controle por acessibilidade)",
+        "agir sozinho em botões de enviar, pagar ou apagar (sempre peço sua confirmação)",
         "fechar outros apps sozinho",
         "e-mail, arquivos e notificações (Fase 2, em andamento; agenda e contatos já podem ser lidos)",
         "corpo 3D de verdade, de costas ou em outras poses",

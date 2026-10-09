@@ -57,3 +57,22 @@ class MemoryStoreTest {
         assertTrue(MemoryStore(file).all().isEmpty())
     }
 }
+
+class MemoryCategoriesTest {
+    private fun store(): MemoryStore = MemoryStore(java.io.File.createTempFile("mem", ".json").also { it.delete() })
+
+    @org.junit.Test
+    fun categoriesEditAndSearchSurviveReload() {
+        val file = java.io.File.createTempFile("mem", ".json").also { it.delete() }
+        val s = MemoryStore(file)
+        val a = s.add("A esposa de Joctã se chama Thaynara Neves Souza Galvão", "conversa", "pedido", "Familia")
+        s.add("Prefere respostas curtas", "conversa", "pedido", "inexistente")
+        kotlin.test.assertEquals("família", a.category)
+        kotlin.test.assertEquals("geral", s.all().last().category)
+        kotlin.test.assertTrue(s.update(a.id, "A esposa de Joctã é Thaynara Neves Souza Galvão, enfermeira", "família"))
+        kotlin.test.assertEquals(listOf(a.id), s.search("quem é a esposa Thaynara").map { it.id })
+        val again = MemoryStore(file)
+        kotlin.test.assertEquals("família", again.all().first().category)
+        kotlin.test.assertTrue(again.all().first().text.contains("enfermeira"))
+    }
+}

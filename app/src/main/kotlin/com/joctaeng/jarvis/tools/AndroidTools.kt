@@ -40,8 +40,8 @@ object AndroidTools {
         return listOf(
             OpenApp(app), ListApps(app), PhoneStatus(app), SetAlarm(app), SetTimer(app),
             Flashlight(app), ShareText(app), OpenLink(app), WebSearch(app), OpenMap(app), AgendaQuery(app), ContactsSearch(app),
-            MemorySave(app), MemoryForget(app), WhatsAppMessage(app), AgendaCreate(app), DaySummary(app),
-        )
+            MemorySave(app), MemoryForget(app), MemorySearch(app), WhatsAppMessage(app), AgendaCreate(app), DaySummary(app),
+        ) + ScreenTools.all(app)
     }
 }
 
@@ -327,16 +327,16 @@ private class MemorySave(context: Context) : AndroidTool(
     "Guarda na memória permanente um fato sobre o usuário (nomes, preferências, dados que ele pediu para lembrar). " +
         "Use quando ele pedir para anotar/lembrar/guardar/corrigir algo. Escreva o fato completo e com a grafia certa.",
     RiskLevel.WRITE_REVERSIBLE,
-    """"fato":{"type":"string","description":"frase completa, ex.: A esposa de Joctã se chama Thaynara Neves Souza Galvão"}""", listOf("fato"),
+    """"fato":{"type":"string","description":"frase completa, ex.: A esposa de Joctã se chama Thaynara Neves Souza Galvão"},"categoria":{"type":"string","enum":["família","pessoas","trabalho","preferências","saúde","casa","geral"]}""", listOf("fato"),
 ) {
     override fun run(args: JSONObject): ToolResult {
         val fact = listOf("fato", "texto", "memoria", "informacao").firstNotNullOfOrNull { args.optString(it).takeIf { v -> v.isNotBlank() } }
             ?: return ToolResult.Failure("fato vazio")
         val app = JarvisApp.from(context)
         if (app.settings.privateMode) return ToolResult.Denied("Modo Privado ativo: nada é memorizado")
-        val item = app.memory.add(fact.trim(), source = "conversa", reason = "pedido do usuário")
+        val item = app.memory.add(fact.trim(), source = "conversa", reason = "pedido do usuário", category = args.optString("categoria"))
         app.events.info("memoria", "guardado pela ferramenta (${item.text.length} caracteres)")
-        return ok("guardado" to item.text, "total" to app.memory.all().size)
+        return ok("guardado" to item.text, "categoria" to item.category, "total" to app.memory.all().size)
     }
 }
 
@@ -487,5 +487,22 @@ private class DaySummary(context: Context) : AndroidTool(
         val memories = JarvisApp.from(context).memory.all().takeLast(5).map { it.text }
         if (memories.isNotEmpty()) parts += "Memórias recentes: " + memories.joinToString(" | ")
         return ToolResult.Success(parts.joinToString("\n\n"))
+    }
+}
+
+/** Procura na memória (para 'o que você sabe sobre a minha esposa?'). */
+private class MemorySearch(context: Context) : AndroidTool(
+    context, "memoria_buscar",
+    "Procura na memória permanente o que o usuário já pediu para guardar sobre um assunto ou pessoa. " +
+        "Use quando perguntarem 'o que você sabe sobre...' ou antes de corrigir uma informação.",
+    RiskLevel.READ,
+    """"consulta":{"type":"string"}""", listOf("consulta"),
+) {
+    override fun run(args: JSONObject): ToolResult {
+        val q = listOf("consulta", "assunto", "texto").firstNotNullOfOrNull { args.optString(it).takeIf { v -> v.isNotBlank() } }
+            ?: return ToolResult.Failure("informe o assunto")
+        val found = JarvisApp.from(context).memory.search(q)
+        if (found.isEmpty()) return ToolResult.Success("Nada guardado sobre \"$q\".")
+        return ToolResult.Success(found.joinToString("\n") { "- (${it.category}) ${it.text}" })
     }
 }

@@ -109,6 +109,7 @@ class SettingsActivity : ComponentActivity() {
                         FullTestSection { refresh++ }
                         androidx.compose.runtime.key(refresh) { ConversationSection() }
                         SummariesSection()
+                        PhoneControlSection()
                         CharacterSection()
                         ProfileSection()
                         BrainSection()
@@ -178,6 +179,8 @@ class SettingsActivity : ComponentActivity() {
             { settings.muteMicBeep }, { settings.muteMicBeep = it }),
         TestSwitch("wake", "Chamar pelo nome (Oi ${settings.wakeName})", "Melhor testada com: Silenciar o bip e Legenda. Precisa do microfone e do personagem na tela; solta o microfone quando a conversa abre.",
             { settings.wakeWord }, { settings.wakeWord = it }),
+        TestSwitch("phone", "Controle do celular (acessibilidade)", "Melhor testada com: Conversa contínua e Responder falando (peça \"toca em pesquisar\" falando). Depois de ligar aqui, ative \"Euno - controle do celular\" nas configurações de acessibilidade do Android.",
+            { settings.phoneControl }, { settings.phoneControl = it }),
         TestSwitch("report", "Incluir a conversa no relatório", "Melhor testada com: qualquer teste; o relatório passa a mostrar o que foi dito.",
             { settings.reportIncludeChat }, { settings.reportIncludeChat = it }),
     )
@@ -198,6 +201,7 @@ class SettingsActivity : ComponentActivity() {
                 if (!com.joctaeng.jarvis.device.SystemSettings.isIgnoringBatteryOptimizations(this@SettingsActivity)) add("bateria sem restrições")
                 if (!getSystemService(android.app.NotificationManager::class.java).isNotificationPolicyAccessGranted) add("acesso a Não perturbe (para silenciar o bip)")
                 if (!com.joctaeng.jarvis.overlay.OverlayBus.running.value) add("personagem na tela (ligue em Meu Euno)")
+                if (settings.phoneControl && !com.joctaeng.jarvis.control.EunoAccessibilityService.isEnabled(this@SettingsActivity)) add("serviço de acessibilidade \"Euno - controle do celular\"")
             }
         }
         fun applied() {
@@ -238,6 +242,11 @@ class SettingsActivity : ComponentActivity() {
                 Hint("Tudo liberado: microfone, agenda, contatos, bateria e personagem.")
             } else {
                 Text("Falta você liberar: ${pending.joinToString(", ")}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                if (pending.any { it.startsWith("serviço de acessibilidade") }) {
+                    TextButton(onClick = {
+                        startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    }) { Text("Abrir acessibilidade do Android") }
+                }
                 if (pending.any { it.startsWith("acesso a Não perturbe") }) {
                     TextButton(onClick = {
                         startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
@@ -381,6 +390,34 @@ class SettingsActivity : ComponentActivity() {
                 },
                 dismissButton = { TextButton(onClick = { editing = null }) { Text("Cancelar") } },
             )
+        }
+    }
+
+    @Composable
+    private fun PhoneControlSection() {
+        var on by remember { mutableStateOf(settings.phoneControl) }
+        var enabled by remember { mutableStateOf(com.joctaeng.jarvis.control.EunoAccessibilityService.isEnabled(this)) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                enabled = com.joctaeng.jarvis.control.EunoAccessibilityService.isEnabled(this@SettingsActivity)
+                delay(1_500)
+            }
+        }
+        Section("Controle do celular") {
+            Hint("Deixa ${settings.displayName} ler a tela e tocar, digitar, rolar e navegar quando você pedir (por exemplo: \"toca em pesquisar\", \"o que está na minha tela?\", \"volta\"). Senhas nunca são lidas e botões como enviar, pagar e apagar pedem a sua confirmação. Nada acontece sem você pedir.")
+            Toggle("Permitir o controle do celular", on) {
+                on = it
+                settings.phoneControl = it
+            }
+            Text(
+                if (enabled) "Serviço de acessibilidade: LIGADO" else "Serviço de acessibilidade: desligado no Android",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+            if (!enabled) {
+                Button(onClick = { startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) { Text("Ligar em Acessibilidade") }
+                Hint("Na tela que abrir, procure \"Euno - controle do celular\" (pode estar em Apps instalados/Serviços) e ative. O Android mostra um aviso: é normal.")
+            }
         }
     }
 
@@ -1101,20 +1138,32 @@ class SettingsActivity : ComponentActivity() {
     private fun MemorySection() {
         var items by remember { mutableStateOf(app.memory.all()) }
         var confirmClear by remember { mutableStateOf(false) }
+        var filter by remember { mutableStateOf("") }
+        var editing by remember { mutableStateOf<com.joctaeng.jarvis.mind.memory.MemoryItem?>(null) }
+        var adding by remember { mutableStateOf(false) }
         val date = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("pt-BR")) }
         Section("Minha Memória") {
-            Hint("O que ${settings.displayName} sabe sobre você. Diga \"lembre que…\" na conversa para acrescentar e \"esqueça isto\" para apagar.")
-            if (items.isEmpty()) Hint("Nada memorizado ainda.")
-            items.reversed().forEach { item ->
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(item.text)
-                        Hint("${date.format(Date(item.createdAtMillis))} · ${item.source} · ${item.reason}")
+            Hint("O que ${settings.displayName} sabe sobre você, por assunto. Diga \"lembre que…\" ou \"anota aí que…\" na conversa para acrescentar, e \"esqueça isto\" para apagar. Aqui você também pode acrescentar e corrigir à mão.")
+            OutlinedButton(onClick = { adding = true }, modifier = Modifier.fillMaxWidth()) { Text("Acrescentar uma memória") }
+            if (items.size > 5) {
+                OutlinedTextField(value = filter, onValueChange = { filter = it }, label = { Text("Procurar na memória") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+            val shown = items.filter { filter.isBlank() || it.text.contains(filter, ignoreCase = true) || it.category.contains(filter, ignoreCase = true) }
+            if (shown.isEmpty()) Hint(if (items.isEmpty()) "Nada memorizado ainda." else "Nada encontrado.")
+            shown.groupBy { it.category }.toSortedMap().forEach { (category, group) ->
+                Text("${category.replaceFirstChar { it.uppercase() }} (${group.size})", style = MaterialTheme.typography.labelLarge)
+                group.reversed().forEach { item ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.text)
+                            Hint("${date.format(Date(item.createdAtMillis))} · ${item.source}")
+                        }
+                        TextButton(onClick = { editing = item }) { Text("Editar") }
+                        TextButton(onClick = {
+                            app.memory.remove(item.id)
+                            items = app.memory.all()
+                        }) { Text("Esquecer") }
                     }
-                    TextButton(onClick = {
-                        app.memory.remove(item.id)
-                        items = app.memory.all()
-                    }) { Text("Esquecer") }
                 }
             }
             if (items.isNotEmpty()) {
@@ -1128,6 +1177,38 @@ class SettingsActivity : ComponentActivity() {
                     }
                 }) { Text(if (confirmClear) "Toque de novo para apagar tudo" else "Apagar todas") }
             }
+        }
+        val target = editing
+        if (adding || target != null) {
+            var text by remember(target?.id, adding) { mutableStateOf(target?.text.orEmpty()) }
+            var category by remember(target?.id, adding) { mutableStateOf(target?.category ?: com.joctaeng.jarvis.mind.memory.MemoryCategory.GERAL) }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { editing = null; adding = false },
+                title = { Text(if (target == null) "Nova memória" else "Editar memória") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("O que ${settings.displayName} deve saber") }, minLines = 2, maxLines = 6)
+                        Text("Assunto", style = MaterialTheme.typography.labelLarge)
+                        com.joctaeng.jarvis.mind.memory.MemoryCategory.ALL.chunked(3).forEach { rowItems ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                rowItems.forEach { c ->
+                                    androidx.compose.material3.FilterChip(selected = category == c, onClick = { category = c }, label = { Text(c) })
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(enabled = text.isNotBlank(), onClick = {
+                        if (target == null) app.memory.add(text, "manual", "escrito por você em Minha Memória", category)
+                        else app.memory.update(target.id, text, category)
+                        items = app.memory.all()
+                        editing = null
+                        adding = false
+                    }) { Text("Salvar") }
+                },
+                dismissButton = { TextButton(onClick = { editing = null; adding = false }) { Text("Cancelar") } },
+            )
         }
     }
 }

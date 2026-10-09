@@ -126,5 +126,19 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Personagem assistente flutuante exibido sobre outros apps e ativado pelo toque do usuário" />
         </service>
+
+        <!-- Controle do celular por acessibilidade: ligado só pelo usuário em Configurações > Acessibilidade. -->
+        <service
+            android:name=".control.EunoAccessibilityService"
+            android:exported="false"
+            android:label="@string/accessibility_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/euno_accessibility" />
+        </service>
     </application>
 </manifest>

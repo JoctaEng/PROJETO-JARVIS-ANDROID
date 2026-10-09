@@ -25,7 +25,21 @@ data class MemoryItem(
     val source: String,
     val reason: String,
     val createdAtMillis: Long,
+    /** Assunto da memória (família, trabalho...). Memórias antigas ficam em "geral". */
+    val category: String = MemoryCategory.GERAL,
 )
+
+/** Categorias de "Minha Memória". O cérebro escolhe uma delas ao guardar. */
+object MemoryCategory {
+    const val GERAL = "geral"
+    val ALL = listOf("família", "pessoas", "trabalho", "preferências", "saúde", "casa", "geral")
+
+    /** Aceita variações ("familia", "Trabalho ") e cai em "geral" se não conhecer. */
+    fun normalize(raw: String?): String {
+        val n = Normalizer.normalize(raw.orEmpty().lowercase(Locale.ROOT).trim(), Normalizer.Form.NFD).replace(Regex("\\p{M}"), "")
+        return ALL.firstOrNull { Normalizer.normalize(it, Normalizer.Form.NFD).replace(Regex("\\p{M}"), "") == n } ?: GERAL
+    }
+}
 
 /**
  * Memória persistente simples do MVP 1: um arquivo JSON privado do app.
@@ -43,11 +57,32 @@ class MemoryStore(private val file: File, private val clock: () -> Long = System
     fun all(): List<MemoryItem> = items.toList()
 
     @Synchronized
-    fun add(text: String, source: String, reason: String): MemoryItem {
-        val item = MemoryItem(UUID.randomUUID().toString(), text.trim(), source, reason, clock())
+    fun add(text: String, source: String, reason: String, category: String = MemoryCategory.GERAL): MemoryItem {
+        val item = MemoryItem(UUID.randomUUID().toString(), text.trim(), source, reason, clock(), MemoryCategory.normalize(category))
         items += item
         save()
         return item
+    }
+
+    /** Troca o texto e/ou a categoria de uma memória (editar em "Minha Memória"). */
+    @Synchronized
+    fun update(id: String, text: String, category: String): Boolean {
+        val i = items.indexOfFirst { it.id == id }
+        if (i < 0 || text.isBlank()) return false
+        items[i] = items[i].copy(text = text.trim(), category = MemoryCategory.normalize(category))
+        save()
+        return true
+    }
+
+    /** Busca simples: memórias que compartilham palavras com a consulta, as mais parecidas primeiro. */
+    @Synchronized
+    fun search(query: String, limit: Int = 8): List<MemoryItem> {
+        val wanted = words(query)
+        if (wanted.isEmpty()) return emptyList()
+        return items.map { it to words(it.text + " " + it.category).intersect(wanted).size }
+            .filter { it.second > 0 }
+            .sortedWith(compareByDescending<Pair<MemoryItem, Int>> { it.second }.thenByDescending { it.first.createdAtMillis })
+            .take(limit).map { it.first }
     }
 
     @Synchronized
@@ -101,6 +136,7 @@ class MemoryStore(private val file: File, private val clock: () -> Long = System
                 source = o.str("source"),
                 reason = o.str("reason"),
                 createdAtMillis = o["createdAt"]?.jsonPrimitive?.long ?: 0L,
+                category = MemoryCategory.normalize(o.str("category")),
             )
         }
     }
@@ -115,6 +151,7 @@ class MemoryStore(private val file: File, private val clock: () -> Long = System
                         put("source", item.source)
                         put("reason", item.reason)
                         put("createdAt", item.createdAtMillis)
+                        put("category", item.category)
                     },
                 )
             }

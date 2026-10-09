@@ -5,4 +5,6 @@
     <string name="overlay_notification_title">Euno está no seu celular</string>
     <string name="overlay_notification_text">Toque no personagem para conversar.</string>
     <string name="overlay_stop">Esconder</string>
+    <string name="accessibility_service_label">Euno - controle do celular</string>
+    <string name="accessibility_description">Permite que o Euno leia o que está na tela e toque, digite, role e navegue quando você pedir. Senhas nunca são lidas e ações como enviar, pagar ou apagar pedem sua confirmação. Só age quando você pede, e você pode desligar aqui a qualquer momento.</string>
 </resources>
