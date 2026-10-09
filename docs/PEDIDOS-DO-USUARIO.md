@@ -63,3 +63,5 @@ Do relatório e do que o usuário contou:
 
 ### Etapa C (prevista, sem ordem ainda)
 Visão ("o que é isto?" com câmera/tela); reconhecer a voz do usuário no "Oi Joca"; "Bom dia" e "Fechar o dia" automáticos em horário escolhido; e-mail e notificações; controle do celular por acessibilidade (volta quando a instalação for resolvida).
+| 30 | Acessibilidade **só para o app e só quando necessária**, não "ligada o tempo todo" para o celular | Ideia a propor (sem ordem ainda): "controle sob demanda": o serviço se desliga sozinho (`disableSelf()`) ao fim da tarefa ou após alguns minutos parado; toda ação na tela pede confirmação; botão "parar tudo"; registro `[controle]`. O Android não deixa o app **ligar** o serviço sozinho: o usuário liga cada vez |
+| 31 | O app continuava dizendo "ligue a acessibilidade" mesmo depois de ligada (teste da 0.13.3) | **A investigar**: qual mensagem e onde; falta o registro `[controle] serviço de acessibilidade conectado` para saber se o Android conectou o serviço |
