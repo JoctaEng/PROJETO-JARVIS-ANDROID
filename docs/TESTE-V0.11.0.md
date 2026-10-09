@@ -99,3 +99,10 @@ HyperOS 3.0.302.0 (WNOMIXM.C07) · Android 16 (BP2A.250605.031.A3) · patch de s
 ## 11. v0.13.3 — teste da declaração mínima do serviço de acessibilidade (a pedido do usuário, 09/10)
 - Mudanças em relação à 0.13.0 (que não instalou): `exported="true"` no serviço (forma da documentação); `euno_accessibility.xml` sem `isAccessibilityTool` e sem `accessibilityFlags`. Além disso inclui a permissão `ACCESS_NOTIFICATION_POLICY` (0.13.2) e está sem outras mudanças.
 - Resultado esperado: se instalar, a causa estava nesses atributos. Se **não** instalar, a causa é a própria presença de um serviço de acessibilidade (provável restrição do instalador/sistema do aparelho) ou, menos provável, a permissão nova; nesse caso separar as duas mudanças e/ou ler o erro com `adb install`.
+
+## 12. Causa da falha de instalação: Google Play Protect (print do usuário, 09/10/2026)
+- [DADO] Ao abrir o APK da v0.13.3 (build 59) pelo Google Drive, o Android mostra **"Google Play Protect — O app foi bloqueado para proteger seu dispositivo. Esse app pode pedir acesso a dados sensíveis. Isso pode aumentar o risco de roubo de identidade ou fraude financeira."** Só há o botão "Entendi" (sem "instalar mesmo assim").
+- [DADO] Sequência: 0.12.0 e 0.13.1 (sem serviço de acessibilidade) instalam; 0.13.0 e 0.13.3 (com serviço) não instalam. A mensagem genérica "O app não foi instalado" da 0.13.0 provavelmente era o mesmo bloqueio.
+- [LEITURA, não verificada em fonte oficial] O bloqueio é uma proteção do Play Protect contra apps instalados fora da loja que pedem acesso sensível (acessibilidade, notificações, SMS), ativa em alguns países. Não é um erro de manifesto: mexer em atributos não resolve.
+- Opções (decisão do usuário): (A) desligar temporariamente a análise do Play Protect para instalar e religar depois (risco: some a proteção enquanto desligado; eficácia **não confirmada** para este bloqueio); (B) tentar `adb install` (não confirmado se contorna); (C) abrir mão do controle por acessibilidade e seguir com a Etapa C; (D) distribuir pela Play Store (teste interno), demorado.
+- Nenhum código novo até o usuário decidir.
