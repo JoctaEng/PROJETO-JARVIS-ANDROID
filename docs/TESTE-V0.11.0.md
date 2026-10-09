@@ -92,3 +92,6 @@ Novidades:
 - [DADO] O usuário informou que instalou o APK 52 (v0.13.1, sem declarar o serviço de acessibilidade) e **instalou**. A v0.13.0 (build 51, com o serviço) **não** instalou ("O app não foi instalado").
 - Conclusão: a causa está na declaração do serviço (`EunoAccessibilityService` no manifesto e/ou `res/xml/euno_accessibility.xml`). O motivo exato do Android não é conhecido.
 - Próxima tentativa prevista (só com ordem do usuário): declarar o serviço com a configuração mínima (sem `isAccessibilityTool` nem atributos novos); alternativa: ler o erro real com `adb install`. Nenhum APK novo até o usuário mandar.
+
+## 10. Dados do aparelho (09/10/2026)
+HyperOS 3.0.302.0 (WNOMIXM.C07) · Android 16 (BP2A.250605.031.A3) · patch de segurança 2026-08-01 · armazenamento 260,1 GB livres de 512 GB. Falta de espaço descartada como causa da falha de instalação da 0.13.0.
