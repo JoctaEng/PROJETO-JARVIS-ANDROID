@@ -2,7 +2,6 @@ package com.joctaeng.jarvis.tools
 
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings
 import com.joctaeng.jarvis.JarvisApp
 import com.joctaeng.jarvis.control.EunoAccessibilityService
 import com.joctaeng.jarvis.control.EunoAccessibilityService.Outcome
@@ -10,6 +9,7 @@ import com.joctaeng.jarvis.core.contracts.Tool
 import com.joctaeng.jarvis.core.contracts.ToolContext
 import com.joctaeng.jarvis.core.model.RiskLevel
 import com.joctaeng.jarvis.core.model.ToolResult
+import com.joctaeng.jarvis.overlay.OverlayBus
 import org.json.JSONObject
 
 /** Controle do celular por acessibilidade: ler a tela, tocar, digitar, rolar e navegar. */
@@ -45,11 +45,17 @@ private abstract class ScreenTool(
             runCatching {
                 this.context.startActivity(com.joctaeng.jarvis.control.AccessibilityLink.intent(this.context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
+            app.events.warn("controle", "tela_*: serviço ${if (EunoAccessibilityService.isEnabled(this.context)) "ligado no Android mas NÃO conectado ao Euno" else "desligado no Android"}")
             return ToolResult.Failure(
-                "O serviço de acessibilidade do Euno ainda não está ligado no Android. Abri as configurações de acessibilidade: " +
-                    "diga ao usuário para ligar \"Euno - controle do celular\" e depois pedir de novo.",
+                if (EunoAccessibilityService.isEnabled(this.context)) {
+                    "O serviço de acessibilidade do Euno está LIGADO no Android, mas não está conectado ao app agora (acontece depois de fechar o Euno por completo ou de atualizá-lo). " +
+                        "Abri a página dele: peça ao usuário para DESLIGAR e LIGAR de novo \"Euno - controle do celular\" e depois pedir de novo."
+                } else {
+                    "O serviço de acessibilidade do Euno está desligado no Android. Abri a página dele: peça ao usuário para ligar \"Euno - controle do celular\" e depois pedir de novo."
+                },
             )
         }
+        OverlayBus.acting.value = true
         val args = runCatching { JSONObject(argumentsJson) }.getOrElse { JSONObject() }
         return run(service, args)
     }

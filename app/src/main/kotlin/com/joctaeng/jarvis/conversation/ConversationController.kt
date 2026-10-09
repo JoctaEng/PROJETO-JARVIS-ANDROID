@@ -178,6 +178,7 @@ class ConversationController(private val app: JarvisApp) {
                 if (speak) voice.awaitIdle()
             } finally {
                 _busy.value = false
+                OverlayBus.acting.value = false
                 relax()
                 if (queue.isEmpty()) _turnFinished.tryEmit(Unit) else drainQueue()
             }
@@ -198,6 +199,7 @@ class ConversationController(private val app: JarvisApp) {
     fun cancel() {
         job?.cancel()
         voice.stop()
+        OverlayBus.acting.value = false
         queue.clear()
         _entries.update { list -> list.filterNot { it.queued }.map { if (it.streaming) it.copy(streaming = false) else it } }
         OverlayBus.anim.value = AnimState.IDLE
@@ -373,7 +375,7 @@ class ConversationController(private val app: JarvisApp) {
 
         val request = history.lastOrNull { it.role == Role.USER }?.text.orEmpty()
         var firstChunkAt = 0L
-        val runner = AgentRunner(app.toolbox.gateway(tools))
+        val runner = AgentRunner(app.toolbox.gateway(tools), maxRounds = 8)
         runner.run(history, generate, ToolContext(sessionId, "Pedido: ${request.take(120)}"), app.toolbox::confirm).collect { event ->
             when (event) {
                 is AgentEvent.Text -> {
@@ -388,7 +390,7 @@ class ConversationController(private val app: JarvisApp) {
                         }
                         OverlayBus.anim.value = AnimState.IDLE
                         edit(replyId) { it.copy(text = TextCleanup.clean(it.text + visible)) }
-                        if (speak) chunker.feed(visible).forEach(voice::speak)
+                        if (speak || OverlayBus.acting.value) chunker.feed(visible).forEach(voice::speak)
                     }
                 }
                 is AgentEvent.ToolStarted -> {
@@ -426,9 +428,9 @@ class ConversationController(private val app: JarvisApp) {
         val rest = parser.finish()
         if (rest.isNotEmpty()) {
             edit(replyId) { it.copy(text = it.text + rest) }
-            if (speak) chunker.feed(rest).forEach(voice::speak)
+            if (speak || OverlayBus.acting.value) chunker.feed(rest).forEach(voice::speak)
         }
-        if (speak) chunker.flush()?.let(voice::speak)
+        if (speak || OverlayBus.acting.value) chunker.flush()?.let(voice::speak)
 
         edit(replyId) { it.copy(text = TextCleanup.clean(it.text).trim()) }
         val finalText = _entries.value.firstOrNull { it.id == replyId }?.text.orEmpty()

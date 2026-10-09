@@ -265,6 +265,35 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
             }
         }
         lifecycleScope.launch { OverlayBus.dismissRequests.collect { hide() } }
+        lifecycleScope.launch { OverlayBus.acting.collect { setActing(it) } }
+    }
+
+    private var actingSaved: Triple<Int, Int, Int>? = null
+
+    /**
+     * "Agindo na tela": vai para o canto superior esquerdo e fica pequeno, para não cobrir o app que está sendo lido;
+     * ao terminar, volta exatamente para onde estava.
+     */
+    private fun setActing(on: Boolean) {
+        val v = view ?: return
+        if (on) {
+            if (actingSaved != null || hidden) return
+            actingSaved = Triple(params.x, params.y, params.width)
+            val size = dpToPx(ACTING_SIZE_DP)
+            params.width = size
+            params.height = size
+            params.x = dpToPx(6)
+            params.y = insets().top + dpToPx(6)
+        } else {
+            val (x, y, w) = actingSaved ?: return
+            actingSaved = null
+            params.width = w
+            params.height = w
+            val p = Placement.clamp(Point(x, y), windowSize(), screenSize(), insets())
+            params.x = p.x
+            params.y = p.y
+        }
+        runCatching { windowManager.updateViewLayout(v, params) }
     }
 
     /** Recolhe depois de um tempo parado — nunca enquanto ouve, pensa, fala ou há conversa aberta. */
@@ -337,7 +366,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     private fun followSettings() = lifecycleScope.launch {
         app.settings.version.collect {
             renderer.applyProfile(app.settings.character)
-            if (!hidden) resize(dpToPx(app.settings.characterSizeDp))
+            if (!hidden && actingSaved == null) resize(dpToPx(app.settings.characterSizeDp))
         }
     }
 
@@ -565,6 +594,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         private const val NOTIFICATION_ID = 1
         const val MIN_SIZE_DP = 56
         const val MAX_SIZE_DP = 180
+        private const val ACTING_SIZE_DP = 56
         private const val RISK_WIDTH_DP = 64
         private const val RISK_HEIGHT_DP = 28
         private const val IDLE_HIDE_MILLIS = 40_000L

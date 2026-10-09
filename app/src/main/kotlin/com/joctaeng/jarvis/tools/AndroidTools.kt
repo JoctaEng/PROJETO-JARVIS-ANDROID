@@ -408,7 +408,7 @@ internal fun findContacts(context: Context, query: String): Map<String, List<Str
 /** Abre a conversa do WhatsApp com o texto já escrito; quem toca em enviar é o usuário. */
 private class WhatsAppMessage(context: Context) : AndroidTool(
     context, "whatsapp_mensagem",
-    "Abre o WhatsApp na conversa com um contato, com a mensagem já escrita (o usuário toca em enviar). " +
+    "Abre o WhatsApp na conversa com um contato, com a mensagem já escrita; para enviar, use depois tela_tocar \"Enviar\" (o app pede a confirmação ao usuário). " +
         "Use para 'manda mensagem para a Maria dizendo que já saí'. Escreva a mensagem na voz do usuário, pronta para enviar.",
     RiskLevel.WRITE_REVERSIBLE,
     """"contato":{"type":"string","description":"nome do contato na agenda"},"mensagem":{"type":"string"},"business":{"type":"boolean","description":"true = usar o WhatsApp Business"}""",
@@ -431,7 +431,7 @@ private class WhatsAppMessage(context: Context) : AndroidTool(
         val uri = Uri.parse("https://wa.me/$number?text=" + Uri.encode(text))
         val intent = Intent(Intent.ACTION_VIEW, uri).also { if (pkg != null) it.setPackage(pkg) }
         JarvisApp.from(context).events.info("ferramentas", "whatsapp_mensagem: abrindo conversa (app=${pkg ?: "padrão"}, texto ${text.length} caracteres)")
-        return if (start(intent)) ok("aberto" to "conversa com $contact", "app" to (pkg ?: "navegador/padrão"), "obs" to "o usuário toca em enviar")
+        return if (start(intent)) ok("aberto" to "conversa com $contact", "app" to (pkg ?: "navegador/padrão"), "obs" to "texto escrito, NÃO enviado ainda; para enviar use tela_tocar com \"Enviar\"")
         else ToolResult.Failure("O Android não deixou abrir o WhatsApp.")
     }
 }

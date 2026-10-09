@@ -275,9 +275,41 @@ class ChatActivity : ComponentActivity() {
         }
     }
 
+    private var wasFullBeforeActing = false
+
+    /** "Agindo na tela": a janela do chat vira um chip pequeno no canto superior esquerdo, sem cobrir o app lido. */
+    private fun applyActing(on: Boolean) {
+        val w = window
+        if (on) {
+            wasFullBeforeActing = !captionOnly
+            captionOnly = true
+            w.setLayout(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+            w.setGravity(android.view.Gravity.TOP or android.view.Gravity.START)
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        } else {
+            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+            setCaption(!wasFullBeforeActing)
+        }
+    }
+
     @Composable
     private fun ChatSheet() {
-        if (captionOnly) CaptionBar() else FullChat()
+        val acting by OverlayBus.acting.collectAsState()
+        androidx.compose.runtime.LaunchedEffect(acting) { applyActing(acting) }
+        if (acting) ActingChip() else if (captionOnly) CaptionBar() else FullChat()
+    }
+
+    /** Legenda mínima enquanto o Euno age na tela: uma linha só, no canto superior esquerdo. */
+    @Composable
+    private fun ActingChip() {
+        val pendingAction by app.toolbox.pending.collectAsState()
+        Column(Modifier.padding(start = 64.dp, top = 6.dp, end = 8.dp).statusBarsPadding()) {
+            Card(shape = RoundedCornerShape(14.dp)) {
+                Text("Agindo na tela…", Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
+            }
+            pendingAction?.let { ConfirmationCard(it, Modifier.padding(top = 6.dp).widthIn(max = 320.dp)) }
+        }
     }
 
     @Composable

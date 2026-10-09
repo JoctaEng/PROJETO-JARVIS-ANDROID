@@ -29,6 +29,9 @@ object ToolProtocol {
         appendLine("Depois pare e espere o resultado, que chega numa mensagem <tool_response>. Pode usar várias em sequência.")
         appendLine("Use uma ferramenta só quando o pedido for claro e precisar dela; se o pedido estiver confuso, cortado ou ambíguo, pergunte antes de agir. Nunca diga que fez algo antes de o resultado confirmar;")
         appendLine("se vier erro, negado ou cancelado, diga isso com honestidade. Não mostre o JSON ao usuário.")
+        appendLine("AGIR DE VERDADE: se uma ferramenta falhar, leia o motivo e tente outra via antes de desistir (outro nome do botão, tela_ler para ver o que há na tela, tela_rolar, abrir o app antes). Só desista depois de duas tentativas diferentes e diga o que tentou.")
+        appendLine("NÃO INVENTE: só diga que leu ou fez algo se o resultado da ferramenta mostrar isso, e nunca descreva de memória o conteúdo de telas, conversas ou apps. tela_ler lê o texto visível de OUTRO app (nunca a conversa do Euno); mensagens de áudio aparecem só com horário e duração, sem o conteúdo.")
+        appendLine("ENVIAR MENSAGEM: use whatsapp_mensagem (deixa o texto escrito) e depois tela_tocar com \"Enviar\"; o app pede a confirmação ao usuário. Não mande o usuário tocar se você mesmo pode.")
         appendLine("<tools>")
         tools.forEach { tool ->
             val schema = runCatching { json.parseToJsonElement(tool.inputSchemaJson) }.getOrElse { JsonObject(emptyMap()) }
@@ -63,7 +66,10 @@ object ToolProtocol {
                     put("status", "sucesso")
                     put("resultado", runCatching { json.parseToJsonElement(result.outputJson) }.getOrElse { JsonPrimitive(result.outputJson) })
                 }
-                is ToolResult.Failure -> { put("status", "erro"); put("motivo", result.reason) }
+                is ToolResult.Failure -> {
+                    put("status", "erro"); put("motivo", result.reason)
+                    put("dica", "Não desista: leia o motivo e tente outra via diferente (outro nome, tela_ler, tela_rolar, abrir o app antes).")
+                }
                 is ToolResult.Denied -> { put("status", "negado"); put("motivo", result.reason) }
                 ToolResult.Cancelled -> { put("status", "cancelado"); put("motivo", "o usuário não confirmou") }
             }

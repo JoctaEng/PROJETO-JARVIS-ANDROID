@@ -29,7 +29,7 @@ object VoiceCommands {
     )
     private val dismissExact = setOf(
         "ir", "ir embora", "se esconder", "sumir", "descansar", "se recolher", "some dai", "se esconde", "esconde", "vai descansar", "descansa",
-        "e so isso", "so isso", "isso e tudo", "e tudo", "e so",
+        "e so isso", "so isso", "isso e tudo", "e so",
     )
     private val stopListeningExact = setOf(
         "para de ouvir", "pare de ouvir", "parar de ouvir", "encerrar", "encerra", "encerrar conversa", "encerrar a conversa",

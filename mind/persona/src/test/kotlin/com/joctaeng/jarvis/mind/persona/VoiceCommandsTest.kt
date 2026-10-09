@@ -12,6 +12,11 @@ class VoiceCommandsTest {
         ).forEach { assertEquals(VoiceCommand.DISMISS, VoiceCommands.parse(it), it) }
     }
 
+    @Test fun greetingsAreNotGoodbyes() {
+        listOf("E aí tudo bem", "e ai, tudo bem?", "tudo bem", "oi, tudo bem", "e tudo bem com você")
+            .forEach { assertNull(VoiceCommands.parse(it), it) }
+    }
+
     @Test fun stopListening() {
         listOf("encerrar", "Pra encerrar", "para de ouvir", "pode encerrar", "Euno, encerra", "desliga o microfone")
             .forEach { assertEquals(VoiceCommand.STOP_LISTENING, VoiceCommands.parse(it), it) }

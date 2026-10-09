@@ -46,6 +46,7 @@ import com.joctaeng.jarvis.core.model.ChatMessage
 import com.joctaeng.jarvis.core.model.Role
 import com.joctaeng.jarvis.core.model.ToolResult
 import com.joctaeng.jarvis.diagnostics.Exporter
+import com.joctaeng.jarvis.overlay.OverlayBus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -85,16 +86,21 @@ class TestsActivity : ComponentActivity() {
         listOf(
             Case("celular", "Estado do celular", "bateria, rede, espaço") { tool("estado_do_celular") },
             Case("apps", "Listar apps", "precisa achar apps") { tool("listar_apps").let { if (it.ok && it.detail.contains("\"total\":0")) Outcome(false, "0 apps visíveis") else it } },
-            Case("whats", "WhatsApp visível?", "mostra os apps com 'whats' no nome") {
-                val r = tool("listar_apps", """{"filtro":"whats"}""")
-                if (r.ok && r.detail.contains("\"total\":0")) Outcome(false, "nenhum app com 'whats' visível ao Euno (outro espaço/duplicado?)") else r
+            Case("whats", "WhatsApp instalado?", "procura os pacotes do WhatsApp e do WhatsApp Business") {
+                val pm = packageManager
+                val found = listOf("com.whatsapp" to "WhatsApp", "com.whatsapp.w4b" to "WhatsApp Business").filter { pm.getLaunchIntentForPackage(it.first) != null }
+                val byName = tool("listar_apps", """{"filtro":"whats"}""").detail.contains("\"total\":0").not()
+                Outcome(found.isNotEmpty(), if (found.isEmpty()) "nenhum pacote do WhatsApp visível ao Euno (outro espaço/duplicado?)" else "achei: ${found.joinToString { it.second }}; aparece na lista de apps pelo nome: ${if (byName) "sim" else "não (o rótulo do app é outro)"}")
             },
             Case("abrir", "Abrir app (\"Google Agenda\")", "abre a Agenda e volta para cá") {
                 val r = tool("abrir_app", """{"nome":"Google Agenda"}""")
                 delay(2000); back(); r
             },
             Case("agenda", "Consultar agenda de hoje", "precisa da permissão de calendário") { tool("agenda_consultar", """{"periodo":"hoje"}""") },
-            Case("contatos", "Buscar contato", "busca por \"a\"; precisa da permissão de contatos") { tool("contatos_buscar", """{"nome":"a"}""") },
+            Case("contatos", "Buscar contato", "busca por \"a\"; mostra só a quantidade (sem telefones)") {
+                val r = tool("contatos_buscar", """{"nome":"a"}""")
+                if (r.ok) Outcome(true, "${r.detail.lines().count { it.isNotBlank() }} linhas de resultado (conteúdo omitido)") else r
+            },
             Case("memoria", "Memória: guardar, buscar, esquecer", "usa um fato fictício e apaga em seguida") {
                 val fato = "Fato de teste do Euno zebra-quadrada-7"
                 val a = tool("memoria_guardar", """{"fato":"$fato","categoria":"geral"}""")
@@ -110,11 +116,20 @@ class TestsActivity : ComponentActivity() {
             Case("acess", "Acessibilidade do Euno", "serviço incluído e ligado") {
                 val declared = EunoAccessibilityService.isDeclared(this); val enabled = EunoAccessibilityService.isEnabled(this)
                 val connected = EunoAccessibilityService.instance != null
-                Outcome(declared && enabled && connected, "no APK=$declared; ligado no Android=$enabled; conectado=$connected; 'Controle do celular' nos Ajustes=${app.settings.phoneControl}")
+                val hint = if (declared && enabled && !connected) " — LIGADO mas DESCONECTADO: desligue e ligue de novo \"Euno - controle do celular\" em Acessibilidade" else ""
+                Outcome(declared && enabled && connected, "no APK=$declared; ligado no Android=$enabled; conectado=$connected; 'Controle do celular' nos Ajustes=${app.settings.phoneControl}$hint")
             },
-            Case("ler", "Ler a tela", "deve ler o botão de teste desta tela") {
+            Case("ler", "Ler a tela de OUTRO app", "abre a Agenda e confere que o texto lido é da Agenda, não do Euno") {
+                val open = tool("abrir_app", """{"nome":"Agenda"}""")
+                delay(2500)
                 val r = tool("tela_ler")
-                if (r.ok && !r.detail.contains("Botão de teste")) Outcome(false, "leu a tela mas não achou o botão de teste: ${r.detail.take(150)}") else r
+                back()
+                when {
+                    !open.ok -> Outcome(false, "não consegui abrir a Agenda: ${open.detail}")
+                    !r.ok -> r
+                    r.detail.contains("com.joctaeng.jarvis") -> Outcome(false, "leu a própria tela do Euno: ${r.detail.take(120)}")
+                    else -> Outcome(true, r.detail.take(160))
+                }
             },
             Case("tocar", "Tocar num botão", "toca em \"Botão de teste do Euno\"") {
                 val before = taps; val r = tool("tela_tocar", """{"nome":"Botão de teste do Euno"}"""); delay(500)
@@ -162,11 +177,14 @@ class TestsActivity : ComponentActivity() {
 
     private suspend fun runCase(case: Case) {
         running.value = case.id
+        EunoAccessibilityService.allowOwnWindow = case.id in setOf("tocar", "digitar", "rolar")
         val outcome = try {
             withTimeout(60_000) { case.run() }
         } catch (e: Exception) {
             Outcome(false, "erro: ${e.message ?: e.javaClass.simpleName}")
         }
+        EunoAccessibilityService.allowOwnWindow = false
+        OverlayBus.acting.value = false
         results[case.id] = outcome
         app.events.log(if (outcome.ok) com.joctaeng.jarvis.system.resources.LogLevel.INFO else com.joctaeng.jarvis.system.resources.LogLevel.WARN, "teste", "${case.title}: ${if (outcome.ok) "PASSOU" else "FALHOU"} — ${outcome.detail}")
         running.value = null

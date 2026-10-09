@@ -57,4 +57,10 @@ class ScreenTextTest {
         assertFalse(ScreenText.isSensitive("Pesquisar"))
         assertFalse(ScreenText.isSensitive("Nova conversa"))
     }
+
+    @Test
+    fun matchesNamesWithEmoji() {
+        val nodes = listOf(UiNode("Meu Amor \u2764\uFE0F", clickable = true), UiNode("Outro"))
+        assertEquals(0, ScreenText.bestMatch(nodes, "Meu Amor \u2764"))
+    }
 }

@@ -18,6 +18,12 @@ object OverlayBus {
     /** Expressão simulada vinda da resposta do cérebro. */
     val emotion = MutableStateFlow(Emotion.NEUTRAL)
 
+    /**
+     * "Agindo na tela": o Euno está lendo/tocando em outro app. Ele se encolhe para o canto superior esquerdo, a legenda
+     * fica mínima e a resposta sai por áudio, para não ficar por cima do que precisa ler.
+     */
+    val acting = MutableStateFlow(false)
+
     /** O usuário está falando (microfone aberto). */
     val listening = MutableStateFlow(false)
 
