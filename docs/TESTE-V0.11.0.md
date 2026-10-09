@@ -76,3 +76,9 @@ Novidades:
 - **Memória completa:** categorias (família, pessoas, trabalho, preferências, saúde, casa, geral), editar e acrescentar à mão em Minha Memória, busca, ferramenta `memoria_buscar`, memórias agrupadas por assunto no prompt.
 - **Teste completo** inclui o controle do celular e mostra o que falta ligar no Android.
 - O Euno passa a saber se o controle do celular está ligado.
+
+## 7. Falha de instalação da v0.13.0 (build 51)
+- [DADO] Print do usuário (09/10, 9:17): "Euno — O app não foi instalado." ao instalar `Euno-fase2-v0.13.0-build51.apk` (149,94 MB). A v0.12.0 (build 50) **instalou** normalmente.
+- [DADO] O CI da build 51 passou, inclusive "Conferir assinatura do APK (atualizar por cima, sem desinstalar)".
+- [HIPÓTESE] O que mudou de 50 para 51 no manifesto é a declaração do serviço de acessibilidade (`EunoAccessibilityService`, permissão BIND_ACCESSIBILITY_SERVICE, `res/xml/euno_accessibility.xml`). O Android só devolve "não foi instalado" genérico; o motivo real não aparece.
+- Experimento (v0.13.1, build seguinte): igual à 0.13.0 mas **sem declarar o serviço** no manifesto. Se instalar, a causa está na declaração do serviço; se não, está em outro ponto da 0.13.0 (ou no espaço/armazenamento do aparelho).

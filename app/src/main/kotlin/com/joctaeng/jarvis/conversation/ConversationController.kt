@@ -455,10 +455,10 @@ class ConversationController(private val app: JarvisApp) {
         if (settings.captionMode) add("ao tocar em você, aparece só uma legenda no pé da tela, sem abrir o chat")
         if (settings.bargeIn) add("você ouve comandos como \"pera aí\" e \"tchau\" enquanto fala")
         add("mensagens enviadas enquanto você responde entram numa fila e são respondidas juntas")
-        if (settings.phoneControl) {
+        if (settings.phoneControl && com.joctaeng.jarvis.control.EunoAccessibilityService.isDeclared(app)) {
             add(if (com.joctaeng.jarvis.control.EunoAccessibilityService.instance != null) "controle do celular LIGADO: você pode ler a tela e tocar, digitar, rolar e navegar com as ferramentas tela_*"
             else "controle do celular permitido, mas o serviço de acessibilidade ainda não está ligado no Android")
-        } else add("controle do celular por acessibilidade existe mas está desligado em Ajustes")
+        } else add("controle do celular por acessibilidade ainda não está disponível neste APK de teste")
         add("o botão Nova guarda um resumo da conversa e começa outra")
         add("guardar fatos na memória só com as ferramentas memoria_guardar/memoria_esquecer ou quando ele diz \"lembre que…\"")
     }

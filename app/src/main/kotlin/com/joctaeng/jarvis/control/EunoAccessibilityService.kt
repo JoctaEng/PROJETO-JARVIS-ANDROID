@@ -131,6 +131,13 @@ class EunoAccessibilityService : AccessibilityService() {
         @Volatile var instance: EunoAccessibilityService? = null
             private set
 
+        /** Este APK declara o serviço no manifesto? (a v0.13.1 de teste não declara, para isolar uma falha de instalação) */
+        fun isDeclared(context: Context): Boolean = runCatching {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SERVICES).services
+                ?.any { it.name == EunoAccessibilityService::class.java.name } == true
+        }.getOrDefault(false)
+
         /** O serviço está ligado nas configurações do Android? (mesmo antes de conectar neste processo) */
         fun isEnabled(context: Context): Boolean {
             val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()

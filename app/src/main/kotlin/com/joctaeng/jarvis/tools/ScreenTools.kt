@@ -38,6 +38,9 @@ private abstract class ScreenTool(
             return ToolResult.Failure("O controle do celular está desligado. Peça ao usuário para ligar em Ajustes → Controle do celular.")
         }
         val service = EunoAccessibilityService.instance
+        if (service == null && !EunoAccessibilityService.isDeclared(this.context)) {
+            return ToolResult.Failure("Este APK de teste não inclui o serviço de acessibilidade; o controle do celular volta numa próxima versão.")
+        }
         if (service == null) {
             runCatching {
                 this.context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
