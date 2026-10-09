@@ -70,3 +70,4 @@ Lista completa e com situação: `docs/PEDIDOS-DO-USUARIO.md`. Diário de sessõ
 - Versão/fase do app: `gradle.properties` (`euno.phase`, `euno.version`). APK: aba Actions → artefato `Euno-fase<N>-v<versão>-build<run>.apk`.
 - Testes de lógica: `./gradlew -Pjarvis.jvmOnly=true test` (o app Android só compila no CI).
 - 09/10/2026: o usuário mostrou que o Euno não aparecia na lista de Não perturbe; faltava a permissão `ACCESS_NOTIFICATION_POLICY` no manifesto (corrigido na 0.13.2). **Lição:** toda permissão especial que o app pede ao usuário precisa estar declarada no manifesto; conferir o manifesto antes de dizer "liberar em Configurações".
+- 09/10/2026: **a v0.13.1 instalou e a v0.13.0 não**: a declaração do serviço de acessibilidade impede a instalação neste aparelho. Controle do celular volta quando o serviço puder ser declarado sem quebrar a instalação. O usuário pediu: **não gerar APK novo até ele mandar**.

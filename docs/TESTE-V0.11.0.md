@@ -87,3 +87,8 @@ Novidades:
 - [DADO] Em Configurações → Acesso aos modos (Não perturbe), a lista mostra Telefone, Gmail, Google… mas **não o Euno**; o aviso "falta liberar o acesso a Não perturbe" fica para sempre em Teste completo.
 - Causa (erro meu): o manifesto não declarava `android.permission.ACCESS_NOTIFICATION_POLICY`; só apps que a declaram aparecem na lista.
 - v0.13.2: permissão declarada. Depois de instalar, o Euno deve aparecer na lista. (Continua sem o serviço de acessibilidade, por causa do teste de instalação da 0.13.1.)
+
+## 9. Resultado do teste de instalação (09/10/2026)
+- [DADO] O usuário informou que instalou o APK 52 (v0.13.1, sem declarar o serviço de acessibilidade) e **instalou**. A v0.13.0 (build 51, com o serviço) **não** instalou ("O app não foi instalado").
+- Conclusão: a causa está na declaração do serviço (`EunoAccessibilityService` no manifesto e/ou `res/xml/euno_accessibility.xml`). O motivo exato do Android não é conhecido.
+- Próxima tentativa prevista (só com ordem do usuário): declarar o serviço com a configuração mínima (sem `isAccessibilityTool` nem atributos novos); alternativa: ler o erro real com `adb install`. Nenhum APK novo até o usuário mandar.
