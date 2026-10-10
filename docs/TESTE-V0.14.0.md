@@ -93,3 +93,20 @@ Causa provável (a confirmar com o registro dos argumentos, que hoje não existe
 
 ## Bug grave achado no relatório (de antes, v0.14.0, 18:42)
 **Queda do app** ao abrir a página de acessibilidade: o Android exige a permissão de sistema `OPEN_ACCESSIBILITY_DETAILS_SETTINGS` para a página "detalhes do serviço"; `AccessibilityLink` verifica só se a tela existe e o `startActivity` lança `SecurityException`. Correção: abrir dentro de try/catch e cair na lista de acessibilidade.
+
+# Teste da v0.17.0 (10/10, 01:01–01:59; relatório "Relatório do Euno" e "Testes rápidos do Euno" no Drive)
+
+## O que funcionou
+- **Voz do Azure** funcionando: 93 frases, síntese de 0,3–1,3 s por frase, sem falha. Os avisos de "PAUSA entre frases" (01:26–01:28) foram o botão **Ouvir** tocado várias vezes (mesma frase de 56 caracteres), não pausa real.
+- **Prompt enxuto:** conversa simples com 8,7 mil caracteres (sem ferramentas) e pedido de ação com 23,6 mil (38 ferramentas).
+- Ferramentas na conversa real: `abrir_app` (Agenda), `tela_ler`, `tela_rolar`, `tela_tocar` (achou e tocou "OK" sozinho depois de ler a tela). Testes rápidos: todos passaram, menos "Cérebro (IA)".
+
+## Falhas
+1. **Groq no limite por minuto (429):** o plano grátis do `openai/gpt-oss-20b` aceita 8.000 tokens por minuto; um pedido com ferramentas pede ~7.200–8.000. Um turno por minuto no máximo → "Todos os cérebros falharam" (01:46:35).
+2. **Principal e reserva eram o mesmo Groq** (a chave do Gemini foi substituída, pois Meu Euno só tem um campo — pedido 51): a reserva não ajudou.
+3. **Teste "Cérebro (IA)" do Groq respondeu vazio** em 344 ms: o `gpt-oss` é um modelo que "raciocina" antes de responder; com o teste limitado a 16 tokens, o raciocínio gasta tudo e o texto sai vazio (hipótese forte; conferir).
+4. **Salvar da agenda:** no app Agenda da Xiaomi o botão chama **"OK"** (o Euno achou ao ler a tela); a lista do `agenda_criar` não tinha "OK" (tirado de propósito para não tocar em diálogos errados) → incluir "OK" só quando o app da frente for o de agenda.
+5. **Disse que agendou antes de confirmar** ("Agendei… tudo certinho") quando o resultado dizia `salvo=false`: viola a regra "nunca diga que fez antes do resultado".
+6. **Disse "não consigo"** navegar até o dia 15 e "deslizar para a direita" sem tentar: não existe ferramenta de **deslizar para os lados** (só rolar para cima/baixo); poderia ter lido a tela e tocado na data.
+7. "Abra minha agenda" foi atendido com `agenda_consultar` (leu os compromissos) em vez de abrir o app; só abriu quando o usuário repetiu.
+8. **Piper:** nenhuma voz baixada e nenhum evento de download no registro (fica em "baixando 0 MB") → falta registrar o estado do DownloadManager (pendente/pausado e motivo).
