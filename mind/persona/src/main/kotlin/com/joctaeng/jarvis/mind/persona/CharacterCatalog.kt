@@ -94,6 +94,12 @@ object CharacterCatalog {
             "Fale como um segundo eu do usuário: próximo e animado, usando o jeito e o vocabulário dele quando você os conhecer.",
             Gender.MALE, 0xFF17707A,
         ),
+        CharacterProfile(
+            "guardiao", "Guardião", "Protetor",
+            "Guerreiro de olhar firme, barba e capa azul: leal, calmo e protetor, sempre ao seu lado.",
+            "Fale com calma, firmeza e lealdade, como um protetor experiente; seja claro e encorajador.",
+            Gender.MALE, 0xFF2F6FE0,
+        ),
     )
 
     val default: CharacterProfile = all.first()

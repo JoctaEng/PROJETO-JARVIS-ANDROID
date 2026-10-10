@@ -34,6 +34,16 @@ object CharacterArt {
             Expression.PREOCUPADO to R.drawable.arte_luna_preocupado,
             Expression.DORMINDO to R.drawable.arte_luna_dormindo,
         ),
+        "guardiao" to mapOf(
+            Expression.NEUTRO to R.drawable.arte_guardiao_neutro,
+            Expression.FELIZ to R.drawable.arte_guardiao_feliz,
+            Expression.PENSATIVO to R.drawable.arte_guardiao_pensativo,
+            Expression.FALANDO to R.drawable.arte_guardiao_falando,
+            Expression.OUVINDO to R.drawable.arte_guardiao_ouvindo,
+            Expression.SURPRESO to R.drawable.arte_guardiao_surpreso,
+            Expression.PREOCUPADO to R.drawable.arte_guardiao_preocupado,
+            Expression.DORMINDO to R.drawable.arte_guardiao_dormindo,
+        ),
         "thor" to mapOf(
             Expression.NEUTRO to R.drawable.arte_thor_neutro,
             Expression.FELIZ to R.drawable.arte_thor_feliz,
@@ -55,6 +65,8 @@ object CharacterArt {
      */
     fun mouthBox(characterId: String): MouthBox? = when (characterId) {
         "jocta_casual" -> MouthBox(0.504f, 0.459f, 0.16f, 0.085f)
+        // Guardião (retrato em medalhão): boca aberta vem do quadro "surpreso" e encaixa nas outras expressões.
+        "guardiao" -> MouthBox(0.49f, 0.715f, 0.30f, 0.15f)
         else -> null
     }
 
@@ -66,7 +78,7 @@ object CharacterArt {
      * Personagens cujos quadros passam em `tools/arte/verificar_alinhamento.py` (mesma pose e escala).
      * Só eles recebem fusão entre expressões. Luna e Thor ficam fora até a arte ser regerada.
      */
-    fun isAligned(characterId: String): Boolean = characterId == "jocta_casual"
+    fun isAligned(characterId: String): Boolean = characterId == "jocta_casual" || characterId == "guardiao"
 
     /** Decodifica uma vez por processo; a troca de expressão (boca a cada ~110 ms) não volta a ler o arquivo. */
     @Synchronized

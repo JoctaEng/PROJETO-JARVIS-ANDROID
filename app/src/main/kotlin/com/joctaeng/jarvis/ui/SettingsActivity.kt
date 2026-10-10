@@ -434,6 +434,8 @@ class SettingsActivity : ComponentActivity() {
                 CharacterRow(profile, selected == profile.id) {
                     selected = profile.id
                     settings.characterId = profile.id
+                    // Personagem com arte 2D própria (ex.: Guardião): mostra ele, não o avatar 3D.
+                    if (settings.avatar3d && profile.id == "guardiao") settings.avatar3d = false
                     name = ""
                     settings.characterName = ""
                 }

@@ -138,11 +138,11 @@ class PersonaEngineTest {
 }
 
 class CharacterCatalogTest {
-    @Test fun twelveCharactersWithoutTheRobot() {
+    @Test fun charactersWithoutTheRobot() {
         assertEquals(
             listOf(
                 "Joca", "Luna", "Thor", "Nina", "Selene", "Rex", "Maya", "Kiko", "Astra",
-                "Joctã Estrategista", "Joctã Casual", "Joctã Jovem",
+                "Joctã Estrategista", "Joctã Casual", "Joctã Jovem", "Guardião",
             ),
             CharacterCatalog.all.map { it.defaultName },
         )
