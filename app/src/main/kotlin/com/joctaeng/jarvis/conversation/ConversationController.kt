@@ -173,6 +173,12 @@ class ConversationController(private val app: JarvisApp) {
                     }
                     null -> Unit
                 }
+                // Atalhos sem cérebro ("abra o Gmail", "tela inicial", "rola para baixo"): na hora e sempre iguais.
+                val quick = com.joctaeng.jarvis.mind.persona.QuickCommands.parse(clean)
+                if (quick != null && runQuick(quick, speak)) {
+                    if (speak) voice.awaitIdle()
+                    return@launch
+                }
                 val command = MemoryCommands.parse(clean)
                 if (command != null) handleMemory(command, speak) else respond(speak)
                 if (speak) voice.awaitIdle()
@@ -324,7 +330,8 @@ class ConversationController(private val app: JarvisApp) {
             ),
             compact = compact,
             // No cérebro local, o prompt precisa caber numa leitura rápida: ferramentas só quando o pedido sugere ação.
-            toolsSection = if (tools.isEmpty() || !toolsNeeded(compact)) "" else ToolProtocol.systemSection(tools),
+            toolsSection = if (tools.isEmpty() || !toolsNeeded(compact)) "" else ToolProtocol.systemSection(tools) +
+                (if (compact) "" else app.recipes.find(lastUser)?.let { "\n" + app.recipes.describe(it) }.orEmpty()),
             userBio = if (compact) settings.userBio.take(LOCAL_BIO_CHARS) else settings.userBio,
             summaries = if (compact) summaries.take(LOCAL_SUMMARY_CHARS) else summaries,
             selfSection = SelfKnowledge.section(
@@ -369,6 +376,8 @@ class ConversationController(private val app: JarvisApp) {
         // Um só aviso de progresso ("Agindo… 3 passos") em vez de uma linha por tentativa (pedido 65).
         var stepNoteId: Long? = null
         var steps = 0
+        // Passos que deram certo neste pedido: viram "caminho" para a próxima vez (memória de caminhos).
+        val okSteps = mutableListOf<com.joctaeng.jarvis.mind.memory.RecipeStep>()
 
         val generate: (List<ChatMessage>) -> Flow<LlmChunk> = { messages ->
             flow {
@@ -433,6 +442,7 @@ class ConversationController(private val app: JarvisApp) {
                     parser = StreamingEmotionParser()
                     // O detalhe de cada tentativa vai para o relatório, não para a conversa.
                     app.events.info("ferramentas", "${event.call.toolName}: ${describe(event.result).take(200)}")
+                    if (event.result is ToolResult.Success) okSteps += com.joctaeng.jarvis.mind.memory.RecipeStep(event.call.toolName, event.call.argumentsJson)
                 }
                 is AgentEvent.Error -> {
                     failure = event.message
@@ -489,7 +499,34 @@ class ConversationController(private val app: JarvisApp) {
         } else {
             edit(replyId) { it.copy(streaming = false) }
             if (failure != null) add(ChatEntry(nextId++, Role.SYSTEM, "Resposta interrompida: $failure", note = true))
+            else if (!settings.privateMode) runCatching { app.recipes.record(request, okSteps) }
         }
+    }
+
+    /**
+     * Executa um atalho direto pela ferramenta (com política, confirmação e registro, como qualquer ação).
+     * Se não der (app não achado, controle desligado), devolve false e o cérebro cuida do pedido normalmente.
+     */
+    private suspend fun runQuick(cmd: com.joctaeng.jarvis.mind.persona.QuickCommand, speak: Boolean): Boolean {
+        if (settings.autonomy == AutonomyLevel.OBSERVER) return false
+        val (tool, args, done) = when (cmd) {
+            is com.joctaeng.jarvis.mind.persona.QuickCommand.OpenApp -> Triple("abrir_app", org.json.JSONObject().put("nome", cmd.name), "Pronto, ${cmd.name} aberto.")
+            com.joctaeng.jarvis.mind.persona.QuickCommand.Home -> Triple("tela_navegar", org.json.JSONObject().put("acao", "inicio"), "Pronto, tela inicial.")
+            com.joctaeng.jarvis.mind.persona.QuickCommand.Back -> Triple("tela_navegar", org.json.JSONObject().put("acao", "voltar"), "Voltei.")
+            is com.joctaeng.jarvis.mind.persona.QuickCommand.Scroll -> Triple(
+                "tela_rolar",
+                org.json.JSONObject().put("direcao", when (cmd.direction) { "proximo" -> "direita"; "anterior" -> "esquerda"; else -> cmd.direction }),
+                "Pronto.",
+            )
+        }
+        val tools = app.toolbox.enabledTools()
+        if (tools.none { it.name == tool }) return false
+        val call = com.joctaeng.jarvis.core.model.ToolCall("atalho-${nextId}", tool, args.toString())
+        val result = app.toolbox.gateway(tools).execute(call, ToolContext(sessionId, "Atalho: $tool"), confirm = app.toolbox::confirm)
+        app.events.info("conversa", "atalho sem cérebro: $tool → ${describe(result).take(160)}")
+        if (result !is ToolResult.Success) return false
+        say(done, Emotion.HAPPY, speak)
+        return true
     }
 
     /** O que está ligado agora, para o Euno não negar recursos que tem (ex.: dizia que não podia ser chamado pelo nome). */
@@ -503,6 +540,9 @@ class ConversationController(private val app: JarvisApp) {
             add(if (com.joctaeng.jarvis.control.EunoAccessibilityService.instance != null) "controle do celular LIGADO: você pode ler a tela, VER o print da tela (tela_ver, entende onde fica cada coisa) e tocar (pelo nome ou no ponto), digitar, rolar até achar e navegar com as ferramentas tela_*; antes de agir você vai sozinho para o canto"
             else "controle do celular permitido, mas o serviço de acessibilidade ainda não está ligado no Android")
         } else add("controle do celular por acessibilidade ainda não está disponível neste APK de teste")
+        add(if (com.joctaeng.jarvis.control.EunoNotificationListener.isEnabled(app)) "acesso às notificações LIGADO: notificacoes_ler mostra o que chegou"
+            else "acesso às notificações desligado (o usuário liga em Meu Euno → Notificações e Gmail)")
+        add(if (settings.gmailConnected) "Gmail CONECTADO (só leitura): gmail_buscar e gmail_ler" else "Gmail ainda não conectado (Meu Euno → Notificações e Gmail → Conectar Gmail)")
         add("o botão Nova guarda um resumo da conversa e começa outra")
         add("guardar fatos na memória só com as ferramentas memoria_guardar/memoria_esquecer ou quando ele diz \"lembre que…\"")
     }

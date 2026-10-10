@@ -118,6 +118,7 @@ class EunoAccessibilityService : AccessibilityService() {
     }
 
     private suspend fun click(target: Entry): Outcome {
+        val before = signature()
         var node: AccessibilityNodeInfo? = target.node
         var hops = 0
         while (node != null && !node.isClickable && hops < 4) { node = node.parent; hops++ }
@@ -133,7 +134,9 @@ class EunoAccessibilityService : AccessibilityService() {
         }
         JarvisApp.from(this).events.info("controle", "toque em \"${target.ui.label.take(40)}\" ($how): ${if (ok) "feito" else "não aceito"}")
         if (ok) waitSettled()
-        return if (ok) Outcome.Done("toquei em \"${target.ui.label}\"") else Outcome.Failed("o app não aceitou o toque em \"${target.ui.label}\"; tente tela_ver e tela_tocar_ponto")
+        // Confere a ação: a tela mudou depois do toque? (pedido 65: não dizer "pronto" às cegas)
+        val changed = ok && signature() != before
+        return if (ok) Outcome.Done("toquei em \"${target.ui.label}\"" + if (changed) " (a tela mudou)" else " (a tela NÃO mudou: confira com tela_ver)") else Outcome.Failed("o app não aceitou o toque em \"${target.ui.label}\"; tente tela_ver e tela_tocar_ponto")
     }
 
     /**
@@ -211,6 +214,42 @@ class EunoAccessibilityService : AccessibilityService() {
         return Outcome.Failed("rolei $max vezes ($direction) e não achei \"$query\"")
     }
 
+    /**
+     * Pesquisa dentro do app que está na tela (Gmail, WhatsApp, YouTube, Play...): acha o campo ou a lupa de pesquisa,
+     * toca, escreve [query] e confirma com o "Enter" do teclado. Cada passo espera a tela assentar.
+     */
+    suspend fun searchInApp(query: String): Outcome {
+        val searchWords = listOf("pesquisar", "pesquisa", "buscar", "busca", "procurar", "search", "localizar")
+        fun isSearch(e: Entry): Boolean {
+            val l = ScreenText.normalize(e.ui.label + " " + (e.node.viewIdResourceName ?: ""))
+            return searchWords.any { it in l }
+        }
+        var entries = collect()
+        var field = entries.firstOrNull { it.ui.editable && !it.ui.password && isSearch(it) }
+        if (field == null) {
+            val button = entries.firstOrNull { (it.ui.clickable || it.node.isClickable) && isSearch(it) }
+                ?: entries.firstOrNull { e -> e.node.viewIdResourceName?.contains("search", ignoreCase = true) == true }
+                ?: return Outcome.Failed("não achei a pesquisa (lupa ou campo) neste app; use tela_ver para localizar e tela_tocar_ponto")
+            val r = click(button)
+            if (r is Outcome.Failed) return r
+            entries = collect()
+            field = entries.firstOrNull { it.node.isFocused && it.ui.editable } ?: entries.firstOrNull { it.ui.editable && !it.ui.password }
+                ?: return Outcome.Failed("toquei na pesquisa, mas não apareceu campo para escrever")
+        } else if (!field.node.isFocused) {
+            field.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            waitSettled(maxMs = 1_200)
+        }
+        val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, query) }
+        if (!field.node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return Outcome.Failed("o campo de pesquisa não aceitou o texto")
+        val before = signature()
+        val enter = AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id
+        val sent = field.node.performAction(enter)
+        waitSettled(maxMs = 3_000)
+        JarvisApp.from(this).events.info("controle", "pesquisa no app (${query.length} car.): ${if (sent) "enviada" else "escrita, sem Enter"}")
+        return if (sent) Outcome.Done("pesquisei \"$query\"" + if (signature() != before) " (resultados na tela; use tela_ler)" else " (a tela não mudou: confira com tela_ver)")
+        else Outcome.Done("escrevi \"$query\" na pesquisa, mas o teclado não confirmou; toque na sugestão ou no botão de pesquisar (tela_ler/tela_tocar)")
+    }
+
     /** Toque com o dedo virtual num ponto da tela (pixels). */
     suspend fun tapAt(x: Float, y: Float): Boolean {
         pace()
@@ -224,10 +263,12 @@ class EunoAccessibilityService : AccessibilityService() {
     suspend fun tapPercent(xPct: Double, yPct: Double): Outcome {
         val m = resources.displayMetrics
         val (x, y) = HumanPace.pointFromPercent(xPct, yPct, m.widthPixels, m.heightPixels)
+        val before = signature()
         val ok = tapAt(x, y)
         JarvisApp.from(this).events.info("controle", "toque no ponto (${xPct.toInt()}%, ${yPct.toInt()}%): ${if (ok) "feito" else "não aceito"}")
         if (ok) waitSettled()
-        return if (ok) Outcome.Done("toquei no ponto (${xPct.toInt()}%, ${yPct.toInt()}%)") else Outcome.Failed("o Android não aceitou o toque")
+        val changed = ok && signature() != before
+        return if (ok) Outcome.Done("toquei no ponto (${xPct.toInt()}%, ${yPct.toInt()}%)" + if (changed) " (a tela mudou)" else " (a tela NÃO mudou)") else Outcome.Failed("o Android não aceitou o toque")
     }
 
     private var lastGestureAt = 0L

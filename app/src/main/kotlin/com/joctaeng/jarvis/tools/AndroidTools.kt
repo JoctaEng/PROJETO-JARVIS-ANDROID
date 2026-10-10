@@ -43,7 +43,7 @@ object AndroidTools {
             OpenApp(app), ListApps(app), PhoneStatus(app), SetAlarm(app), SetTimer(app),
             Flashlight(app), ShareText(app), OpenLink(app), WebSearch(app), OpenMap(app), AgendaQuery(app), ContactsSearch(app),
             MemorySave(app), MemoryForget(app), MemorySearch(app), WhatsAppMessage(app), AgendaCreate(app), DaySummary(app),
-        ) + ScreenTools.all(app)
+        ) + BackgroundTools.all(app) + ScreenTools.all(app)
     }
 }
 
@@ -404,6 +404,7 @@ internal fun readAgenda(context: Context, from: Long, to: Long): List<AgendaEven
         CalendarContract.Instances.ALL_DAY,
         CalendarContract.Instances.EVENT_LOCATION,
         CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
+        CalendarContract.Instances.EVENT_ID,
     )
     val out = mutableListOf<AgendaEvent>()
     context.contentResolver.query(uri, projection, null, null, "${CalendarContract.Instances.BEGIN} ASC")?.use { c ->
@@ -415,6 +416,7 @@ internal fun readAgenda(context: Context, from: Long, to: Long): List<AgendaEven
                 allDay = c.getInt(3) == 1,
                 location = c.getString(4)?.ifBlank { null },
                 calendar = c.getString(5),
+                id = c.getLong(6),
             )
         }
     }
@@ -479,7 +481,8 @@ private class WhatsAppMessage(context: Context) : AndroidTool(
 /** Abre a tela de novo compromisso da agenda já preenchida; o usuário toca em salvar. */
 private class AgendaCreate(context: Context) : AndroidTool(
     context, "agenda_criar",
-    "Cria um compromisso na agenda: abre a agenda com título, data e hora preenchidos para o usuário salvar. " +
+    "Cria um compromisso PELA TELA: abre o app da agenda preenchido e toca em Salvar (use quando o usuário quiser ver; " +
+        "para criar em segundo plano, sem abrir nada, use agenda_salvar). " +
         "Descubra a data/hora absolutas a partir de 'Agora' do prompt (ex.: amanhã às 15h → data de amanhã).",
     RiskLevel.WRITE_REVERSIBLE,
     """"titulo":{"type":"string"},"inicio":{"type":"string","description":"AAAA-MM-DD HH:mm (hora local)"},"duracao_min":{"type":"integer","minimum":5,"maximum":1440},"local":{"type":"string"}""",

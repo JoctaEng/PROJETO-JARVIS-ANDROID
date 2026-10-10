@@ -73,6 +73,8 @@ dependencies {
     // Voz offline (Kokoro): AAR oficial do sherpa-onnx v1.13.8, baixado pelo CI dos releases do GitHub (não está no Maven).
     implementation(files("libs/sherpa-onnx-1.13.8.aar"))
     implementation(libs.commons.compress)
+    // v0.26: entrar com a conta Google para ler o Gmail (só leitura), pedido 72.
+    implementation(libs.play.services.auth)
     implementation(project(":system:resources"))
     implementation(project(":presence:placement"))
     implementation(project(":presence:expression"))

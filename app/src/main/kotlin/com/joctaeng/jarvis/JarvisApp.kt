@@ -44,6 +44,9 @@ class JarvisApp : Application() {
     val voiceSession: com.joctaeng.jarvis.voice.VoiceSession by lazy { com.joctaeng.jarvis.voice.VoiceSession(this) }
     val toolbox: Toolbox by lazy { Toolbox(this) }
 
+    /** Caminhos que deram certo em cada app (memória de caminhos, v0.26). */
+    val recipes: com.joctaeng.jarvis.mind.memory.RecipeBook by lazy { com.joctaeng.jarvis.mind.memory.RecipeBook(File(filesDir, "memory/caminhos.json")) }
+
     override fun onCreate() {
         super.onCreate()
         diagnostics = Diagnostics(this)

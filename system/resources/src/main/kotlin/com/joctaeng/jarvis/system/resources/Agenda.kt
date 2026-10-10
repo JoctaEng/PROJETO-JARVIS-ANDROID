@@ -16,6 +16,8 @@ data class AgendaEvent(
     val allDay: Boolean,
     val location: String? = null,
     val calendar: String? = null,
+    /** Id do evento no Android (para editar/apagar sem abrir o app); 0 = desconhecido. */
+    val id: Long = 0L,
 )
 
 enum class AgendaPeriod(val label: String, val days: Int, val startsTomorrow: Boolean = false) {
@@ -71,6 +73,7 @@ object AgendaFormatter {
                 }
                 append("- $whenText ${e.title}")
                 e.location?.takeIf { it.isNotBlank() }?.let { append(" (local: $it)") }
+                if (e.id > 0) append(" [id ${e.id}]")
                 appendLine()
             }
             if (sorted.size > shown.size) appendLine("…e mais ${sorted.size - shown.size} compromissos.")

@@ -110,6 +110,7 @@ class SettingsActivity : ComponentActivity() {
                         androidx.compose.runtime.key(refresh) { ConversationSection() }
                         SummariesSection()
                         PhoneControlSection()
+                        ConnectionsSection()
                         CharacterSection()
                         ProfileSection()
                         BrainSection()
@@ -424,6 +425,95 @@ class SettingsActivity : ComponentActivity() {
             }
         }
     }
+
+    /** v0.26: notificações e Gmail (as "mãos invisíveis" que precisam de permissão do usuário). */
+    @Composable
+    private fun ConnectionsSection() {
+        var notif by remember { mutableStateOf(com.joctaeng.jarvis.control.EunoNotificationListener.isEnabled(this)) }
+        var gmail by remember { mutableStateOf(settings.gmailConnected) }
+        var gmailStatus by remember { mutableStateOf("") }
+        var showSetup by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                notif = com.joctaeng.jarvis.control.EunoNotificationListener.isEnabled(this@SettingsActivity)
+                delay(1_500)
+            }
+        }
+        val authClient = remember { com.google.android.gms.auth.api.identity.Identity.getAuthorizationClient(this) }
+        val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+            val ok = runCatching { authClient.getAuthorizationResultFromIntent(res.data).accessToken != null }.getOrDefault(false)
+            gmail = ok
+            settings.gmailConnected = ok
+            gmailStatus = if (ok) "Gmail conectado (só leitura)." else "Não conectou. Veja o passo a passo abaixo."
+            app.events.info("gmail", "conexão pela tela de consentimento: ${if (ok) "ok" else "não"}")
+        }
+        Section("Notificações e Gmail") {
+            Hint("Com isso ${settings.displayName} faz em segundo plano, sem abrir nada na tela: lê as notificações que chegaram quando você pergunta (\"o que chegou?\") e procura/lê seus e-mails. Ele nunca responde nem envia nada sozinho.")
+            Text(
+                if (notif) "Acesso às notificações: LIGADO" else "Acesso às notificações: desligado",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (notif) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+            if (!notif) {
+                Button(onClick = {
+                    runCatching { startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+                }) { Text("Ligar acesso às notificações") }
+            }
+            Text(
+                if (gmail) "Gmail: conectado (só leitura)" else "Gmail: não conectado",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (gmail) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    gmailStatus = "Abrindo a conta Google…"
+                    authClient.authorize(com.joctaeng.jarvis.tools.GmailAuth.request())
+                        .addOnSuccessListener { r ->
+                            val pi = r.pendingIntent
+                            if (r.hasResolution() && pi != null) {
+                                consent.launch(androidx.activity.result.IntentSenderRequest.Builder(pi.intentSender).build())
+                            } else {
+                                gmail = r.accessToken != null
+                                settings.gmailConnected = gmail
+                                gmailStatus = if (gmail) "Gmail conectado (só leitura)." else "Não conectou."
+                            }
+                        }
+                        .addOnFailureListener { e ->
+                            gmailStatus = "O Google recusou: ${e.message}. Falta registrar o Euno no Google Cloud (passo a passo abaixo)."
+                            showSetup = true
+                            app.events.warn("gmail", "falha ao conectar: ${e.message}")
+                        }
+                }) { Text(if (gmail) "Reconectar Gmail" else "Conectar Gmail") }
+                if (gmail) OutlinedButton(onClick = { gmail = false; settings.gmailConnected = false; gmailStatus = "Desligado no Euno. Para revogar de vez: myaccount.google.com → Segurança → Apps de terceiros." }) { Text("Desligar") }
+            }
+            if (gmailStatus.isNotEmpty()) Hint(gmailStatus)
+            TextButton(onClick = { showSetup = !showSetup }) { Text(if (showSetup) "Esconder passo a passo do Google" else "Passo a passo do Google (uma vez só)") }
+            if (showSetup) {
+                val sha1 = remember { signingSha1() }
+                Hint(
+                    "O Google só libera o Gmail para apps registrados. Faça uma vez, no computador:\n" +
+                        "1) console.cloud.google.com → crie um projeto (ex.: Euno).\n" +
+                        "2) APIs e serviços → Biblioteca → ative a Gmail API.\n" +
+                        "3) Tela de permissão OAuth → Externo → modo Teste → em Usuários de teste, adicione o seu e-mail.\n" +
+                        "4) Credenciais → Criar credenciais → ID do cliente OAuth → Android:\n" +
+                        "   Nome do pacote: $packageName\n   SHA-1: $sha1\n" +
+                        "5) Volte aqui e toque em Conectar Gmail.",
+                )
+                OutlinedButton(onClick = {
+                    val cm = getSystemService(android.content.ClipboardManager::class.java)
+                    cm?.setPrimaryClip(android.content.ClipData.newPlainText("SHA-1", sha1))
+                    gmailStatus = "SHA-1 copiado."
+                }) { Text("Copiar SHA-1") }
+            }
+        }
+    }
+
+    /** Impressão digital (SHA-1) da assinatura deste APK, pedida pelo Google para liberar o Gmail. */
+    private fun signingSha1(): String = runCatching {
+        val info = packageManager.getPackageInfo(packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+        val cert = info.signingInfo?.apkContentsSigners?.firstOrNull() ?: return@runCatching "?"
+        java.security.MessageDigest.getInstance("SHA-1").digest(cert.toByteArray()).joinToString(":") { "%02X".format(it) }
+    }.getOrDefault("?")
 
     @Composable
     private fun CharacterSection() {

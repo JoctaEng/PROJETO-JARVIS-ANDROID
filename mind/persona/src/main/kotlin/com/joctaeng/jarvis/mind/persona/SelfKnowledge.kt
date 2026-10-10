@@ -27,7 +27,7 @@ object SelfKnowledge {
         "reconhecer QUEM está falando (qualquer voz que diga meu nome me chama)",
         "agir sozinho em botões de enviar, pagar ou apagar (sempre peço sua confirmação)",
         "encerrar (matar) outros apps — para sair de um app, vá para a tela inicial com tela_navegar \"inicio\"",
-        "ler e-mails, arquivos e notificações POR DENTRO, sem abrir o app (isso não impede abrir o Gmail ou o app de arquivos e ler/agir na tela)",
+        "enviar e-mail ou mensagem em segundo plano (enviar é sempre pela tela, com confirmação do usuário)",
         "corpo 3D de verdade, de costas ou em outras poses",
     )
 

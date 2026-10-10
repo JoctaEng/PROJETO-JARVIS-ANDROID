@@ -14,8 +14,10 @@ cameraX = "1.4.2"
 litertlm = "0.17.1"
 junit = "4.13.2"
 serializationJson = "1.7.3"
+playServicesAuth = "21.3.0"
 
 [libraries]
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 plugin-android = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }
 plugin-kotlin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }

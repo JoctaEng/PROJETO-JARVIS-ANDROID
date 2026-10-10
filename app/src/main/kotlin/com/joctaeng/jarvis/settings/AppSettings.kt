@@ -129,6 +129,9 @@ class AppSettings(context: Context) {
     /** Controle do celular por acessibilidade (ler a tela, tocar, digitar). Além desta chave, o usuário liga o serviço no Android. */
     var phoneControl by boolean("phoneControl", false)
 
+    /** O usuário conectou a conta Google (Gmail só leitura) em Meu Euno. */
+    var gmailConnected by boolean("gmailConnected", false)
+
     /** Como estavam as chaves antes de "Habilitar tudo para teste completo" (para restaurar). Vazio = nada guardado. */
     var testSnapshot by string("testSnapshot", "")
     var continuousVoice by boolean("continuousVoice", true)

@@ -19,7 +19,7 @@ private const val ACTING_SETTLE_MS = 450L
 object ScreenTools {
     fun all(context: Context): List<Tool> {
         val app = context.applicationContext
-        return listOf(ScreenRead(app), ScreenLook(app), ScreenTap(app), ScreenTapPoint(app), ScreenType(app), ScreenScroll(app), ScreenSwipe(app), ScreenNav(app))
+        return listOf(ScreenRead(app), ScreenLook(app), ScreenTap(app), ScreenTapPoint(app), ScreenType(app), ScreenScroll(app), ScreenSwipe(app), ScreenNav(app), ScreenSearch(app))
     }
 }
 
@@ -49,6 +49,7 @@ private abstract class ScreenTool(
                 com.joctaeng.jarvis.control.AccessibilityLink.open(this.context)
             }
             app.events.warn("controle", "tela_*: serviço ${if (EunoAccessibilityService.isEnabled(this.context)) "ligado no Android mas NÃO conectado ao Euno" else "desligado no Android"}")
+            ControlAlert.post(this.context, EunoAccessibilityService.isEnabled(this.context))
             return ToolResult.Failure(
                 if (EunoAccessibilityService.isEnabled(this.context)) {
                     "O serviço de acessibilidade do Euno está LIGADO no Android, mas não está conectado ao app agora (acontece depois de fechar o Euno por completo ou de atualizá-lo). " +
@@ -208,6 +209,20 @@ private class ScreenSwipe(context: Context) : ScreenTool(
     }
 }
 
+private class ScreenSearch(context: Context) : ScreenTool(
+    context, "tela_pesquisar",
+    "Pesquisa DENTRO do app que está aberto na tela (Gmail, WhatsApp, YouTube, Play...): acha a lupa/campo, escreve e confirma. " +
+        "Abra o app antes (abrir_app). Depois use tela_ler para ver os resultados.",
+    RiskLevel.WRITE_REVERSIBLE,
+    """"texto":{"type":"string","description":"o que pesquisar"}""", listOf("texto"),
+) {
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult {
+        val q = listOf("texto", "consulta", "busca", "query").firstNotNullOfOrNull { args.optString(it).takeIf { v -> v.isNotBlank() } }
+            ?: return ToolResult.Failure("informe o texto da pesquisa")
+        return result(service.searchInApp(q))
+    }
+}
+
 private class ScreenNav(context: Context) : ScreenTool(
     context, "tela_navegar",
     "Navegação do Android: voltar, ir para a tela inicial ('inicio' — use para 'sai do app', 'volta para a tela inicial', 'fecha o app'), " +
@@ -219,5 +234,34 @@ private class ScreenNav(context: Context) : ScreenTool(
         val o = service.system(args.optString("acao"))
         if (o is Outcome.Done) service.waitSettled(maxMs = 1_500)
         return result(o)
+    }
+}
+
+/**
+ * Aviso na barra de notificações quando o controle do celular cai (pedido 65/72): antes ele só falhava calado.
+ * Tocar abre direto a página de acessibilidade do Euno.
+ */
+internal object ControlAlert {
+    private const val CHANNEL = "controle"
+    private const val ID = 4207
+
+    fun post(context: Context, enabledButDisconnected: Boolean) {
+        val nm = context.getSystemService(android.app.NotificationManager::class.java) ?: return
+        nm.createNotificationChannel(android.app.NotificationChannel(CHANNEL, "Controle do celular", android.app.NotificationManager.IMPORTANCE_HIGH))
+        val open = android.app.PendingIntent.getActivity(
+            context, ID, Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val text = if (enabledButDisconnected) "O Android desligou a ligação do Euno com a tela. Toque, desligue e ligue \"Euno - controle do celular\"."
+        else "O controle do celular está desligado. Toque e ligue \"Euno - controle do celular\"."
+        val n = androidx.core.app.NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(com.joctaeng.jarvis.R.drawable.ic_jarvis)
+            .setContentTitle("Euno sem controle da tela")
+            .setContentText(text)
+            .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        runCatching { nm.notify(ID, n) }
     }
 }

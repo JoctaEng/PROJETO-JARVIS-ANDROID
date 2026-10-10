@@ -21,7 +21,7 @@ class SelfKnowledgeTest {
         assertTrue("QUALQUER app instalado" in s && "tela_*" in s)
         assertTrue("Você é a Clara" in s && "Seu nome é Clara" in s)
         // Não pode mais dizer que e-mail "não existe" a ponto de recusar abrir o Gmail.
-        assertTrue("isso não impede abrir o Gmail" in s)
+        assertTrue("e-mail, arquivos" !in s)
     }
 
     @Test fun compactOmitsRoadmapAndNoToolsIsHonest() {
