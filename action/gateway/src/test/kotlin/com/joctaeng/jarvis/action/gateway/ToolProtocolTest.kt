@@ -99,3 +99,17 @@ class ToolProtocolTest {
         override suspend fun execute(argumentsJson: String, context: ToolContext) = ToolResult.Success("{\"ok\":true}")
     }
 }
+
+class ToolProtocolParseVariantsTest {
+    @Test fun camposSoltosAoLadoDoNome() =
+        assertEquals("""{"nome":"Agenda"}""", ToolProtocol.parseCall("""{"name":"abrir_app","nome":"Agenda"}""", "1")!!.argumentsJson)
+
+    @Test fun blocoArgs() =
+        assertEquals("""{"nome":"Agenda"}""", ToolProtocol.parseCall("""{"name":"abrir_app","args":{"nome":"Agenda"}}""", "1")!!.argumentsJson)
+
+    @Test fun formatoFunction() {
+        val c = ToolProtocol.parseCall("""{"type":"function","function":{"name":"abrir_app","arguments":"{\"nome\":\"Agenda\"}"}}""", "1")!!
+        assertEquals("abrir_app", c.toolName)
+        assertEquals("""{"nome":"Agenda"}""", c.argumentsJson)
+    }
+}

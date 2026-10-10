@@ -37,7 +37,7 @@ class WakeWordRunner(
     private var cycles = 0
     private var errors = 0
 
-    private val busy = combine(OverlayBus.sessionActive, OverlayBus.listening, app.voice.speaking) { a, b, c -> a || b || c }
+    private val busy = combine(OverlayBus.sessionActive, OverlayBus.listening, app.voice.speaking, OverlayBus.voiceSession) { a, b, c, d -> a || b || c || d }
 
     fun start() {
         if (job != null) return
@@ -90,7 +90,7 @@ class WakeWordRunner(
     private fun canListen(): Boolean {
         if (SystemClock.elapsedRealtime() < pausedUntil) return false
         val power = context.getSystemService(PowerManager::class.java)
-        return power.isInteractive && !OverlayBus.sessionActive.value && !OverlayBus.listening.value && !app.voice.speaking.value
+        return power.isInteractive && !OverlayBus.sessionActive.value && !OverlayBus.voiceSession.value && !OverlayBus.listening.value && !app.voice.speaking.value
     }
 
     /** Uma escuta curta, cancelada assim que a conversa precisar do microfone. Texto ouvido, ou null. */

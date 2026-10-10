@@ -24,6 +24,12 @@ object OverlayBus {
      */
     val acting = MutableStateFlow(false)
 
+    /** Conversa por voz ligada (VoiceSession), mesmo sem a tela de conversa aberta. */
+    val voiceSession = MutableStateFlow(false)
+
+    /** A tela de conversa está na frente (então o balão de legenda não precisa aparecer). */
+    val chatVisible = MutableStateFlow(false)
+
     /** O usuário está falando (microfone aberto). */
     val listening = MutableStateFlow(false)
 

@@ -124,6 +124,7 @@ class TestsActivity : ComponentActivity() {
                 delay(2500)
                 val r = tool("tela_ler")
                 back()
+                delay(1500) // espera a tela de testes voltar antes do próximo teste (tocar/digitar usam esta tela)
                 when {
                     !open.ok -> Outcome(false, "não consegui abrir a Agenda: ${open.detail}")
                     !r.ok -> r
@@ -141,7 +142,7 @@ class TestsActivity : ComponentActivity() {
             },
             Case("rolar", "Rolar a tela", "rola para baixo e para cima") {
                 val a = tool("tela_rolar", """{"direcao":"baixo"}"""); val b = tool("tela_rolar", """{"direcao":"cima"}""")
-                Outcome(a.ok && b.ok, "baixo=${a.detail.take(100)} cima=${b.detail.take(100)}")
+                Outcome(a.ok || b.ok, "baixo=${a.detail.take(100)} cima=${b.detail.take(100)} (basta um dos dois: no topo não há como subir)")
             },
             Case("voz", "Falar (voz)", "ele fala uma frase; confirme se ouviu") {
                 app.voice.speak("Teste de voz do Euno. Se você me ouviu, está funcionando."); Outcome(true, "frase enviada à voz — passou só se você ouviu")

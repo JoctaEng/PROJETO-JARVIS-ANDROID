@@ -39,6 +39,7 @@ class JarvisApp : Application() {
     val voice: VoiceOutput by lazy { VoiceOutput(this, settings, events) { secrets.get(SecretStore.CLOUD_API_KEY) }.also { it.start() } }
     val conversation: ConversationController by lazy { ConversationController(this) }
     val transcripts: com.joctaeng.jarvis.system.resources.TranscriptStore by lazy { com.joctaeng.jarvis.system.resources.TranscriptStore(File(filesDir, "conversas")) }
+    val voiceSession: com.joctaeng.jarvis.voice.VoiceSession by lazy { com.joctaeng.jarvis.voice.VoiceSession(this) }
     val toolbox: Toolbox by lazy { Toolbox(this) }
 
     override fun onCreate() {

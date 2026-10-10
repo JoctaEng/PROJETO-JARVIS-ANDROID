@@ -77,6 +77,9 @@ class EunoAccessibilityService : AccessibilityService() {
         return out
     }
 
+    /** Pacote do app que está na frente (nunca o Euno), ou null. */
+    fun foregroundPackage(): String? = targetRoot()?.packageName?.toString()
+
     /** O que está na tela agora, em texto (sem senhas), e o app que está na frente. */
     fun readScreen(): String {
         val root = targetRoot()

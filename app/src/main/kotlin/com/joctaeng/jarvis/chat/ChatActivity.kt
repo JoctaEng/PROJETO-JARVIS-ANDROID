@@ -2,7 +2,6 @@ package com.joctaeng.jarvis.chat
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -52,7 +51,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -63,11 +61,9 @@ import com.joctaeng.jarvis.character.CharacterView
 import com.joctaeng.jarvis.character.ComposeCharacterRenderer
 import com.joctaeng.jarvis.conversation.ChatEntry
 import com.joctaeng.jarvis.core.model.Role
-import com.joctaeng.jarvis.mind.persona.VoiceCommands
 import com.joctaeng.jarvis.overlay.OverlayBus
 import com.joctaeng.jarvis.ui.JarvisTheme
 import com.joctaeng.jarvis.ui.SettingsActivity
-import com.joctaeng.jarvis.voice.SpeechListener
 import kotlinx.coroutines.launch
 
 /**
@@ -78,188 +74,81 @@ import kotlinx.coroutines.launch
 class ChatActivity : ComponentActivity() {
     private val app get() = JarvisApp.from(this)
     private val renderer = ComposeCharacterRenderer()
-    private lateinit var listener: SpeechListener
-    private lateinit var bargeListener: SpeechListener
-    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val bargeOn get() = app.settings.bargeIn
+    private val session get() = app.voiceSession
     private var partial by mutableStateOf("")
     private var status by mutableStateOf("")
-    private var voiceMode by mutableStateOf(false)
+
+    /** Conversa por voz: mora na VoiceSession (continua ouvindo mesmo quando esta tela sai da frente). */
+    private var voiceMode: Boolean
+        get() = session.active.value
+        set(on) { if (on) session.begin() else session.end() }
 
     /** Legenda: janela pequena no pé da tela, sem bloquear o app de trás. "Expandir" volta ao chat completo. */
     private var captionOnly by mutableStateOf(false)
 
     private val micPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) startListening() else status = "Sem permissão de microfone: use o teclado."
+            if (granted) startListening(beginSession = true) else status = "Sem permissão de microfone: use o teclado."
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        listener = SpeechListener(this, events = app.events, muteBeep = { app.settings.muteMicBeep }, priority = 2)
-        bargeListener = SpeechListener(this, events = app.events, muteBeep = { app.settings.muteMicBeep }, priority = 1).also { it.graceMs = 0L }
+        session.chatVisible = true
+        lifecycleScope.launch { session.partial.collect { partial = it } }
+        lifecycleScope.launch { session.status.collect { status = it } }
         app.conversation.preloadLocalModel()
         OverlayBus.sessionActive.value = true
         CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking)
         lifecycleScope.launch { app.settings.version.collect { renderer.applyProfile(app.settings.character) } }
-        voiceMode = app.settings.listenOnOpen && intent.getBooleanExtra(EXTRA_FROM_TAP, false)
+        val startVoice = app.settings.listenOnOpen && intent.getBooleanExtra(EXTRA_FROM_TAP, false)
         setCaption(app.settings.captionMode && intent.getBooleanExtra(EXTRA_FROM_TAP, false))
 
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                app.conversation.turnFinished.collect {
-                    if (voiceMode && app.settings.continuousVoice) startListening()
-                }
-            }
-        }
-        // Ouvir comandos enquanto ele fala ("pera aí", "tchau"...): liga com a opção marcada em Ajustes → Conversa.
-        lifecycleScope.launch {
-            app.voice.speaking.collect { speaking ->
-                if (speaking && bargeOn) startBarge() else stopBarge()
-                app.events.info("escuta", "falando=$speaking; ouvir comandos ao falar=${if (bargeOn) "ligado" else "desligado"}")
-            }
-        }
-        // "Tchau": encerra a conversa por voz e fecha a janela; o personagem se recolhe.
-        lifecycleScope.launch {
-            OverlayBus.dismissRequests.collect {
-                voiceMode = false
-                stopListening()
-                finish()
-            }
-        }
-        // "Para de ouvir" / "encerrar": a conversa por voz acaba, o personagem fica.
-        lifecycleScope.launch {
-            OverlayBus.stopListeningRequests.collect {
-                voiceMode = false
-                stopListening()
-            }
-        }
+        // "Tchau": a sessão de voz encerra sozinha; aqui só fecha a janela (o personagem se recolhe).
+        lifecycleScope.launch { OverlayBus.dismissRequests.collect { finish() } }
         setContent { JarvisTheme { ChatSheet() } }
         val wakeText = intent.getStringExtra(EXTRA_WAKE_TEXT).orEmpty()
         if (wakeText.isNotBlank()) {
-            voiceMode = true
+            session.begin()
+            session.stopListening() // responde primeiro; volta a ouvir ao fim da resposta
             app.conversation.send(wakeText, speak = true)
-        } else if (voiceMode) {
-            startListening()
+        } else if (startVoice && !session.active.value) {
+            startListening(beginSession = true)
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        session.chatVisible = true
+    }
+
     override fun onStop() {
-        stopListening()
-        stopBarge()
+        // Com a conversa por voz ligada, continua ouvindo mesmo com outro app na frente (antes parava aqui).
+        session.chatVisible = false
+        if (!session.active.value) session.stopListening()
         super.onStop()
+    }
+
+    /** Fechar a conversa pelo botão encerra também a conversa por voz. */
+    private fun closeChat() {
+        session.end()
+        finish()
     }
 
     override fun onDestroy() {
         OverlayBus.sessionActive.value = false
-        OverlayBus.listening.value = false
+        if (!session.active.value) OverlayBus.listening.value = false
         super.onDestroy()
     }
 
-    /** Escuta curta enquanto ele fala: só comandos valem (sem fone, o eco da própria voz dele não vira mensagem). */
-    private fun startBarge() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
-        fun again(delay: Long) {
-            if (app.voice.speaking.value && bargeOn) mainHandler.postDelayed({ startBarge() }, delay)
-        }
-        app.events.info("escuta", "ouvindo comandos enquanto ele fala")
-        status = "Ouvindo comandos…"
-        bargeListener.start { event ->
-            when (event) {
-                is SpeechListener.Event.Final -> {
-                    app.events.info("escuta", "ouvido durante a fala: ${event.text.length} caracteres")
-                    handleBarge(event.text)
-                    again(250)
-                }
-                is SpeechListener.Event.Failed -> {
-                    app.events.info("escuta", "escuta de comandos falhou: ${event.message}")
-                    again(700)
-                }
-                else -> Unit
-            }
-        }
-    }
-
-    private fun stopBarge() {
-        if (status == "Ouvindo comandos…") status = ""
-        mainHandler.removeCallbacksAndMessages(null)
-        bargeListener.stop()
-    }
-
-    private fun handleBarge(text: String) {
-        val isCommand = VoiceCommands.parse(text) != null
-        if (!isCommand) {
-            if (!headsetConnected()) return // alto-falante: o que ele ouviu pode ser a própria voz dele
-            val spoken = flat(app.conversation.entries.value.lastOrNull { it.role == Role.ASSISTANT }?.text.orEmpty())
-            val heard = flat(text)
-            if (heard.length >= 4 && spoken.contains(heard)) return // eco
-        }
-        app.events.info("escuta", "fala durante a resposta: ${if (isCommand) "comando" else "mensagem"} (${text.length} caracteres)")
-        app.conversation.send(text, speak = app.settings.speakReplies)
-    }
-
-    private fun flat(text: String): String =
-        java.text.Normalizer.normalize(text.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").replace(Regex("[^a-z0-9 ]"), " ").replace(Regex(" +"), " ").trim()
-
-    private fun headsetConnected(): Boolean {
-        val audio = getSystemService(android.media.AudioManager::class.java) ?: return false
-        val types = setOf(
-            android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET, android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-            android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-            android.media.AudioDeviceInfo.TYPE_USB_HEADSET, android.media.AudioDeviceInfo.TYPE_BLE_HEADSET,
-        )
-        return audio.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).any { it.type in types }
-    }
-
-    private var listenRetries = 0
-
-    private fun startListening(fromRetry: Boolean = false) {
-        if (!fromRetry) listenRetries = 0
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+    private fun startListening(beginSession: Boolean = false) {
+        if (!session.micGranted()) {
             micPermission.launch(Manifest.permission.RECORD_AUDIO)
             return
         }
-        listener.graceMs = app.settings.listenPatienceMs.toLong()
-        app.voice.stop()
-        partial = ""
-        status = "Ouvindo…"
-        OverlayBus.listening.value = true
-        listener.start { event ->
-            when (event) {
-                is SpeechListener.Event.Partial -> partial = event.text
-                is SpeechListener.Event.Level -> Unit
-                is SpeechListener.Event.Final -> {
-                    listenRetries = 0
-                    OverlayBus.listening.value = false
-                    partial = ""
-                    status = ""
-                    app.conversation.send(event.text, speak = app.settings.speakReplies)
-                }
-                is SpeechListener.Event.Failed -> {
-                    OverlayBus.listening.value = false
-                    partial = ""
-                    if (event.transient && voiceMode && listenRetries < MAX_LISTEN_RETRIES) {
-                        // Falha passageira do serviço de voz (ocupado, desconectado): tenta de novo sozinho.
-                        listenRetries++
-                        status = "Reconectando a escuta…"
-                        app.events.warn("escuta", "tentando de novo sozinho (${listenRetries}ª vez) após ${SpeechListener.name(event.code)}")
-                        mainHandler.postDelayed({ if (voiceMode && !app.voice.speaking.value) startListening(fromRetry = true) }, 600L * listenRetries)
-                        return@start
-                    }
-                    if (event.transient) app.events.error("escuta", "desisti após $listenRetries tentativas automáticas; é preciso tocar em Falar")
-                    status = if (event.silent) "" else event.message
-                    if (event.silent) voiceMode = false
-                }
-            }
-        }
+        if (beginSession) session.begin() else session.startListening()
     }
 
-    private fun stopListening() {
-        listener.stop()
-        OverlayBus.listening.value = false
-        partial = ""
-        if (status == "Ouvindo…") status = ""
-    }
+    private fun stopListening() = session.stopListening()
 
     private fun setCaption(on: Boolean) {
         captionOnly = on
@@ -337,7 +226,7 @@ class ChatActivity : ComponentActivity() {
                     )
                     if (busy || speaking) TextButton(onClick = { app.conversation.cancel() }) { Text("Parar") }
                     TextButton(onClick = { setCaption(false) }) { Text("Expandir") }
-                    TextButton(onClick = ::finish) { Text("Fechar") }
+                    TextButton(onClick = ::closeChat) { Text("Fechar") }
                 }
                 pendingAction?.let { ConfirmationCard(it) }
                 if (partial.isNotEmpty()) {
@@ -402,7 +291,7 @@ class ChatActivity : ComponentActivity() {
                         TextButton(onClick = {
                             startActivity(Intent(this@ChatActivity, SettingsActivity::class.java))
                         }) { Text("Ajustes") }
-                        TextButton(onClick = ::finish) { Text("Fechar") }
+                        TextButton(onClick = ::closeChat) { Text("Fechar") }
                     }
 
                     LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -425,10 +314,8 @@ class ChatActivity : ComponentActivity() {
                     if (!keyboardOpen) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Conversa por voz", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                            Switch(checked = voiceMode, onCheckedChange = {
-                                voiceMode = it
-                                if (it) startListening() else stopListening()
-                            })
+                            val voiceOn by session.active.collectAsState()
+                            Switch(checked = voiceOn, onCheckedChange = { voiceMode = it })
                             if (busy || speaking) {
                                 TextButton(onClick = { app.conversation.cancel() }) { Text("Parar") }
                             }
@@ -559,7 +446,6 @@ class ChatActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_FROM_TAP = "from_tap"
-        private const val MAX_LISTEN_RETRIES = 3
         /** Pedido dito junto com o chamado ("Oi Joca, que horas são"): é enviado direto. */
         const val EXTRA_WAKE_TEXT = "wake_text"
     }

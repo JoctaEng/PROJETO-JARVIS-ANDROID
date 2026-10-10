@@ -45,18 +45,27 @@ object ToolProtocol {
         append("</tools>")
     }
 
-    /** Lê o JSON de dentro de <tool_call>; tolera cercas ``` e "arguments" como texto. */
+    /**
+     * Lê o JSON de dentro de <tool_call>. Tolera cercas ```, "arguments" como texto, outros nomes do bloco de argumentos
+     * ("parameters", "args", "input", "params"), o formato {"function": {"name", "arguments"}} e campos soltos ao lado do nome.
+     */
     fun parseCall(body: String, id: String): ToolCall? {
         val cleaned = body.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-        val obj = runCatching { json.parseToJsonElement(cleaned).jsonObject }.getOrNull() ?: return null
-        val name = (obj["name"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: return null
-        val args: JsonElement = when (val a = obj["arguments"] ?: obj["parameters"]) {
-            null -> JsonObject(emptyMap())
-            is JsonPrimitive -> runCatching { json.parseToJsonElement(a.content) }.getOrElse { JsonObject(emptyMap()) }
-            else -> a
+        val root = runCatching { json.parseToJsonElement(cleaned).jsonObject }.getOrNull() ?: return null
+        val obj = (root["function"] as? JsonObject)?.takeIf { it["name"] != null } ?: root
+        val name = listOf("name", "tool", "tool_name", "ferramenta").firstNotNullOfOrNull { k ->
+            (obj[k] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+        } ?: return null
+        val block = listOf("arguments", "parameters", "args", "input", "params", "argumentos").firstNotNullOfOrNull { obj[it] }
+        val args: JsonElement = when (block) {
+            null -> JsonObject(obj.filterKeys { it !in META_KEYS })
+            is JsonPrimitive -> runCatching { json.parseToJsonElement(block.content) }.getOrElse { JsonObject(emptyMap()) }
+            else -> block
         }
         return ToolCall(id = id, toolName = name, argumentsJson = args.toString())
     }
+
+    private val META_KEYS = setOf("name", "tool", "tool_name", "ferramenta", "type", "id", "function")
 
     fun responseMessage(call: ToolCall, result: ToolResult): String {
         val body = buildJsonObject {
@@ -68,7 +77,7 @@ object ToolProtocol {
                 }
                 is ToolResult.Failure -> {
                     put("status", "erro"); put("motivo", result.reason)
-                    put("dica", "Não desista: leia o motivo e tente outra via diferente (outro nome, tela_ler, tela_rolar, abrir o app antes).")
+                    put("dica", "Não desista: leia o motivo e tente outra via diferente (outro nome, tela_ler, tela_rolar, abrir o app antes). Se faltou um campo, repita com os argumentos dentro de \"arguments\", com os nomes exatos do esquema.")
                 }
                 is ToolResult.Denied -> { put("status", "negado"); put("motivo", result.reason) }
                 ToolResult.Cancelled -> { put("status", "cancelado"); put("motivo", "o usuário não confirmou") }

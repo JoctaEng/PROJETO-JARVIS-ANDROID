@@ -59,10 +59,13 @@ private abstract class AndroidTool(
 
     final override suspend fun execute(argumentsJson: String, context: ToolContext): ToolResult {
         val args = runCatching { JSONObject(argumentsJson) }.getOrElse { JSONObject() }
-        return run(args)
+        return afterRun(run(args))
     }
 
     protected abstract fun run(args: JSONObject): ToolResult
+
+    /** Passo depois de executar (pode esperar sem travar a tela, ex.: o app aberto aparecer). */
+    protected open suspend fun afterRun(result: ToolResult): ToolResult = result
 
     protected fun start(intent: Intent): Boolean = runCatching {
         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -122,6 +125,9 @@ private class OpenApp(context: Context) : AndroidTool(
                 // Apps conhecidos pelo pacote (ex.: WhatsApp Business), caso o nome na lista seja diferente.
                 context.packageManager.getLaunchIntentForPackage(pkg)?.let { Launchable(args.optString("nome"), pkg) }
             }
+            // "WhatsApp" quando só o Business está instalado (o rótulo dele não tem "WhatsApp").
+            ?: listOf("com.whatsapp", "com.whatsapp.w4b").takeIf { "whats" in wanted || wanted == "zap" }
+                ?.firstNotNullOfOrNull { pkg -> context.packageManager.getLaunchIntentForPackage(pkg)?.let { Launchable(if (pkg.endsWith("w4b")) "WhatsApp Business" else "WhatsApp", pkg) } }
         if (match == null) {
             val close = apps.map { it.label }.filter { label -> wanted.split(' ').any { w -> w.length >= 3 && w in normalize(label) } }.take(8)
             JarvisApp.from(context).events.warn(
@@ -135,7 +141,30 @@ private class OpenApp(context: Context) : AndroidTool(
         }
         val intent = context.packageManager.getLaunchIntentForPackage(match.packageName)
             ?: return ToolResult.Failure("${match.label} não pode ser aberto diretamente")
-        return if (start(intent)) ok("aberto" to match.label) else ToolResult.Failure("o Android não deixou abrir ${match.label}")
+        opened = match.packageName
+        return if (start(intent)) ok("aberto" to match.label, "pacote" to match.packageName) else ToolResult.Failure("o Android não deixou abrir ${match.label}")
+    }
+
+    @Volatile private var opened: String? = null
+
+    /** Espera o app ficar na frente (até 3 s) antes de devolver: senão o tela_ler/tocar seguinte chega antes do app. */
+    override suspend fun afterRun(result: ToolResult): ToolResult {
+        val pkg = opened ?: return result
+        opened = null
+        if (result !is ToolResult.Success) return result
+        val service = com.joctaeng.jarvis.control.EunoAccessibilityService.instance
+        if (service == null) {
+            kotlinx.coroutines.delay(1_200)
+            return result
+        }
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < 3_000) {
+            if (service.foregroundPackage() == pkg) {
+                return ToolResult.Success(JSONObject(result.outputJson).put("na_frente", true).toString())
+            }
+            kotlinx.coroutines.delay(150)
+        }
+        return ToolResult.Success(JSONObject(result.outputJson).put("na_frente", false).put("obs", "o app ainda não apareceu na frente; espere e use tela_ler").toString())
     }
 }
 

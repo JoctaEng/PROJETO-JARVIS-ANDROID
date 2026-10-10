@@ -44,24 +44,30 @@ class ToolGateway(
             PolicyDecision.Allow -> Unit
         }
 
-        val result = try {
-            tool.execute(call.argumentsJson, context)
+        val args = ArgFixer.normalize(call.argumentsJson, tool.inputSchemaJson)
+        val raw = try {
+            tool.execute(args, context)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             ToolResult.Failure(e.message ?: e::class.simpleName ?: "erro desconhecido")
         }
-        return record(tool.name, context, result)
+        // Campo obrigatório vazio: o erro mostra o que chegou e o formato certo, para o cérebro se corrigir na hora.
+        val missing = ArgFixer.missingRequired(args, tool.inputSchemaJson)
+        val result = if (raw is ToolResult.Failure && missing.isNotEmpty()) {
+            ToolResult.Failure("${raw.reason}. Faltou: ${missing.joinToString()} (recebi ${ArgFixer.shape(call.argumentsJson)}). Formato certo: ${ArgFixer.example(tool.name, missing)}")
+        } else raw
+        return record(tool.name, context, result, if (result is ToolResult.Success) "" else ArgFixer.shape(call.argumentsJson))
     }
 
-    private fun record(toolName: String, context: ToolContext, result: ToolResult): ToolResult {
+    private fun record(toolName: String, context: ToolContext, result: ToolResult, shape: String = ""): ToolResult {
         val outcome = when (result) {
             is ToolResult.Success -> "sucesso"
             is ToolResult.Failure -> "falhou: ${result.reason}"
             is ToolResult.Denied -> "negado: ${result.reason}"
             ToolResult.Cancelled -> "cancelado pelo usuário"
         }
-        auditLog.append(AuditEntry(clock(), toolName, context.reason, outcome))
+        auditLog.append(AuditEntry(clock(), toolName, context.reason, if (shape.isEmpty()) outcome else "$outcome | $shape"))
         return result
     }
 }

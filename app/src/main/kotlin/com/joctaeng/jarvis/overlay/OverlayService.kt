@@ -153,6 +153,8 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     override fun onDestroy() {
         wake?.stop()
         diagnostics.append(Poc.OVERLAY, "event" to "stop", "run" to runId, "battery" to DeviceState.batteryPercent(this))
+        bubble?.hide()
+        bubble = null
         view?.let { windowManager.removeView(it) }
         view = null
         OverlayBus.running.value = false
@@ -193,7 +195,8 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         // O tipo specialUse só existe a partir do Android 14; antes disso, sem tipo.
         val special = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
         // "Oi Joca" precisa do tipo microfone (Android 14+); se o sistema negar, segue sem ele e a escuta fica desligada.
-        val wantMic = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && app.settings.wakeWord &&
+        // Também para a conversa por voz continuar ouvindo quando outro app está na frente.
+        val wantMic = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
             checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
         micAllowed = false
         if (wantMic) {
@@ -244,6 +247,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         followSettings()
         bindPortalEvents()
         startIdlePortalMonitor()
+        bubble = CaptionBubble(this, windowManager).also { it.bind() }
     }
 
     /** Reage ao que acontece: emerge quando alguém fala/ouve e recolhe ao pedido ("tchau"). */
@@ -269,6 +273,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     }
 
     private var actingSaved: Triple<Int, Int, Int>? = null
+    private var bubble: CaptionBubble<OverlayService>? = null
 
     /**
      * "Agindo na tela": vai para o canto superior esquerdo e fica pequeno, para não cobrir o app que está sendo lido;
@@ -427,6 +432,11 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     }
 
     private fun onTap() {
+        // Tocar nele enquanto age na tela = parar a ação (antes o toque parecia não fazer nada).
+        if (OverlayBus.acting.value) {
+            app.events.info("controle", "ação na tela interrompida pelo toque no personagem")
+            app.conversation.cancel()
+        }
         wake?.pauseNow() // solta o microfone antes de a conversa abrir e começar a ouvir
         reactionStartNanos = System.nanoTime()
         renderer.play(AnimState.WAKING)
