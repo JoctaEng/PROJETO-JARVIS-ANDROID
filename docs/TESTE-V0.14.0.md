@@ -120,3 +120,9 @@ Causa provável (a confirmar com o registro dos argumentos, que hoje não existe
 3. **OneKeyClean encerrou o app** 4× (10:21 e 10:57); "Otimização de bateria ignorada: NÃO".
 4. **Acessibilidade "ligada mas NÃO conectada"** 2× (10:29–10:30): `tela_ler` falhou.
 5. **Ação apressada**: `tela_ler` 80 ms depois de `abrir_app` (lê antes de o app carregar); `tela_deslizar` 7× em ~4 s (rolagem rápida demais); "não achei '15'" e toque em "15 de outubro…" não aceito (clicou no texto, não no item clicável).
+
+## Por que "uma hora sabe, outra não" (releitura do relatório da 0.24.0, pedido 69)
+1. **Turnos sem ferramentas**: 7 dos 34 turnos foram com "ferramentas no prompt=0" (ex.: 09:04 "e agora", 11:01, 11:07). O Euno só manda as ferramentas ao cérebro quando a frase "parece pedido de ação" (`ToolIntent.likely`) ou houve ação nas últimas mensagens; num "e agora?" / "continua" o cérebro fica **sem mãos** e responde que não consegue. Causa direta de "não sabe continuar".
+2. **Cérebro trocando**: até ~10:24 o Groq (gpt-oss-20b) era o 1º; ele voltou vazio 5× em pedidos de ação e o Gemini respondia depois (10–15 s). Mesmo pedido, cérebro diferente → comportamento diferente.
+3. **Corpo desligado**: 10:21 o HyperOS fechou o app; 10:29–10:30 a acessibilidade estava ligada mas desconectada → `tela_ler` falhou; voltou só às 10:58.
+4. **Ação apressada/às cegas** (já tratado na 0.25): leitura 80 ms após abrir; 7 deslizes em 4 s; toque recusado no dia 15.
