@@ -243,7 +243,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         view = composeView
         renderer.play(AnimState.IDLE)
         startFpsMeter()
-        CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking) { dragging }
+        CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking, app.voice.lip.pose, { app.voice.lip.updatedAt }, app.voice.sentenceEmotion) { dragging }
         followSettings()
         bindPortalEvents()
         startIdlePortalMonitor()

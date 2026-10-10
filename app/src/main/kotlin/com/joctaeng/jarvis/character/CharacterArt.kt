@@ -46,6 +46,18 @@ object CharacterArt {
         ),
     )
 
+    /** Região da boca na arte (proporções 0..1 do quadro): centro, largura e altura. */
+    data class MouthBox(val cx: Float, val cy: Float, val w: Float, val h: Float)
+
+    /**
+     * Boca medida comparando os quadros "neutro" e "falando" (mesma pose). Só personagens com arte alinhada têm boca
+     * animada sobre a expressão; os outros trocam o quadro inteiro.
+     */
+    fun mouthBox(characterId: String): MouthBox? = when (characterId) {
+        "jocta_casual" -> MouthBox(0.504f, 0.459f, 0.16f, 0.085f)
+        else -> null
+    }
+
     private val cache = HashMap<Int, ImageBitmap>()
 
     fun hasArt(characterId: String): Boolean = characterId in frames

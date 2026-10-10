@@ -14,7 +14,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -106,6 +109,16 @@ class ComposeCharacterRenderer : CharacterRenderer {
 
     override fun setMouthOpen(level: Float) {
         mouthLevel = level.coerceIn(0f, 1f)
+    }
+
+    /** Largura da boca pelo visema (1 = normal; <1 arredondada, ex.: "o", "u"; >1 esticada, ex.: "i"). */
+    var mouthWidth by mutableFloatStateOf(1f)
+        private set
+
+    /** Sincronia labial: abertura e largura vindas do áudio e do texto (ver LipSync). */
+    fun setMouthShape(open: Float, width: Float) {
+        mouthLevel = open.coerceIn(0f, 1f)
+        mouthWidth = width.coerceIn(0.5f, 1.3f)
     }
 }
 
@@ -346,7 +359,11 @@ private fun DrawScope.drawArt(
     fade: ArtFade,
     aligned: Boolean,
 ) {
-    var wanted = ExpressionPicker.pick(r.state, r.emotion, r.mouthLevel)
+    // Avatar falante: com a boca medida na arte, o rosto fica na emoção da frase e só a boca se mexe (desenhada por cima).
+    val mouthBox = if (aligned) CharacterArt.mouthBox(r.characterId) else null
+    val talkArt = art[Expression.FALANDO]
+    val liveMouth = r.state == AnimState.SPEAKING && mouthBox != null && talkArt != null
+    var wanted = if (liveMouth) ExpressionPicker.fromEmotion(r.emotion) else ExpressionPicker.pick(r.state, r.emotion, r.mouthLevel)
     if (blink && wanted == Expression.NEUTRO && Expression.DORMINDO in art && isBlinking(t)) wanted = Expression.DORMINDO
     val image = ExpressionPicker.resolve(wanted, art) ?: return
 
@@ -391,6 +408,54 @@ private fun DrawScope.drawArt(
         } else {
             drawImage(image, dstOffset = dst, dstSize = dstSize, alpha = currentAlpha, filterQuality = FilterQuality.Medium)
         }
+        if (liveMouth && image !== talkArt) drawMouthPatch(talkArt!!, mouthBox!!, dst, side, r.mouthLevel, r.mouthWidth, currentAlpha)
+    }
+}
+
+/**
+ * Boca falando por cima do rosto: recorta a boca aberta do quadro "falando" e a desenha com a abertura e a largura do
+ * visema do instante (achatada = quase fechada; estreita = "o"/"u"; larga = "i"), com borda suave para não aparecer recorte.
+ */
+private fun DrawScope.drawMouthPatch(
+    talk: ImageBitmap,
+    box: CharacterArt.MouthBox,
+    dst: IntOffset,
+    side: Float,
+    open: Float,
+    width: Float,
+    alpha: Float,
+) {
+    if (open < 0.03f) return
+    val srcOffset = IntOffset(((box.cx - box.w / 2f) * talk.width).toInt(), ((box.cy - box.h / 2f) * talk.height).toInt())
+    val srcSize = IntSize((box.w * talk.width).toInt(), (box.h * talk.height).toInt())
+    val cx = dst.x + box.cx * side
+    val topY = dst.y + (box.cy - box.h / 2f) * side
+    val w = box.w * side * width
+    // O lábio de cima fica quase parado; a boca "desce" ao abrir, como no rosto real.
+    val h = box.h * side * (0.4f + 0.6f * open)
+    val top = topY + box.h * side * 0.08f * (1f - open)
+    val rect = androidx.compose.ui.geometry.Rect(cx - w / 2f, top, cx + w / 2f, top + h)
+    val a = (alpha * (open / 0.3f).coerceIn(0f, 1f)).coerceIn(0f, 1f)
+    drawIntoCanvas { canvas ->
+        canvas.saveLayer(rect, Paint())
+        drawImage(
+            talk, srcOffset = srcOffset, srcSize = srcSize,
+            dstOffset = IntOffset(rect.left.toInt(), rect.top.toInt()), dstSize = IntSize(rect.width.toInt().coerceAtLeast(1), rect.height.toInt().coerceAtLeast(1)),
+            alpha = a, filterQuality = FilterQuality.Medium,
+        )
+        // Máscara oval com borda suave (só a boca aparece; a pele em volta funde com o rosto de baixo).
+        withTransform({ scale(1f, rect.height / rect.width, rect.center) }) {
+            drawRect(
+                brush = Brush.radialGradient(
+                    0f to Color.Black, 0.62f to Color.Black, 1f to Color.Transparent,
+                    center = rect.center, radius = rect.width / 2f,
+                ),
+                topLeft = Offset(rect.left, rect.center.y - rect.width / 2f),
+                size = Size(rect.width, rect.width),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+        canvas.restore()
     }
 }
 

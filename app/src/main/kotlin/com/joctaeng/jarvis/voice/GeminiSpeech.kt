@@ -169,7 +169,7 @@ class GeminiSpeech(private val apiKey: String, private val model: String = DEFAU
 
 /** Toca PCM 16 bits mono e só retorna quando terminar (ou quando [stopped] virar true). */
 object PcmPlayer {
-    fun play(clip: GeminiSpeech.Clip, stopped: () -> Boolean) {
+    fun play(clip: GeminiSpeech.Clip, onStart: (AudioTrack) -> Unit = {}, stopped: () -> Boolean) {
         val track = AudioTrack.Builder()
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
             .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(clip.sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
@@ -178,6 +178,7 @@ object PcmPlayer {
             .build()
         try {
             track.play()
+            runCatching { onStart(track) }
             var offset = 0
             val step = clip.sampleRate / 5 * 2 // ~200 ms por bloco, para parar rápido
             while (offset < clip.pcm.size && !stopped()) {

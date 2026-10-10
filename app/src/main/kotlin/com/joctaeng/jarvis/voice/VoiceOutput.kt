@@ -91,6 +91,16 @@ class VoiceOutput(
 
     val piper = PiperVoice(appContext)
 
+    /** Boca do personagem sincronizada com o áudio (visemas do texto + volume real). */
+    val lip = LipDriver(scope)
+
+    /** Emoção da frase que está sendo falada agora (null = a da resposta). */
+    private val _sentenceEmotion = kotlinx.coroutines.flow.MutableStateFlow<com.joctaeng.jarvis.core.model.Emotion?>(null)
+    val sentenceEmotion: StateFlow<com.joctaeng.jarvis.core.model.Emotion?> = _sentenceEmotion.asStateFlow()
+
+    /** Texto de cada fala da voz do Android, para a boca seguir as palavras anunciadas por ela. */
+    private val utteranceTexts = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     /** Chave do Azure (fica no SecretStore). */
     var azureKey: () -> String? = { null }
 
@@ -304,7 +314,14 @@ class VoiceOutput(
                     val start = SystemClock.elapsedRealtime()
                     val gap = if (lastClipEndAt == 0L) 0L else start - lastClipEndAt
                     _speaking.value = true
-                    PcmPlayer.play(clip) { stopped }
+                    val timeline = runCatching { com.joctaeng.jarvis.presence.expression.LipTimeline.forClip(text, clip.pcm, clip.sampleRate) }.getOrNull()
+                    _sentenceEmotion.value = com.joctaeng.jarvis.presence.expression.SentenceMood.detect(text)
+                    PcmPlayer.play(clip, onStart = { track ->
+                        if (timeline != null) lip.start(timeline) {
+                            runCatching { track.playbackHeadPosition.toLong() * 1000L / clip.sampleRate }.getOrNull()
+                        }
+                    }) { stopped }
+                    lip.stop()
                     lastClipEndAt = SystemClock.elapsedRealtime()
                     val audioMs = clip.pcm.size * 1000L / (clip.sampleRate * 2L)
                     val note = "frase ${text.length} car.; motor=${spoken.engine}; síntese=${spoken.synthMs} ms; áudio=$audioMs ms; " +
@@ -362,6 +379,8 @@ class VoiceOutput(
     }
 
     fun stop() {
+        lip.stop()
+        _sentenceEmotion.value = null
         cloud?.stop()
         cloud = null
         waiting.clear()
@@ -416,6 +435,14 @@ class VoiceOutput(
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
                 _speaking.value = true
+                utteranceId?.let { utteranceTexts[it] }?.let { _sentenceEmotion.value = com.joctaeng.jarvis.presence.expression.SentenceMood.detect(it) }
+            }
+
+            // Cada palavra anunciada pela voz do Android (quando o motor informa) move a boca no tempo certo.
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                val text = utteranceId?.let { utteranceTexts[it] } ?: return
+                if (start < 0 || end > text.length || start >= end) return
+                lip.startNow(com.joctaeng.jarvis.presence.expression.LipTimeline.forText(text.substring(start, end)))
             }
 
             override fun onDone(utteranceId: String?) = ended(utteranceId)
@@ -436,6 +463,8 @@ class VoiceOutput(
 
     /** Fim de uma fala do Android: se alguém está esperando por ela (fila ordenada), avisa; senão conta como frase concluída. */
     private fun ended(utteranceId: String?) {
+        utteranceId?.let { utteranceTexts.remove(it) }
+        lip.stop()
         val waiter = utteranceId?.let { androidWaiters.remove(it) }
         if (waiter != null) waiter.complete(Unit) else finishedOne()
     }
@@ -443,6 +472,7 @@ class VoiceOutput(
     /** Fala uma frase com a voz do Android e só retorna quando ela terminar (mantém a ordem com os áudios naturais). */
     private suspend fun speakWithAndroidInOrder(text: String) {
         val id = "jarvis-fb-${counter.getAndIncrement()}"
+        utteranceTexts[id] = text
         val done = CompletableDeferred<Unit>()
         androidWaiters[id] = done
         val posted = CompletableDeferred<Boolean>()
@@ -471,7 +501,9 @@ class VoiceOutput(
 
     private fun enqueue(text: String) {
         val engine = tts ?: return
-        val result = engine.speak(text, TextToSpeech.QUEUE_ADD, null, "jarvis-${counter.getAndIncrement()}")
+        val id = "jarvis-${counter.getAndIncrement()}"
+        utteranceTexts[id] = text
+        val result = engine.speak(text, TextToSpeech.QUEUE_ADD, null, id)
         if (result != TextToSpeech.SUCCESS) finishedOne()
     }
 

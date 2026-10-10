@@ -98,7 +98,7 @@ class ChatActivity : ComponentActivity() {
         lifecycleScope.launch { session.status.collect { status = it } }
         app.conversation.preloadLocalModel()
         OverlayBus.sessionActive.value = true
-        CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking)
+        CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking, app.voice.lip.pose, { app.voice.lip.updatedAt }, app.voice.sentenceEmotion)
         lifecycleScope.launch { app.settings.version.collect { renderer.applyProfile(app.settings.character) } }
         val startVoice = app.settings.listenOnOpen && intent.getBooleanExtra(EXTRA_FROM_TAP, false)
         setCaption(app.settings.captionMode && intent.getBooleanExtra(EXTRA_FROM_TAP, false))
