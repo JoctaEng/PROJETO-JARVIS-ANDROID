@@ -110,3 +110,13 @@ Causa provável (a confirmar com o registro dos argumentos, que hoje não existe
 6. **Disse "não consigo"** navegar até o dia 15 e "deslizar para a direita" sem tentar: não existe ferramenta de **deslizar para os lados** (só rolar para cima/baixo); poderia ter lido a tela e tocado na data.
 7. "Abra minha agenda" foi atendido com `agenda_consultar` (leu os compromissos) em vez de abrir o app; só abriu quando o usuário repetiu.
 8. **Piper:** nenhuma voz baixada e nenhum evento de download no registro (fica em "baixando 0 MB") → falta registrar o estado do DownloadManager (pendente/pausado e motivo).
+
+# Teste da v0.24.0 (10/10, 09:01–11:11; "Relatório do Euno" no Drive)
+"Testes rápidos do Euno": todos "não testado". A seção de conversa do relatório veio vazia.
+
+## Erros e avisos (22 na versão)
+1. **Groq (gpt-oss-20b) volta vazio** em turnos com ferramentas (5×, "1ª palavra=nunca"; prompt de ~24,8 mil caracteres e 39 ferramentas). Depois vem 429 (TPM 8000; cada pedido ~6,4–7,9 mil tokens) e o Gemini responde. Custa 10–15 s por turno.
+2. Até ~10:24 o Groq era o 1º da lista; depois o Gemini virou o 1º e os turnos ficaram estáveis (1,4–3 s de 1ª palavra).
+3. **OneKeyClean encerrou o app** 4× (10:21 e 10:57); "Otimização de bateria ignorada: NÃO".
+4. **Acessibilidade "ligada mas NÃO conectada"** 2× (10:29–10:30): `tela_ler` falhou.
+5. **Ação apressada**: `tela_ler` 80 ms depois de `abrir_app` (lê antes de o app carregar); `tela_deslizar` 7× em ~4 s (rolagem rápida demais); "não achei '15'" e toque em "15 de outubro…" não aceito (clicou no texto, não no item clicável).

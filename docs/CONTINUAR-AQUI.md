@@ -1,7 +1,7 @@
 # CONTINUAR AQUI — resumo para a próxima sessão (atualizado em 10/10/2026)
 
 > Leia este arquivo primeiro. Ele resume a conversa longa com o usuário até a v0.24.0.
-> Detalhes: `docs/PEDIDOS-DO-USUARIO.md` (pedidos 1–64), `docs/MEMORIA-DO-PROJETO.md`, `docs/HANDOFF.md`, `docs/FASE-2.md`.
+> Detalhes: `docs/PEDIDOS-DO-USUARIO.md` (pedidos 1–65), `docs/MEMORIA-DO-PROJETO.md`, `docs/HANDOFF.md`, `docs/FASE-2.md`.
 
 ## 1. Quem é o usuário e como trabalhar com ele
 - Prof. Joctã (pt-BR). Celular: Redmi Note 13 Pro+ 5G, HyperOS 3, Android 16. Respostas **curtas, em português, honestas**.
@@ -38,11 +38,10 @@
 - Foco agora: **melhorias e novas fases**.
 
 ## 4. Próximo passo proposto (aguardando "pode começar")
-- **v0.25 "Ele vê e acompanha seu dia"**: (1) visão: "o que tem na tela?" (captura de tela pela acessibilidade, API 30+) e câmera "o que é isto?" com Gemini multimodal;
-  (2) notificações: ler/resumir "o que chegou?" (NotificationListenerService, nunca responde sozinho); (3) Bom dia / Fechar o dia automáticos em horário escolhido.
-- **v0.26 "Ele aprende com você"**: (4) rotinas ensinadas ("quando eu disser modo aula, faça X, Y, Z"); (5) memória por sentido (embeddings).
-- **v0.27 Fase 3**: (6) backup/restauração no Drive; (7) testar a ponte MCP do EduMath no aparelho e conectores sem recompilar.
-- Junto: corrigir o que aparecer nos testes da 0.24 (Piper, vozes Azure, acessibilidade, avatares 3D na lista).
+- **Plano completo até a v1 comercial: `docs/PLANO-ATE-V1.md`** (v0.25 age direito → v0.26 visão/notificações → v0.27 skills → v0.28 tarefas programadas → v0.29 Fase 3 → v0.30 Fase 4 → v1.0).
+- Primeiro: **v0.25** = bugs do avatar (o 2D "boca lascada" aparece atrás do 3D no portal/"tchau"/troca e no cabeçalho do chat) + jeito de agir
+  (minimizar antes, esperar o app carregar, rolagem humana, print da tela para tocar certo, tentativas em silêncio, conferir capacidades, prompt menor). Pedido 65.
+- Teste da 0.24.0 analisado em `docs/TESTE-V0.14.0.md` (Groq vazio/429 com ferramentas, OneKeyClean, acessibilidade desconectada, ação apressada).
 
 ## 5. Lembretes técnicos
 - App Android só compila no CI; aqui só módulos JVM. Google Maven bloqueado aqui; npm, PyPI e raw.githubusercontent funcionam; Hugging Face não.
