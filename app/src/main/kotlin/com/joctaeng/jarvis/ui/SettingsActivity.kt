@@ -428,14 +428,52 @@ class SettingsActivity : ComponentActivity() {
     private fun CharacterSection() {
         var selected by remember { mutableStateOf(settings.character.id) }
         var name by remember { mutableStateOf(settings.characterName) }
+        var use3d by remember { mutableStateOf(settings.avatar3d) }
+        var model3d by remember { mutableStateOf(settings.avatarModel) }
         Section("Personagem") {
+            Text("Avatares 3D (falam e mostram emoções)", style = MaterialTheme.typography.labelLarge)
+            com.joctaeng.jarvis.character.Avatar3D.MODELS.forEach { (id, label) ->
+                val res = when (id) {
+                    "victoria" -> com.joctaeng.jarvis.R.drawable.thumb3d_victoria
+                    "vita" -> com.joctaeng.jarvis.R.drawable.thumb3d_vita
+                    "vivi" -> com.joctaeng.jarvis.R.drawable.thumb3d_vivi
+                    "shino" -> com.joctaeng.jarvis.R.drawable.thumb3d_shino
+                    "fumiriya" -> com.joctaeng.jarvis.R.drawable.thumb3d_fumiriya
+                    "clara" -> com.joctaeng.jarvis.R.drawable.thumb3d_clara
+                    else -> com.joctaeng.jarvis.R.drawable.thumb3d_avatar
+                }
+                val chosen = use3d && model3d == id
+                Row(
+                    Modifier.fillMaxWidth().selectable(chosen) {
+                        use3d = true
+                        model3d = id
+                        settings.avatar3d = true
+                        settings.avatarModel = id
+                        name = label.substringBefore(" (")
+                        settings.characterName = name
+                        reopenCharacter()
+                    }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = chosen, onClick = null)
+                    androidx.compose.foundation.Image(
+                        androidx.compose.ui.res.painterResource(res), contentDescription = label,
+                        modifier = Modifier.size(56.dp).padding(end = 8.dp),
+                    )
+                    Text(label, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            Text("Personagens 2D", style = MaterialTheme.typography.labelLarge)
             val (ready, coming) = CharacterCatalog.all.partition { CharacterArt.hasArt(it.id) }
             ready.forEach { profile ->
-                CharacterRow(profile, selected == profile.id) {
+                CharacterRow(profile, !use3d && selected == profile.id) {
                     selected = profile.id
                     settings.characterId = profile.id
-                    // Personagem com arte 2D própria (ex.: Guardião): mostra ele, não o avatar 3D.
-                    if (settings.avatar3d && profile.id == "guardiao") settings.avatar3d = false
+                    // Escolheu um personagem 2D: mostra ele, não o avatar 3D.
+                    val was3d = settings.avatar3d
+                    use3d = false
+                    settings.avatar3d = false
+                    if (was3d) reopenCharacter()
                     name = ""
                     settings.characterName = ""
                 }
@@ -467,6 +505,13 @@ class SettingsActivity : ComponentActivity() {
             )
             Avatar3DOptions()
         }
+    }
+
+    /** Reabre o personagem flutuante (se estiver na tela) para trocar entre 2D e 3D sem o usuário precisar fazer nada. */
+    private fun reopenCharacter() {
+        if (!com.joctaeng.jarvis.overlay.OverlayBus.running.value) return
+        com.joctaeng.jarvis.overlay.OverlayService.stop(this)
+        window.decorView.postDelayed({ com.joctaeng.jarvis.overlay.OverlayService.start(this) }, 900)
     }
 
     /** Avatar 3D (VRM): ligar, enquadramento, importar um avatar próprio (ex.: feito no VRoid). */
@@ -505,14 +550,6 @@ class SettingsActivity : ComponentActivity() {
             Choice(listOf("busto", "corpo"), framing, { if (it == "busto") "Rosto e ombros" else "Meio corpo" }) {
                 framing = it
                 settings.avatarFraming = it
-            }
-            var model by remember { mutableStateOf(settings.avatarModel) }
-            Text("Modelo 3D", style = MaterialTheme.typography.labelLarge)
-            Choice(com.joctaeng.jarvis.character.Avatar3D.MODELS.map { it.first }, model, { id ->
-                com.joctaeng.jarvis.character.Avatar3D.MODELS.first { it.first == id }.second
-            }) {
-                model = it
-                settings.avatarModel = it
             }
             Hint(
                 if (custom) "Usando o seu avatar importado (ele vale para todos os personagens)." else
