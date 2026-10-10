@@ -51,3 +51,25 @@ Ao encolher para o canto superior esquerdo o Euno "trava": não ouve mais, não 
 - **Balão de legenda em janela de sobreposição** (visível por cima de qualquer app, com a confirmação e um botão "Parar"), em vez de depender da `ChatActivity`.
 - Tocar no personagem em modo agindo = parar a ação e abrir o chat.
 - Consertar os testes (esperar a tela de testes voltar; "rolar" só exige "baixo" ou "cima" com sucesso).
+
+# Conversa e relatório completo da 0.15.0 (Drive, 10/10/2026; sessão 22:02–22:43 locais)
+
+## O que funcionou
+- Ler a tela de outro app e **tocar** ("Família … ❤️" tocado com sucesso, emoji ok), `tela_navegar` (início), `abrir_app` do WhatsApp Business, `agenda_consultar` (dia e semana), `contatos_buscar`. A camada "não lê o Euno" funcionou: o Euno disse sozinho "o sistema ainda está segurando minha visão só para as janelas do Euno" e abriu o app antes de ler.
+- O usuário confirmou o problema de escuta (22:12) e a prova: quando voltou à tela inicial, ele voltou a ouvir (22:14).
+
+## Falha nova e grave: ferramentas chamadas SEM argumentos
+A partir de 22:08 (e sempre depois de 22:14) o registro mostra, para `abrir_app`, `agenda_criar`, `memoria_guardar`, `tela_tocar` e `whatsapp_mensagem`, só erros do tipo **"informe o nome do app" / "fato vazio" / "informe o título" / "informe o nome do botão" / "informe o contato e a mensagem"**: a ferramenta recebeu o pedido com os argumentos vazios (ou com outros nomes de campo). O modelo repete 2–3 vezes igual e desiste ("o sistema está teimoso"). Isso explica "não consegue abrir a Agenda" na conversa real enquanto "Testar funções" passa (o teste monta os argumentos certos). No começo funcionou (22:06 abrir_app, 22:10 tela_tocar com argumentos) e depois o modelo passou a errar o formato.
+Causa provável (a confirmar com o registro dos argumentos, que hoje não existe): o protocolo de ferramentas é texto (`<tool_call>{"name":…,"arguments":{…}}`) e só aceita `arguments`/`parameters` com os nomes exatos dos campos; o modelo (Gemini lite) às vezes manda os campos soltos, com outro nome (`app`, `title`, `text`…) ou sem `arguments`. A mensagem de erro ("informe o nome do app") também não diz o formato certo, então ele não se corrige.
+
+## Outros achados
+- `tela_tocar` logo depois de `abrir_app` chegou antes do app aparecer ("não há outro app na tela") → `abrir_app` deve esperar o app ficar na frente.
+- Voz do Gemini: 196 pedidos hoje, em descanso até 04:05; voz do Android falhou uma vez ("não terminou em 30 s", frase de 297 caracteres).
+- O Euno explicou a falha de escuta com uma desculpa errada ("brigam pelo mesmo recurso"): a causa real é a `ChatActivity` parar ao abrir outro app.
+- Erro dele de interpretação: tratou "abra por favor no meu WhatsApp" como app "WhatsApp" (não existe; é o Business) e pediu o nome; `abrir_app` devia aceitar "WhatsApp" → Business quando só ele existe.
+
+## Correção prevista (aguarda ordem)
+1. **Argumentos:** aceitar `args/input/params`, campos soltos e apelidos (`app`→`nome`, `title`→`titulo`, `text`→`fato/mensagem`…), com testes; registrar no relatório o formato recebido (nomes e tamanhos dos campos, sem o conteúdo); erro que diz o formato certo com exemplo.
+2. **`abrir_app`** espera o app ficar na frente (até ~3 s) e trata "WhatsApp" como o Business quando só ele está instalado.
+3. **Escuta no serviço + legenda em janela de sobreposição + botão Parar** (pedido 44).
+4. Consertar os dois testes defeituosos.
