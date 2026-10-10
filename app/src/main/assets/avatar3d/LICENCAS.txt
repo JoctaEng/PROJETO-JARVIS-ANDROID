@@ -52,6 +52,6 @@ VRM1_Constraint_Twist_Sample v1.0.1 — (c) 2022 pixiv Inc. Licença: VRM Public
 Metadados do arquivo: avatarPermission=everyone; commercialUsage=corporation; allowRedistribution=true; modification=allowModificationRedistribution; creditNotation=unnecessary.
 Origem: https://github.com/pixiv/three-vrm (packages/three-vrm/examples/models).
 
-== Modelos models/jocta_casual.vrm e models/luna.vrm ==
-Personagens do Projeto Euno (Joctã Casual e Luna), gerados por tools/avatar3d/gerar_personagens.py a partir de formas simples.
-Uso restrito ao app Euno (sem redistribuição; ver metadados VRM dos arquivos).
+== Modelos victoria, vita, vivi, shino, fumiriya, clara (.vrm) ==
+Modelos de exemplo da VRoid (pixiv) marcados como CC0 nos metadados (Victoria Rubin, Vita, Vivi, Sendagaya Shino, Sakurada Fumiriya, HairSample_Female).
+Texturas reduzidas para 1024 px por tools/avatar3d/otimizar_vrm.py. Origem: https://github.com/madjin/vrm-samples (vroid/beta).

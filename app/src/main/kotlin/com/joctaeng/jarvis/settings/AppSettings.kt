@@ -87,8 +87,8 @@ class AppSettings(context: Context) {
     /** Avatar 3D (VRM) no lugar do desenho 2D na tela; [avatarFraming] = "busto" ou "corpo". */
     var avatar3d by boolean("avatar3d", true)
     var avatarFraming by string("avatarFraming", "busto")
-    /** "personagem" = 3D do personagem escolhido (quando existe); "exemplo" = avatar de exemplo (pixiv). */
-    var avatarModel by string("avatarModel", "personagem")
+    /** Modelo 3D escolhido (arquivo em assets/avatar3d/models, sem ".vrm"); "avatar" = exemplo. */
+    var avatarModel by string("avatar3dModel", "avatar")
     var brainsMigrated by boolean("brainsMigrated", false)
     var cloudPreset by enum("cloudPreset", CloudPreset.NONE)
     var cloudBaseUrl by string("cloudBaseUrl", "")

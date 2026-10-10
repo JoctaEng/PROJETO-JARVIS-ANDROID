@@ -61,9 +61,8 @@ class Avatar3D(context: Context) {
     private fun modelPath(): String {
         val custom = customFile(appContext)
         if (custom.isFile) return "files/${custom.name}"
-        val id = app.settings.character.id
-        if (app.settings.avatarModel != "exemplo" && hasModel(appContext, id)) return "models/$id.vrm"
-        return "models/avatar.vrm"
+        val id = app.settings.avatarModel
+        return if (hasModel(appContext, id)) "models/$id.vrm" else "models/avatar.vrm"
     }
 
     fun load() {
@@ -167,8 +166,19 @@ class Avatar3D(context: Context) {
         fun customDir(context: Context) = File(context.filesDir, "avatar").apply { mkdirs() }
         fun customFile(context: Context) = File(customDir(context), "meu-avatar.vrm")
 
-        /** O personagem tem modelo 3D próprio dentro do APK? */
-        fun hasModel(context: Context, characterId: String): Boolean = "$characterId.vrm" in models(context)
+        /** Modelos 3D que vêm no APK (id do arquivo → descrição). Todos CC0 (VRoid) ou licença VRM (pixiv). */
+        val MODELS = listOf(
+            "avatar" to "Exemplo (cabelo castanho longo, camiseta branca)",
+            "victoria" to "Victoria (loira, vestido rosa)",
+            "vita" to "Vita (cabelo prateado, roupa azul)",
+            "vivi" to "Vivi (cabelo castanho curto, vestido verde)",
+            "shino" to "Shino (cabelo azul-escuro, uniforme)",
+            "fumiriya" to "Fumiriya (rapaz, cabelo ruivo, uniforme)",
+            "clara" to "Clara (cabelo preto, orelhinhas de gato, vestido branco)",
+        )
+
+        /** O modelo existe dentro do APK? */
+        fun hasModel(context: Context, id: String): Boolean = "$id.vrm" in models(context)
 
         @Volatile private var modelList: Set<String>? = null
 

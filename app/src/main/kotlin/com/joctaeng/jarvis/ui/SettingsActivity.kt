@@ -505,18 +505,17 @@ class SettingsActivity : ComponentActivity() {
                 settings.avatarFraming = it
             }
             var model by remember { mutableStateOf(settings.avatarModel) }
-            val own = com.joctaeng.jarvis.character.Avatar3D.hasModel(this@SettingsActivity, settings.character.id)
-            Choice(listOf("personagem", "exemplo"), model, {
-                if (it == "personagem") "3D do personagem escolhido" + (if (own) "" else " (este ainda não tem; usa o exemplo)")
-                else "Avatar de exemplo (moça de cabelo castanho)"
+            Text("Modelo 3D", style = MaterialTheme.typography.labelLarge)
+            Choice(com.joctaeng.jarvis.character.Avatar3D.MODELS.map { it.first }, model, { id ->
+                com.joctaeng.jarvis.character.Avatar3D.MODELS.first { it.first == id }.second
             }) {
                 model = it
                 settings.avatarModel = it
             }
             Hint(
                 if (custom) "Usando o seu avatar importado (ele vale para todos os personagens)." else
-                    "Já em 3D: Joctã Casual e Luna. O avatar de exemplo é do formato VRM (pixiv, uso e redistribuição permitidos). " +
-                        "Você pode criar outro (por exemplo, no VRoid Studio, grátis) e importar o arquivo .vrm aqui.",
+                    "O personagem na tela troca sozinho ao escolher. Modelos livres (CC0, da VRoid; exemplo da pixiv). " +
+                        "Você também pode criar o seu (por exemplo, no VRoid Studio, grátis) e importar o arquivo .vrm aqui.",
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }) { Text("Importar avatar .vrm") }
