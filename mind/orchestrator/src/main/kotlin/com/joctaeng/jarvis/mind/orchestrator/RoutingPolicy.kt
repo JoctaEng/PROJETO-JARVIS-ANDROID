@@ -88,7 +88,8 @@ class RoutingPolicy(
             hints.complexity == TaskComplexity.SIMPLE -> onDeviceFirst
             else -> offDeviceFirst
         }
-        if (deviceStressed && device.online) {
+        // Só avisa quando há mesmo um cérebro do celular a evitar (antes o aviso saía em todo turno, só com nuvem).
+        if (deviceStressed && device.online && candidates.any { it.location == ProviderLocation.ON_DEVICE }) {
             notices += "Bateria baixa ou aparelho quente: priorizando processamento fora do celular."
         }
 

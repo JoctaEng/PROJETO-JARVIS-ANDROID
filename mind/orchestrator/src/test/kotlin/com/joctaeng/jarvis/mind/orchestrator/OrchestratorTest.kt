@@ -70,6 +70,13 @@ class RoutingPolicyTest {
         assertEquals(listOf("own", "cloud", "local"), plan.orderedProviderIds)
     }
 
+    @Test fun hotWarningOnlyWhenThereIsALocalBrainToAvoid() {
+        val withLocal = policy.plan(all, healthy.copy(thermal = ThermalLevel.HOT), RoutingHints())
+        assertTrue(withLocal.notices.any { "quente" in it })
+        val cloudOnly = policy.plan(listOf(cloud), healthy.copy(thermal = ThermalLevel.HOT), RoutingHints())
+        assertTrue(cloudOnly.notices.none { "quente" in it })
+    }
+
     @Test fun unavailableProvidersAreIgnored() {
         val plan = policy.plan(listOf(local.copy(available = false)), healthy, RoutingHints())
         assertTrue(plan.isEmpty)

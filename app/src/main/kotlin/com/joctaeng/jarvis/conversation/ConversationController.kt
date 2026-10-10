@@ -280,6 +280,9 @@ class ConversationController(private val app: JarvisApp) {
     /** Cérebros que bateram limite (429) descansam o tempo pedido pelo provedor e o próximo da lista responde. */
     private val cooldown = com.joctaeng.jarvis.mind.orchestrator.ProviderCooldown()
 
+    /** Cérebros que voltaram vazios em pedidos com ferramentas nesta sessão: ficam por último quando há ação. */
+    private val toolWeak = mutableSetOf<String>()
+
     /** Cérebros online na ordem escolhida pelo usuário, sem os que estão descansando (se todos descansam, tenta todos). */
     private fun cloudProviders(): List<LlmProvider> {
         val all = app.brains.all().mapNotNull { app.brains.provider(it) }
@@ -327,6 +330,8 @@ class ConversationController(private val app: JarvisApp) {
             selfSection = SelfKnowledge.section(
                 SelfInfo(
                     versionName = version,
+                    assistantName = settings.displayName,
+                    article = settings.persona.gender.article,
                     brainNames = providers.map { it.displayName },
                     voiceName = settings.voiceEngine.name.lowercase(),
                     autonomyLabel = settings.autonomy.name.lowercase(),
@@ -340,7 +345,9 @@ class ConversationController(private val app: JarvisApp) {
         )
 
         val prompt = buildPrompt(onlyLocal)
-        val effective = if (onlyLocal) providers else providers.map { p ->
+        // Pedido com ferramentas: cérebros que já voltaram vazios com ferramentas nesta sessão vão para o fim da fila.
+        val ordered = if (prompt.contains("<tools>")) providers.sortedBy { it.id in toolWeak } else providers
+        val effective = if (onlyLocal) ordered else ordered.map { p ->
             // Cérebro do celular no meio da lista (fallback): recebe prompt/histórico enxutos, não os da nuvem.
             if (p.location == ProviderLocation.ON_DEVICE) CompactProvider(p, buildPrompt(true), LOCAL_HISTORY) else p
         }
@@ -395,7 +402,7 @@ class ConversationController(private val app: JarvisApp) {
         val runner = AgentRunner(app.toolbox.gateway(tools), maxRounds = 10)
         // Com ferramentas no prompt, o texto de cada tentativa fica guardado: só a resposta final é mostrada e falada.
         val toolsInPrompt = prompt.contains("<tools>")
-        runner.run(history, generate, ToolContext(sessionId, "Pedido: ${request.take(120)}"), app.toolbox::confirm, holdToolRoundText = toolsInPrompt).collect { event ->
+        runner.run(history, generate, ToolContext(sessionId, "Pedido: ${request.take(120)}"), app.toolbox::confirm, holdToolRoundText = toolsInPrompt, verifyClaims = toolsInPrompt).collect { event ->
             when (event) {
                 is AgentEvent.Text -> {
                     if (firstChunkAt == 0L) firstChunkAt = System.nanoTime()
@@ -412,7 +419,7 @@ class ConversationController(private val app: JarvisApp) {
                         if (speak || OverlayBus.acting.value) chunker.feed(visible).forEach(voice::speak)
                     }
                 }
-                is AgentEvent.Aside -> app.events.info("conversa", "tentativa (não falada): ${event.text.take(160)}")
+                is AgentEvent.Aside -> app.events.info("conversa", "não falado: ${event.text.take(200)}")
                 is AgentEvent.ToolStarted -> {
                     OverlayBus.anim.value = AnimState.THINKING
                     steps++
@@ -463,6 +470,7 @@ class ConversationController(private val app: JarvisApp) {
             // Alguns cérebros (ex.: gpt-oss no Groq grátis) voltam vazios em pedidos com ferramentas: ele descansa
             // um pouco e o próximo da lista responde agora, sem pedir para o usuário repetir.
             cooldown.rest(emptyFrom, EMPTY_REST_MS, System.currentTimeMillis())
+            if (prompt.contains("<tools>")) toolWeak += emptyFrom
             app.events.warn("conversa", "${names[emptyFrom]} voltou vazio; ele descansa ${EMPTY_REST_MS / 1000} s e o próximo cérebro responde")
             _entries.update { list -> list.filterNot { it.id == replyId || it.id == stepNoteId } }
             respond(speak, retried = true)
@@ -560,16 +568,14 @@ class ConversationController(private val app: JarvisApp) {
     }
 
     /**
-     * Ferramentas no prompt só quando o pedido parece de ação (ou a conversa recente foi de ação): economiza cota e deixa
-     * a conversa simples mais rápida. No cérebro do celular, só o último pedido conta.
+     * Cérebro online: ferramentas SEMPRE no prompt. Antes elas só iam quando a frase "parecia pedido de ação" e, num
+     * "e agora?" ou "continua", o cérebro ficava sem mãos e dizia que não sabia fazer (relatório da 0.24, pedido 69).
+     * Cérebro do celular (lento): só quando o último pedido sugere ação, para a leitura caber.
      */
     private fun toolsNeeded(compact: Boolean): Boolean {
-        if (OverlayBus.acting.value) return true
-        val users = _entries.value.filter { it.role == Role.USER && !it.note }.map { it.text }
-        if (users.isEmpty()) return false
-        if (compact) return ToolIntent.likely(users.last())
-        return users.takeLast(3).any { ToolIntent.likely(it) } ||
-            _entries.value.takeLast(6).any { it.note && it.text.startsWith(STEP_NOTE) }
+        if (!compact || OverlayBus.acting.value) return true
+        val last = _entries.value.lastOrNull { it.role == Role.USER && !it.note }?.text ?: return false
+        return ToolIntent.likely(last)
     }
 
     private fun add(entry: ChatEntry) {

@@ -51,7 +51,9 @@ object DeviceState {
         PowerManager.THERMAL_STATUS_NONE, PowerManager.THERMAL_STATUS_LIGHT -> ThermalLevel.NORMAL
         PowerManager.THERMAL_STATUS_MODERATE -> ThermalLevel.WARM
         PowerManager.THERMAL_STATUS_SEVERE -> ThermalLevel.HOT
-        else -> ThermalLevel.CRITICAL
+        PowerManager.THERMAL_STATUS_CRITICAL, PowerManager.THERMAL_STATUS_EMERGENCY, PowerManager.THERMAL_STATUS_SHUTDOWN -> ThermalLevel.CRITICAL
+        // Valor desconhecido (alguns sistemas devolvem códigos próprios): não trata como superaquecido.
+        else -> ThermalLevel.NORMAL
     }
 
     private fun isOnline(context: Context): Boolean {

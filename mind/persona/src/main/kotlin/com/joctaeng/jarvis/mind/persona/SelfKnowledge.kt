@@ -6,6 +6,10 @@ package com.joctaeng.jarvis.mind.persona
  */
 data class SelfInfo(
     val appName: String = "Euno",
+    /** Nome do personagem/avatar escolhido (ex.: "Clara"); vazio = só o nome do app. */
+    val assistantName: String = "",
+    /** Artigo do personagem ("o ", "a " ou ""). */
+    val article: String = "o ",
     val versionName: String,
     val brainNames: List<String>,
     val voiceName: String,
@@ -22,20 +26,28 @@ object SelfKnowledge {
     private val notYet = listOf(
         "reconhecer QUEM está falando (qualquer voz que diga meu nome me chama)",
         "agir sozinho em botões de enviar, pagar ou apagar (sempre peço sua confirmação)",
-        "fechar outros apps sozinho",
-        "e-mail, arquivos e notificações (Fase 2, em andamento; agenda e contatos já podem ser lidos)",
+        "encerrar (matar) outros apps — para sair de um app, vá para a tela inicial com tela_navegar \"inicio\"",
+        "ler e-mails, arquivos e notificações POR DENTRO, sem abrir o app (isso não impede abrir o Gmail ou o app de arquivos e ler/agir na tela)",
         "corpo 3D de verdade, de costas ou em outras poses",
     )
 
     fun section(info: SelfInfo, compact: Boolean = false): String = buildString {
         appendLine("Sobre você mesmo (verdade deste momento — use quando perguntarem o que você é ou pode fazer):")
-        appendLine("- Você é o ${info.appName} ${info.versionName}, um assistente pessoal que vive no celular como personagem flutuante.")
+        if (info.assistantName.isBlank()) {
+            appendLine("- Você é o ${info.appName} ${info.versionName}, um assistente pessoal que vive no celular como personagem flutuante.")
+        } else {
+            appendLine("- Você é ${info.article}${info.assistantName}, o personagem do app ${info.appName} (versão ${info.versionName}), um assistente pessoal que vive no celular como personagem flutuante. Seu nome é ${info.assistantName}.")
+        }
         appendLine("- Cérebro: ${info.brainNames.ifEmpty { listOf("nenhum configurado") }.joinToString(", ")}. Voz: ${info.voiceName}.")
         appendLine("- Autonomia: ${info.autonomyLabel}. Memórias guardadas: ${info.memoryCount}${if (info.privateMode) " (Modo Privado: nada novo é memorizado)" else ""}.")
         if (info.toolNames.isEmpty()) {
-            appendLine("- Ferramentas: nenhuma disponível agora; só conversa.")
+            appendLine("- Ferramentas: não vieram nesta resposta. Se pedirem uma ação, não diga que é incapaz: peça para repetir o pedido de forma direta (ex.: \"abra o Gmail\").")
         } else {
             appendLine("- Ferramentas que você realmente tem: ${info.toolNames.joinToString(", ")}.")
+            if ("abrir_app" in info.toolNames) {
+                appendLine("- Você abre QUALQUER app instalado (Gmail, Instagram, banco, EduMath, Arquivos...) com abrir_app" +
+                    if (info.toolNames.any { it.startsWith("tela_") }) " e, dentro dele, lê, olha, toca, digita e rola com as ferramentas tela_*." else ".")
+            }
         }
         if (info.features.isNotEmpty()) appendLine("- Como você conversa agora: ${info.features.joinToString("; ")}.")
         if (!compact) {

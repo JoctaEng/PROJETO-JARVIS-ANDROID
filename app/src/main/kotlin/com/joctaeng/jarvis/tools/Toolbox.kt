@@ -39,7 +39,9 @@ class Toolbox(private val app: JarvisApp) {
     suspend fun enabledTools(): List<Tool> {
         // App que não responde não pode atrasar a conversa: no máximo 4 s para reunir as ferramentas MCP.
         val mcpTools = runCatching { withTimeoutOrNull(4_000) { mcp.tools { settings.mcpServerEnabled(it.id) } } }.getOrNull().orEmpty()
-        return (native + mcpTools).filter { settings.toolEnabled(it.name) }
+        // Sem o controle do celular ligado, as ferramentas de tela só gerariam erro (e prompt maior): ficam de fora.
+        val screenOk = settings.phoneControl && com.joctaeng.jarvis.control.EunoAccessibilityService.isDeclared(app)
+        return (native + mcpTools).filter { settings.toolEnabled(it.name) && (screenOk || !it.name.startsWith("tela_")) }
     }
 
     fun gateway(tools: List<Tool>) = ToolGateway(
@@ -57,8 +59,9 @@ class Toolbox(private val app: JarvisApp) {
             critical = tool.risk == RiskLevel.CRITICAL,
         )
         _pending.value = request
-        // Garante que o pedido apareça mesmo se a conversa não estiver aberta (o personagem tem permissão de abrir sobre apps).
-        runCatching {
+        // Com o personagem na tela, o pedido aparece no balão dele, por cima do app em uso (abrir o chat cobria o app e o
+        // toque confirmado, ex.: "Enviar" no WhatsApp, caía na tela do Euno). Sem o personagem, abre a conversa.
+        if (!com.joctaeng.jarvis.overlay.OverlayBus.running.value) runCatching {
             app.startActivity(android.content.Intent(app, com.joctaeng.jarvis.chat.ChatActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         return try {

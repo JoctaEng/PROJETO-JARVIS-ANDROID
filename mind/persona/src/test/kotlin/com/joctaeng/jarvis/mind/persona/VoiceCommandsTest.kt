@@ -41,3 +41,16 @@ class VoiceCommandsTest {
         ).forEach { assertNull(VoiceCommands.parse(it), it) }
     }
 }
+
+class GreetingIsNotGoodbyeTest {
+    @Test fun greetingsAreNotCommands() {
+        listOf("E aí tudo bem", "Oi tudo bem", "e aí", "E aí, beleza?", "Oi, tá me ouvindo?", "Olá como é seu nome").forEach {
+            kotlin.test.assertNull(VoiceCommands.parse(it), it)
+        }
+    }
+
+    @Test fun avatarNamesAreFillers() {
+        kotlin.test.assertEquals(VoiceCommand.DISMISS, VoiceCommands.parse("Clara, pode ir"))
+        kotlin.test.assertEquals(VoiceCommand.STOP, VoiceCommands.parse("Guardião, para"))
+    }
+}

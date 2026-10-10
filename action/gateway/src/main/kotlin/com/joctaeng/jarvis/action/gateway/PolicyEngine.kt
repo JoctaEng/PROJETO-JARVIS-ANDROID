@@ -30,7 +30,7 @@ object PolicyEngine {
         partOfApprovedSkill: Boolean = false,
     ): PolicyDecision {
         if (!permissions.androidGranted) return PolicyDecision.Deny("Permissão do Android não concedida.")
-        if (!permissions.jarvisGranted) return PolicyDecision.Deny("Você ainda não autorizou o JARVIS a fazer isso.")
+        if (!permissions.jarvisGranted) return PolicyDecision.Deny("O usuário desligou esta ferramenta em Meu Euno → O que o Euno pode fazer.")
 
         return when (autonomy) {
             AutonomyLevel.OBSERVER -> PolicyDecision.Deny("Modo Observador: eu apenas respondo, não executo ações.")

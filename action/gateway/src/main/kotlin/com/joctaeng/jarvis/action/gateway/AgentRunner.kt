@@ -41,9 +41,16 @@ class AgentRunner(
          * não cada tentativa (pedido 65). Custa o streaming da resposta quando há ferramentas no prompt.
          */
         holdToolRoundText: Boolean = false,
+        /**
+         * Confere a resposta final ([HonestyCheck]): ferramenta "fingida" em texto ou ação dita sem ferramenta. Uma vez
+         * por pedido, devolve a correção ao cérebro em vez de mostrar/falar a mentira. Só vale com [holdToolRoundText].
+         */
+        verifyClaims: Boolean = false,
     ): Flow<AgentEvent> = flow {
         val messages = history.toMutableList()
         var counter = 0
+        var anySuccess = false
+        var corrected = false
         for (round in 1..maxRounds) {
             val filter = ToolCallFilter { "call-${++counter}" }
             val raw = StringBuilder()
@@ -70,6 +77,16 @@ class AgentRunner(
                 if (holdToolRoundText) held.append(tail.visible) else emit(AgentEvent.Text(tail.visible))
             }
             calls += tail.calls
+            if (verifyClaims && holdToolRoundText && !corrected && failed == null && calls.isEmpty() && round < maxRounds) {
+                val fix = HonestyCheck.problem(held.toString(), anySuccess)
+                if (fix != null) {
+                    corrected = true
+                    emit(AgentEvent.Aside("corrigido antes de responder: ${held.toString().trim().take(200)}"))
+                    messages += ChatMessage(Role.ASSISTANT, raw.toString())
+                    messages += ChatMessage(Role.USER, fix)
+                    continue
+                }
+            }
             if (held.isNotBlank()) {
                 if (calls.isEmpty() || failed != null) emit(AgentEvent.Text(held.toString())) else emit(AgentEvent.Aside(held.toString().trim()))
             }
@@ -89,6 +106,7 @@ class AgentRunner(
             val responses = calls.map { call ->
                 emit(AgentEvent.ToolStarted(call))
                 val result = gateway.execute(call, context, confirm = confirm)
+                if (result is ToolResult.Success) anySuccess = true
                 emit(AgentEvent.ToolFinished(call, result))
                 ToolProtocol.responseMessage(call, result)
             }

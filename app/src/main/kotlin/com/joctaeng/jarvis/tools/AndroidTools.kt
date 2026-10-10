@@ -19,6 +19,7 @@ import com.joctaeng.jarvis.system.resources.AgendaEvent
 import com.joctaeng.jarvis.system.resources.AppNameMatch
 import com.joctaeng.jarvis.system.resources.AgendaFormatter
 import com.joctaeng.jarvis.system.resources.AgendaPeriod
+import com.joctaeng.jarvis.system.resources.AgendaRequest
 import java.time.Instant
 import java.time.ZoneId
 import com.joctaeng.jarvis.core.contracts.Tool
@@ -317,19 +318,22 @@ private class OpenMap(context: Context) : AndroidTool(
 /** Fase 2: lê a agenda do celular (Google Agenda e outras contas sincronizadas), só leitura. */
 private class AgendaQuery(context: Context) : AndroidTool(
     context, "agenda_consultar",
-    "Lê a agenda do celular (Google Agenda e outras) e lista os compromissos de hoje, amanhã ou dos próximos 7 dias. " +
-        "Use para 'como está meu dia', 'tenho algo amanhã?', 'o que tenho esta semana'.",
+    "Lê a agenda do celular (Google Agenda e outras) sem abrir o app: hoje, amanhã, a semana, o mês ou um DIA ESPECÍFICO " +
+        "(campo data, ex.: 15/10). Use para 'como está meu dia', 'o que tenho dia 15?', 'o que tenho esta semana'.",
     RiskLevel.READ,
-    """"periodo":{"type":"string","enum":["hoje","amanha","semana"],"description":"hoje (padrão), amanha ou semana"}""",
+    """"periodo":{"type":"string","enum":["hoje","amanha","semana","mes"],"description":"hoje (padrão), amanha, semana ou mes"},""" +
+        """"data":{"type":"string","description":"um dia específico: DD/MM ou AAAA-MM-DD (ex.: 15/10); tem prioridade sobre periodo"},""" +
+        """"dias":{"type":"integer","minimum":1,"maximum":31,"description":"quantos dias a partir da data (ou de hoje)"}""",
 ) {
     override fun run(args: JSONObject): ToolResult {
         missingPermission(Manifest.permission.READ_CALENDAR, "ler a agenda")?.let { return it }
-        val period = AgendaPeriod.parse(args.optString("periodo"))
         val zone = ZoneId.systemDefault()
-        val now = Instant.now()
-        val (from, to) = AgendaFormatter.range(period, zone, now)
-        val events = runCatching { readAgenda(context, from, to) }.getOrElse { return ToolResult.Failure("Não consegui ler a agenda: ${it.message}") }
-        return ToolResult.Success(AgendaFormatter.format(events, period, zone, now))
+        val window = AgendaRequest.resolve(
+            args.optString("periodo"), args.optString("data").ifBlank { args.optString("dia") },
+            args.optInt("dias", 0).takeIf { it > 0 }, zone, Instant.now(),
+        ).getOrElse { return ToolResult.Failure(it.message ?: "pedido de agenda inválido") }
+        val events = runCatching { readAgenda(context, window.from, window.to) }.getOrElse { return ToolResult.Failure("Não consegui ler a agenda: ${it.message}") }
+        return ToolResult.Success(AgendaFormatter.format(events, window.label, window.multiDay, zone))
     }
 }
 
@@ -453,8 +457,11 @@ private class WhatsAppMessage(context: Context) : AndroidTool(
         if (name.isBlank()) return ToolResult.Failure("informe o contato")
         val found = runCatching { findContacts(context, name) }.getOrElse { return ToolResult.Failure("Não consegui ler os contatos: ${it.message}") }
         if (found.isEmpty()) return ToolResult.Failure("Nenhum contato com \"$name\".")
-        if (found.size > 1) return ToolResult.Failure("Mais de um contato combina com \"$name\": ${found.keys.joinToString(", ")}. Pergunte qual.")
-        val (contact, numbers) = found.entries.first()
+        // Vários parecidos ("Maria" → "Maria", "Maria Souza"): o de nome exato (sem emoji/acento) ganha; senão, pergunta.
+        val exact = found.entries.filter { normalize(it.key) == normalize(name) }
+        val entry = if (found.size == 1) found.entries.first() else exact.singleOrNull()
+            ?: return ToolResult.Failure("Mais de um contato combina com \"$name\": ${found.keys.joinToString(", ")}. Pergunte qual.")
+        val (contact, numbers) = entry
         val number = numbers.firstNotNullOfOrNull { PhoneNumber.forWhatsApp(it) } ?: return ToolResult.Failure("O contato $contact não tem um telefone válido.")
         val pm = context.packageManager
         val installed = listOf("com.whatsapp", "com.whatsapp.w4b").filter { pm.getLaunchIntentForPackage(it) != null }

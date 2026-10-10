@@ -55,3 +55,36 @@ class AgendaTest {
         assertTrue("quinta-feira, 08/10:" in text && "sexta-feira, 09/10:" in text)
     }
 }
+
+class AgendaRequestTest {
+    private val zone = java.time.ZoneId.of("America/Sao_Paulo")
+    // Sábado, 10/10/2026, 12:00 em Brasília.
+    private val now = java.time.ZonedDateTime.of(2026, 10, 10, 12, 0, 0, 0, zone).toInstant()
+    private val today = java.time.LocalDate.of(2026, 10, 10)
+
+    @Test fun specificDayFromManyFormats() {
+        for (text in listOf("15/10", "2026-10-15", "15/10/2026", "dia 15", "15")) {
+            assertEquals(java.time.LocalDate.of(2026, 10, 15), AgendaRequest.parseDate(text, today), text)
+        }
+    }
+
+    @Test fun dayAlreadyPassedMeansNextMonth() {
+        assertEquals(java.time.LocalDate.of(2026, 11, 5), AgendaRequest.parseDate("dia 5", today))
+    }
+
+    @Test fun dateInPeriodFieldIsNotSilentlyToday() {
+        val w = AgendaRequest.resolve("15/10", null, null, zone, now).getOrThrow()
+        assertEquals(java.time.LocalDate.of(2026, 10, 15), w.firstDay)
+        assertTrue("15/10/2026" in w.label)
+        // "17/10" tinha "7" e virava "semana"
+        assertEquals(java.time.LocalDate.of(2026, 10, 17), AgendaRequest.resolve("17/10", null, null, zone, now).getOrThrow().firstDay)
+    }
+
+    @Test fun periodsAndErrors() {
+        assertEquals(today, AgendaRequest.resolve("hoje", null, null, zone, now).getOrThrow().firstDay)
+        assertEquals(today.plusDays(1), AgendaRequest.resolve("amanhã", null, null, zone, now).getOrThrow().firstDay)
+        assertTrue(AgendaRequest.resolve("semana", null, null, zone, now).getOrThrow().multiDay)
+        assertTrue(AgendaRequest.resolve("quando der", null, null, zone, now).isFailure)
+        assertTrue(AgendaRequest.resolve(null, "ontem à tarde", null, zone, now).isFailure)
+    }
+}

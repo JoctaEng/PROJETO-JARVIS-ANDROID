@@ -16,10 +16,18 @@ class SelfKnowledgeTest {
         assertTrue("Ainda não existe" in s)
     }
 
+    @Test fun knowsItCanOpenAnyAppAndItsOwnName() {
+        val s = SelfKnowledge.section(info.copy(toolNames = listOf("abrir_app", "tela_ler"), assistantName = "Clara", article = "a "))
+        assertTrue("QUALQUER app instalado" in s && "tela_*" in s)
+        assertTrue("Você é a Clara" in s && "Seu nome é Clara" in s)
+        // Não pode mais dizer que e-mail "não existe" a ponto de recusar abrir o Gmail.
+        assertTrue("isso não impede abrir o Gmail" in s)
+    }
+
     @Test fun compactOmitsRoadmapAndNoToolsIsHonest() {
         val s = SelfKnowledge.section(info.copy(toolNames = emptyList(), brainNames = emptyList()), compact = true)
         assertFalse("Ainda não existe" in s)
-        assertTrue("nenhuma disponível" in s && "nenhum configurado" in s)
+        assertTrue("não vieram nesta resposta" in s && "nenhum configurado" in s)
     }
 }
 

@@ -85,7 +85,8 @@ class EunoAccessibilityService : AccessibilityService() {
     /** O que está na tela agora, em texto (sem senhas), e o app que está na frente. */
     fun readScreen(): String {
         val root = targetRoot()
-            ?: return "Não consegui ver outro app: só há janelas do Euno na tela. Abra o app que quer ler (abrir_app) e tente de novo."
+            ?: return "Agora só vejo janelas do próprio Euno (o chat ou o balão estão por cima). Isso NÃO quer dizer que o outro app " +
+                "fechou ou que a tela inicial está aberta. Para conferir, use tela_ver; para ir à tela inicial, tela_navegar \"inicio\"; para ler um app, abrir_app antes."
         val pkg = root.packageName?.toString().orEmpty()
         val entries = collect()
         return "App lido: ${pkg.ifBlank { "desconhecido" }} (nunca a tela do Euno)\n" + ScreenText.render(entries.map { it.ui })

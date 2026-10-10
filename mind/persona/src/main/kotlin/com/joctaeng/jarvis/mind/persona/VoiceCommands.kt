@@ -20,8 +20,8 @@ enum class VoiceCommand {
 object VoiceCommands {
     private val fillers = setOf(
         "ei", "oi", "ok", "entao", "bom", "ta", "bem", "ai", "por", "favor", "obrigado", "obrigada", "valeu", "muito", "ja",
-        "agora", "pode", "pra", "voce", "euno", "jarvis", "joca", "jocta", "luna", "thor", "nina", "selene", "rex", "maya", "kiko", "astra",
-    )
+        "agora", "pode", "pra", "voce", "euno", "jarvis", "joca", "jocta",
+    ) + (CharacterCatalog.all + AvatarPersonas.all).filter { it.id != "avatar" }.flatMap { normalize(it.defaultName) }.toSet()
     private val byeWords = setOf("tchau", "tchauzinho", "adeus", "flw", "xau")
     private val byePhrases = listOf(
         listOf("ate", "logo"), listOf("ate", "mais"), listOf("ate", "amanha"), listOf("ate", "ja"), listOf("ate", "breve"),

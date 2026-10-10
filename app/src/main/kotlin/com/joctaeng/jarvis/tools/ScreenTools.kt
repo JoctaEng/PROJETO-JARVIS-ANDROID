@@ -210,9 +210,14 @@ private class ScreenSwipe(context: Context) : ScreenTool(
 
 private class ScreenNav(context: Context) : ScreenTool(
     context, "tela_navegar",
-    "Navegação do Android: voltar, ir para o início, abrir os apps recentes, as notificações ou as configurações rápidas.",
+    "Navegação do Android: voltar, ir para a tela inicial ('inicio' — use para 'sai do app', 'volta para a tela inicial', 'fecha o app'), " +
+        "abrir os apps recentes, as notificações ou as configurações rápidas.",
     RiskLevel.WRITE_REVERSIBLE,
     """"acao":{"type":"string","enum":["voltar","inicio","recentes","notificacoes","configuracoes_rapidas"]}""", listOf("acao"),
 ) {
-    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult = result(service.system(args.optString("acao")))
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult {
+        val o = service.system(args.optString("acao"))
+        if (o is Outcome.Done) service.waitSettled(maxMs = 1_500)
+        return result(o)
+    }
 }
