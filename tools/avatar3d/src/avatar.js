@@ -73,12 +73,14 @@ function notify(kind, detail) {
 
 function relaxArms(vrm) {
   const h = vrm.humanoid;
+  // VRM 0.x olha para -Z antes de girar: o sentido do giro dos braços é o contrário.
+  const k = vrm.meta && vrm.meta.metaVersion === '0' ? -1 : 1;
   const set = (name, x, y, z) => { const b = h.getNormalizedBoneNode(name); if (b) b.rotation.set(x, y, z); };
   // VRM vem em pose "T": baixa os braços para uma pose natural.
-  set('leftUpperArm', 0, 0, -1.2);
-  set('rightUpperArm', 0, 0, 1.2);
-  set('leftLowerArm', 0, -0.15, 0);
-  set('rightLowerArm', 0, 0.15, 0);
+  set('leftUpperArm', 0, 0, -1.2 * k);
+  set('rightUpperArm', 0, 0, 1.2 * k);
+  set('leftLowerArm', 0, -0.15 * k, 0);
+  set('rightLowerArm', 0, 0.15 * k, 0);
 }
 
 function load(url) {

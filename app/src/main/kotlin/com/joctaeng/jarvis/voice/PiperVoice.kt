@@ -1,13 +1,13 @@
 package com.joctaeng.jarvis.voice
 
-import android.app.DownloadManager
 import android.content.Context
-import android.net.Uri
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -28,8 +28,6 @@ class PiperVoice(context: Context) {
 
     private val appContext = context.applicationContext
     private val root = File(appContext.getExternalFilesDir(null) ?: appContext.filesDir, "voz")
-    private val prefs = appContext.getSharedPreferences("piper", Context.MODE_PRIVATE)
-    private val manager = appContext.getSystemService(DownloadManager::class.java)
     private val lock = Mutex()
     private var tts: OfflineTts? = null
     private var loadedId: String? = null
@@ -41,42 +39,97 @@ class PiperVoice(context: Context) {
     fun installed(o: Option): Boolean = model(o).isFile && File(dir(o), "tokens.txt").isFile
     fun anyInstalled(): Option? = VOICES.firstOrNull { installed(it) }
 
+    // Download feito pelo próprio app (o DownloadManager do Android deixava o pedido "na fila" sem sair do 0 MB).
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    private val jobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+    private val progress = java.util.concurrent.ConcurrentHashMap<String, KokoroVoice.State>()
+
     fun startDownload(o: Option) {
-        root.mkdirs()
-        archive(o).delete()
-        val request = DownloadManager.Request(Uri.parse(o.url))
-            .setTitle("Euno: voz offline Piper (${o.label})")
-            .setDescription("Cerca de 67 MB")
-            // Algumas redes Wi-Fi são vistas pelo Android como "limitadas" e o download ficava parado em 0 MB.
-            .setAllowedOverMetered(true)
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalFilesDir(appContext, null, "voz/${archive(o).name}")
-        prefs.edit().putLong("id_${o.id}", manager.enqueue(request)).apply()
+        if (jobs[o.id]?.isActive == true) return
+        progress[o.id] = KokoroVoice.State.Downloading(0, 0, "conectando")
         log("download da voz ${o.id} iniciado")
+        jobs[o.id] = scope.launch { download(o) }
+    }
+
+    private suspend fun download(o: Option) {
+        root.mkdirs()
+        val part = File(root, "${o.folder}.part")
+        try {
+            val conn = (java.net.URL(o.url).openConnection() as java.net.HttpURLConnection).apply {
+                instanceFollowRedirects = true
+                connectTimeout = 15_000
+                readTimeout = 30_000
+                setRequestProperty("User-Agent", "Euno")
+            }
+            val code = conn.responseCode
+            if (code !in 200..299) error("o servidor respondeu HTTP $code")
+            val total = conn.contentLengthLong
+            var done = 0L
+            var lastReport = 0L
+            conn.inputStream.use { input ->
+                part.outputStream().use { out ->
+                    val buf = ByteArray(1 shl 16)
+                    while (true) {
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        if (done - lastReport > 512 * 1024) {
+                            lastReport = done
+                            progress[o.id] = KokoroVoice.State.Downloading(done, total, "")
+                        }
+                    }
+                }
+            }
+            conn.disconnect()
+            progress[o.id] = KokoroVoice.State.Extracting
+            note(o, "baixado (${done shr 20} MB); conferindo e preparando")
+            val file = archive(o)
+            file.delete()
+            if (!part.renameTo(file)) error("não consegui salvar o arquivo")
+            if (sha256(file) != o.sha256) {
+                file.delete()
+                error("arquivo baixado não confere (SHA-256); baixe de novo")
+            }
+            try {
+                extract(file)
+            } catch (e: Exception) {
+                dir(o).deleteRecursively()
+                error("não consegui descompactar: ${e.message}")
+            } finally {
+                file.delete()
+            }
+            progress[o.id] = KokoroVoice.State.Ready
+            note(o, "pronta")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            part.delete()
+            progress.remove(o.id)
+            throw e
+        } catch (e: Exception) {
+            part.delete()
+            val why = e.message ?: e.javaClass.simpleName
+            progress[o.id] = KokoroVoice.State.Failed("$why. Confira a internet e tente de novo.")
+            note(o, "falhou: $why")
+        }
     }
 
     private val lastStatus = mutableMapOf<String, String>()
 
     private fun log(text: String) = runCatching { com.joctaeng.jarvis.JarvisApp.from(appContext).events.info("voz", "Piper: $text") }
 
-    /** Registra só quando o estado muda (para o relatório mostrar por que parou). */
+    /** Registra só quando o estado muda (para o relatório mostrar o que aconteceu). */
     private fun note(o: Option, status: String) {
         if (lastStatus[o.id] == status) return
         lastStatus[o.id] = status
         log("${o.id}: $status")
     }
 
-    private fun pausedReason(reason: Int): String = when (reason) {
-        DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "esperando Wi-Fi (o Android acha que a rede é limitada)"
-        DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "esperando internet"
-        DownloadManager.PAUSED_WAITING_TO_RETRY -> "falha de rede; o Android vai tentar de novo"
-        else -> "pausado pelo Android (motivo $reason)"
-    }
-
     /** Cancela um download em andamento (o usuário pode tentar de novo depois). */
     fun cancel(o: Option) {
-        prefs.getLong("id_${o.id}", -1).takeIf { it >= 0 }?.let { manager.remove(it) }
-        prefs.edit().remove("id_${o.id}").apply()
+        jobs.remove(o.id)?.cancel()
+        progress.remove(o.id)
+        File(root, "${o.folder}.part").delete()
         archive(o).delete()
         note(o, "cancelado")
     }
@@ -84,54 +137,12 @@ class PiperVoice(context: Context) {
     fun delete(o: Option) {
         if (loadedId == o.id) release()
         dir(o).deleteRecursively()
+        progress.remove(o.id)
     }
 
-    /** Consulta o download; ao terminar confere o SHA-256 e descompacta (chamar fora da thread principal). */
+    /** Situação da voz: pronta, baixando (com bytes), preparando ou falhou. */
     suspend fun poll(o: Option): KokoroVoice.State = withContext(Dispatchers.IO) {
-        if (installed(o)) return@withContext KokoroVoice.State.Ready
-        val id = prefs.getLong("id_${o.id}", -1)
-        if (id < 0) return@withContext KokoroVoice.State.NotInstalled
-        manager.query(DownloadManager.Query().setFilterById(id)).use { c ->
-            if (!c.moveToFirst()) {
-                prefs.edit().remove("id_${o.id}").apply()
-                return@withContext KokoroVoice.State.NotInstalled
-            }
-            when (c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
-                DownloadManager.STATUS_SUCCESSFUL -> {
-                    note(o, "baixado; conferindo e preparando")
-                    prefs.edit().remove("id_${o.id}").apply()
-                    val file = archive(o)
-                    if (sha256(file) != o.sha256) {
-                        file.delete()
-                        note(o, "arquivo não confere (SHA-256)")
-                        return@withContext KokoroVoice.State.Failed("arquivo baixado não confere (SHA-256); baixe de novo")
-                    }
-                    runCatching { extract(file) }.fold(
-                        { KokoroVoice.State.Ready },
-                        { e -> dir(o).deleteRecursively(); KokoroVoice.State.Failed("não consegui descompactar: ${e.message}") },
-                    ).also { file.delete() }
-                }
-                DownloadManager.STATUS_FAILED -> {
-                    val reason = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                    note(o, "falhou (código $reason)")
-                    prefs.edit().remove("id_${o.id}").apply()
-                    manager.remove(id)
-                    KokoroVoice.State.Failed("o download falhou (código $reason); tente de novo no Wi-Fi")
-                }
-                else -> {
-                    val status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                    val reason = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                    val bytes = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-                    val text = when (status) {
-                        DownloadManager.STATUS_PENDING -> "na fila do Android"
-                        DownloadManager.STATUS_PAUSED -> pausedReason(reason)
-                        else -> ""
-                    }
-                    note(o, if (text.isEmpty()) "baixando" else text)
-                    KokoroVoice.State.Downloading(bytes, c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)), text)
-                }
-            }
-        }
+        if (installed(o)) KokoroVoice.State.Ready else progress[o.id] ?: KokoroVoice.State.NotInstalled
     }
 
     private fun extract(file: File) {

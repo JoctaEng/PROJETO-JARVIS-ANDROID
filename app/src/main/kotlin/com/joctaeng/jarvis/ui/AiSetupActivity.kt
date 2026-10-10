@@ -83,6 +83,7 @@ class AiSetupActivity : ComponentActivity() {
                         AzureSection()
                         BackupBrainSection()
                         PiperSection()
+                        GeminiSection()
                     }
                 }
             }
@@ -218,20 +219,7 @@ class AiSetupActivity : ComponentActivity() {
                 }
             }
             if (status.isNotEmpty()) Hint(status)
-            if (voices.isNotEmpty()) {
-                Text("Voz do Azure", style = MaterialTheme.typography.labelLarge)
-                Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
-                    Choice(listOf("") + voices.map { it.shortName }, voiceName, { name ->
-                        if (name.isEmpty()) "Padrão do personagem (Francisca ou Antonio)"
-                        else voices.first { it.shortName == name }.let { "${it.localName} (${if (it.gender == "Female") "feminina" else "masculina"})" }
-                    }) {
-                        voiceName = it
-                        settings.azureVoice = it
-                    }
-                }
-            } else if (voiceName.isNotEmpty()) {
-                Hint("Voz escolhida: $voiceName")
-            }
+            androidx.compose.runtime.key(keySaved, voices.size) { AzureVoicePicker(app) }
             if (keySaved) {
                 OutlinedButton(onClick = {
                     app.voice.resetAzureCooldown()
@@ -279,13 +267,13 @@ class AiSetupActivity : ComponentActivity() {
         LaunchedEffect(tick) {
             while (true) {
                 PiperVoice.VOICES.forEach { states[it.id] = piper.poll(it) }
-                if (states.values.none { it is KokoroVoice.State.Downloading }) break
+                if (states.values.none { it is KokoroVoice.State.Downloading || it == KokoroVoice.State.Extracting }) break
                 delay(1000)
             }
         }
 
         Section("3. Voz sem internet: Piper (offline, leve)") {
-            Hint("Funciona sem internet e sem gastar cota. Cada voz tem cerca de 67 MB; baixe no Wi-Fi, uma de cada vez. São vozes masculinas brasileiras (licença livre). O progresso também aparece na barra de notificações.")
+            Hint("Funciona sem internet e sem gastar cota. Cada voz tem cerca de 67 MB; baixe no Wi-Fi, uma de cada vez. São vozes masculinas brasileiras (licença livre). Mantenha esta tela aberta até terminar.")
             PiperVoice.VOICES.forEach { o ->
                 val st = states[o.id] ?: KokoroVoice.State.NotInstalled
                 Card(Modifier.fillMaxWidth()) {
@@ -344,6 +332,22 @@ class AiSetupActivity : ComponentActivity() {
                 }
             }
             Hint("Voz offline feminina: Kokoro (~130 MB), em Meu Euno → Voz.")
+        }
+    }
+
+    @Composable
+    private fun GeminiSection() {
+        Section("4. Cérebro principal: Google Gemini") {
+            Steps(
+                "Toque em Abrir AI Studio e entre com sua conta Google.",
+                "Toque em Get API key → Create API key e copie a chave.",
+                "Na seção 2 (Cérebros), toque em Adicionar cérebro → Google Gemini, cole a chave e toque em Salvar e testar. Deixe o Gemini em 1º (↑ Subir).",
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { open("https://aistudio.google.com/apikey") }) { Text("Abrir AI Studio") }
+                OutlinedButton(onClick = { startActivity(Intent(this@AiSetupActivity, SettingsActivity::class.java)) }) { Text("Abrir Meu Euno") }
+            }
+            Hint("A chave do Gemini também liga a voz do Gemini (2ª opção de voz no Automático). A cota grátis de voz é pequena; por isso o Azure vem primeiro.")
         }
     }
 }

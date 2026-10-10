@@ -87,7 +87,7 @@ private fun BrainCard(app: JarvisApp, slot: BrainSlot, index: Int, count: Int, o
     val brains = app.brains
     val preset = brains.preset(slot)
     val scope = rememberCoroutineScope()
-    var open by remember { mutableStateOf(!brains.hasKey(slot.id) && preset.keyRequired) }
+    var open by remember { mutableStateOf(true) }
     var keyText by remember { mutableStateOf("") }
     var keySaved by remember { mutableStateOf(brains.hasKey(slot.id)) }
     var model by remember { mutableStateOf(slot.model) }

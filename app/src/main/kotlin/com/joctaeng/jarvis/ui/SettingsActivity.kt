@@ -885,6 +885,7 @@ class SettingsActivity : ComponentActivity() {
                 Text("Configurar Azure, Piper e cérebro reserva (passo a passo)")
             }
             Text("Voz natural", style = MaterialTheme.typography.labelLarge)
+            if (naturalEngine == VoiceEngine.AUTO || naturalEngine == VoiceEngine.AZURE) AzureVoicePicker(app)
             Choice(VoiceEngine.entries, naturalEngine, { it.label }) {
                 naturalEngine = it
                 settings.voiceEngine = it

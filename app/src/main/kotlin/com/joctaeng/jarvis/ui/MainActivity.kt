@@ -100,6 +100,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val accessibilityOff = refreshKey >= 0 && app.settings.phoneControl &&
+                com.joctaeng.jarvis.control.EunoAccessibilityService.isDeclared(this@MainActivity) &&
+                !com.joctaeng.jarvis.control.EunoAccessibilityService.isEnabled(this@MainActivity)
+            if (accessibilityOff) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Controle do celular desligado", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
+                        Text(
+                            "O Android desligou a acessibilidade do Euno. Isso acontece uma vez quando uma atualização pede uma permissão nova " +
+                                "(a 0.18 trouxe o gesto de deslizar). Ligue de novo para ele abrir apps, tocar e ler a tela.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Button(onClick = { com.joctaeng.jarvis.control.AccessibilityLink.open(this@MainActivity) }) { Text("Ligar acessibilidade") }
+                    }
+                }
+            }
             if (!canOverlay) {
                 Text("Para ${app.settings.displayName} flutuar sobre os apps, permita \"Exibir sobre outros apps\".", textAlign = TextAlign.Center)
                 Button(onClick = { SystemSettings.openOverlayPermission(this@MainActivity) }) { Text("Permitir") }
