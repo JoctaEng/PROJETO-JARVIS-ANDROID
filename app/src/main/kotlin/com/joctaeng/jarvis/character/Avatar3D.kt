@@ -52,10 +52,26 @@ class Avatar3D(context: Context) {
         addJavascriptInterface(Bridge(), "EunoAvatar")
     }
 
-    fun load() {
+    private var loadedModel = ""
+
+    /**
+     * Modelo a usar: o .vrm importado pelo usuário; senão o 3D do personagem escolhido (Joctã Casual, Luna...);
+     * senão (ou se o usuário pediu) o avatar de exemplo.
+     */
+    private fun modelPath(): String {
         val custom = customFile(appContext)
-        val model = if (custom.isFile) "files/${custom.name}" else "models/avatar.vrm"
-        view.loadUrl("https://$HOST/index.html?model=$model")
+        if (custom.isFile) return "files/${custom.name}"
+        val id = app.settings.character.id
+        if (app.settings.avatarModel != "exemplo" && hasModel(appContext, id)) return "models/$id.vrm"
+        return "models/avatar.vrm"
+    }
+
+    fun load() {
+        loadedModel = modelPath()
+        ready = false
+        failed = false
+        last = ""
+        view.loadUrl("https://$HOST/index.html?model=$loadedModel")
     }
 
     private var job: Job? = null
@@ -67,6 +83,11 @@ class Avatar3D(context: Context) {
         job = scope.launch {
             var framing = ""
             while (isActive) {
+                // Trocou de personagem ou de modelo nos ajustes: recarrega o 3D sozinho.
+                if (modelPath() != loadedModel) {
+                    framing = ""
+                    load()
+                }
                 if (ready) {
                     val f = app.settings.avatarFraming
                     if (f != framing) {
@@ -145,5 +166,14 @@ class Avatar3D(context: Context) {
 
         fun customDir(context: Context) = File(context.filesDir, "avatar").apply { mkdirs() }
         fun customFile(context: Context) = File(customDir(context), "meu-avatar.vrm")
+
+        /** O personagem tem modelo 3D próprio dentro do APK? */
+        fun hasModel(context: Context, characterId: String): Boolean = "$characterId.vrm" in models(context)
+
+        @Volatile private var modelList: Set<String>? = null
+
+        /** Modelos que vêm no APK (lido uma vez por processo). */
+        private fun models(context: Context): Set<String> = modelList
+            ?: runCatching { context.assets.list("avatar3d/models")?.toSet() }.getOrNull().orEmpty().also { modelList = it }
     }
 }

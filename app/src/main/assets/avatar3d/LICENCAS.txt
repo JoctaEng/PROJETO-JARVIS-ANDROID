@@ -51,3 +51,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 VRM1_Constraint_Twist_Sample v1.0.1 — (c) 2022 pixiv Inc. Licença: VRM Public License 1.0 (https://vrm.dev/licenses/1.0/).
 Metadados do arquivo: avatarPermission=everyone; commercialUsage=corporation; allowRedistribution=true; modification=allowModificationRedistribution; creditNotation=unnecessary.
 Origem: https://github.com/pixiv/three-vrm (packages/three-vrm/examples/models).
+
+== Modelos models/jocta_casual.vrm e models/luna.vrm ==
+Personagens do Projeto Euno (Joctã Casual e Luna), gerados por tools/avatar3d/gerar_personagens.py a partir de formas simples.
+Uso restrito ao app Euno (sem redistribuição; ver metadados VRM dos arquivos).

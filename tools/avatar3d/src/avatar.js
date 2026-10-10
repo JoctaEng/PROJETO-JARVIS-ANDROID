@@ -37,6 +37,8 @@ const st = {
   nextBlink: 2,
   blinkT: -1,
   headY: 1.4,
+  top: 0,
+  height: 0,
   framing: 'busto',
 };
 
@@ -52,8 +54,11 @@ window.addEventListener('resize', resize);
 
 function frame() {
   // Enquadramento de busto (cabeça e ombros) ou meio corpo.
-  const span = st.framing === 'corpo' ? 0.95 : 0.62;
-  const centerY = st.headY - (st.framing === 'corpo' ? 0.32 : 0.12);
+  // Pelo tamanho real do modelo (serve para qualquer VRM): busto = ~37% de cima; corpo = ~62%.
+  const H = st.height > 0.3 ? st.height : 1.6;
+  const top = st.height > 0.3 ? st.top : st.headY + 0.2;
+  const span = H * (st.framing === 'corpo' ? 0.62 : 0.37);
+  const centerY = top - span * 0.47;
   const dist = (span / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.min(1, camera.aspect);
   camera.position.set(0, centerY, dist);
   camera.lookAt(0, centerY, 0);
@@ -93,6 +98,8 @@ function load(url) {
       vrm.update(0);
       const head = vrm.humanoid.getNormalizedBoneNode('head');
       if (head) { const p = new THREE.Vector3(); head.getWorldPosition(p); st.headY = p.y + 0.06; }
+      const box = new THREE.Box3().setFromObject(vrm.scene);
+      if (isFinite(box.max.y)) { st.top = box.max.y; st.height = box.max.y - Math.max(0, box.min.y); }
       if (vrm.lookAt) vrm.lookAt.target = lookTarget;
       st.vrm = vrm;
       st.loaded = true;

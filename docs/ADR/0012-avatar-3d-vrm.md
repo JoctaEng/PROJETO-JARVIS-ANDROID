@@ -27,3 +27,6 @@ O app já calcula a boca (visemas) e a emoção de cada frase (ADR implícito na
 ## Consequências
 - APK ~11 MB maior (modelo). Memória maior com o 3D ligado (opção pode ser desligada em Meu Euno → Personagem).
 - Personagens próprios (Joctã, Luna, Thor) em 3D dependem de criar os modelos VRM.
+
+## Atualização (v0.21.0)
+Joctã Casual e Luna ganharam modelos VRM próprios, gerados por código (`tools/avatar3d/gerar_personagens.py`), sem programa de modelagem. Estilo de boneco 3D simples; modelos mais detalhados podem ser feitos depois no VRoid Studio/Blender e colocados em `assets/avatar3d/models/<id>.vrm`.
