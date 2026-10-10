@@ -23,6 +23,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,7 +38,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.joctaeng.jarvis.JarvisApp
-import com.joctaeng.jarvis.character.CharacterView
 import com.joctaeng.jarvis.character.ComposeCharacterRenderer
 import com.joctaeng.jarvis.chat.ChatActivity
 import com.joctaeng.jarvis.core.model.AnimState
@@ -78,14 +78,16 @@ class MainActivity : ComponentActivity() {
             verticalArrangement = Arrangement.spacedBy(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            CharacterView(renderer, Modifier.size(150.dp))
+            com.joctaeng.jarvis.character.AvatarBadge(renderer, Modifier.size(150.dp))
             val version = remember { packageManager.getPackageInfo(packageName, 0).versionName.orEmpty() }
             Text("Euno · Seu segundo eu digital", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Versão $version", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(app.settings.displayName, style = MaterialTheme.typography.headlineMedium)
-            Text(profile.trait, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            // Com avatar 3D, a tela inicial fala dele (e não do personagem 2D guardado por trás).
+            val use3d = app.settings.avatar3d
+            Text(if (use3d) "Avatar 3D" else profile.trait, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Text(
-                profile.description, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
+                if (use3d) com.joctaeng.jarvis.character.Avatar3D.describe(this@MainActivity, app.settings.avatarModel) else profile.description, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
@@ -109,10 +111,28 @@ class MainActivity : ComponentActivity() {
                         Text("Controle do celular desligado", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
                         Text(
                             "O Android desligou a acessibilidade do Euno. Isso acontece uma vez quando uma atualização pede uma permissão nova " +
-                                "(a 0.18 trouxe o gesto de deslizar). Ligue de novo para ele abrir apps, tocar e ler a tela.",
+                                "(a 0.25 trouxe o print da tela, para ele ver onde tocar). Ligue de novo para ele abrir apps, tocar e ler a tela.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Button(onClick = { com.joctaeng.jarvis.control.AccessibilityLink.open(this@MainActivity) }) { Text("Ligar acessibilidade") }
+                    }
+                }
+            }
+            val batteryLimited = refreshKey >= 0 && !SystemSettings.isIgnoringBatteryOptimizations(this@MainActivity)
+            if (batteryLimited) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("O sistema está fechando o Euno", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
+                        Text(
+                            "A limpeza automática do celular encerrou o Euno algumas vezes. Para ele ficar sempre pronto: " +
+                                "1) bateria sem restrições; 2) início automático ligado" +
+                                (if (SystemSettings.isXiaomi) "; 3) nos apps recentes, segure o Euno e toque no cadeado." else "."),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { SystemSettings.requestIgnoreBatteryOptimizations(this@MainActivity) }) { Text("Bateria") }
+                            if (SystemSettings.isXiaomi) OutlinedButton(onClick = { SystemSettings.openXiaomiAutostart(this@MainActivity) }) { Text("Início automático") }
+                        }
                     }
                 }
             }

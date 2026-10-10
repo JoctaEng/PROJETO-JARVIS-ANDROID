@@ -70,6 +70,11 @@ class BrainStore(private val settings: AppSettings, private val secrets: SecretS
     /** Chave do primeiro Gemini da lista (a voz do Gemini usa a mesma chave). */
     fun geminiKey(): String? = all().filter { it.preset == CloudPreset.GEMINI.name }.firstNotNullOfOrNull { key(it.id) }
 
+    /** O primeiro Gemini com chave (endereço, modelo, chave): ele enxerga imagens, então é quem olha o print da tela. */
+    fun visionBrain(): Triple<String, String, String>? = all()
+        .filter { it.preset == CloudPreset.GEMINI.name && it.baseUrl.isNotBlank() && it.model.isNotBlank() }
+        .firstNotNullOfOrNull { s -> key(s.id)?.let { Triple(s.baseUrl, s.model, it) } }
+
     /**
      * Uma vez só: leva o cérebro principal e o reserva das versões anteriores (um campo de chave cada) para a lista,
      * sem perder as chaves. Depois disso os campos antigos não são mais usados.

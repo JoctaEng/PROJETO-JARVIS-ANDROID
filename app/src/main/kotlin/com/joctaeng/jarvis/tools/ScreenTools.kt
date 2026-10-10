@@ -12,11 +12,14 @@ import com.joctaeng.jarvis.core.model.ToolResult
 import com.joctaeng.jarvis.overlay.OverlayBus
 import org.json.JSONObject
 
-/** Controle do celular por acessibilidade: ler a tela, tocar, digitar, rolar e navegar. */
+/** Controle do celular por acessibilidade: ler a tela, olhar o print, tocar, digitar, rolar e navegar. */
+
+/** Tempo para o Euno ir para o canto antes da 1ª ação na tela. */
+private const val ACTING_SETTLE_MS = 450L
 object ScreenTools {
     fun all(context: Context): List<Tool> {
         val app = context.applicationContext
-        return listOf(ScreenRead(app), ScreenTap(app), ScreenType(app), ScreenScroll(app), ScreenSwipe(app), ScreenNav(app))
+        return listOf(ScreenRead(app), ScreenLook(app), ScreenTap(app), ScreenTapPoint(app), ScreenType(app), ScreenScroll(app), ScreenSwipe(app), ScreenNav(app))
     }
 }
 
@@ -55,7 +58,11 @@ private abstract class ScreenTool(
                 },
             )
         }
-        OverlayBus.acting.value = true
+        if (!OverlayBus.acting.value) {
+            // Se encolhe para o canto ANTES de agir (pedido 65): senão o 1º toque/leitura pega o Euno ainda no meio da tela.
+            OverlayBus.acting.value = true
+            kotlinx.coroutines.delay(ACTING_SETTLE_MS)
+        }
         val args = runCatching { JSONObject(argumentsJson) }.getOrElse { JSONObject() }
         return run(service, args)
     }
@@ -71,11 +78,60 @@ private abstract class ScreenTool(
 
 private class ScreenRead(context: Context) : ScreenTool(
     context, "tela_ler",
-    "Lê o que está na tela agora (textos, botões e campos; senhas nunca são lidas). Use antes de tocar, para ver os nomes dos botões, " +
-        "e para 'o que está na minha tela?'.",
+    "Lê o que está na tela agora (textos, botões e campos; senhas nunca são lidas). Espera o app terminar de carregar. " +
+        "Use antes de tocar, para ver os nomes dos botões, e para 'o que está na minha tela?'.",
     RiskLevel.READ,
 ) {
-    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult = ToolResult.Success(service.readScreen())
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult {
+        service.waitSettled(maxMs = 2_500)
+        return ToolResult.Success(service.readScreen())
+    }
+}
+
+private class ScreenLook(context: Context) : ScreenTool(
+    context, "tela_ver",
+    "Tira um print da tela e OLHA a imagem (visão): diz o que aparece e onde fica cada elemento, em % da largura e da altura. " +
+        "Use quando tela_ler não bastar (ícones sem nome, calendário, imagens, mapas) ou quando um toque pelo nome falhar; depois use tela_tocar_ponto.",
+    RiskLevel.READ,
+    """"pergunta":{"type":"string","description":"o que você procura na tela (ex.: o dia 15, o botão de salvar)"}""",
+) {
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult {
+        val app = JarvisApp.from(context)
+        service.waitSettled(maxMs = 2_500)
+        val jpeg = service.screenshotJpeg()
+            ?: return ToolResult.Failure(
+                "não consegui tirar o print da tela. Se for a primeira vez nesta versão, o Android pede para desligar e ligar " +
+                    "\"Euno - controle do celular\" em Acessibilidade (permissão nova de captura). Enquanto isso, use tela_ler.",
+            )
+        val text = runCatching { service.readScreen() }.getOrDefault("")
+        return runCatching { ScreenVision.look(app, jpeg, args.optString("pergunta"), text) }
+            .fold(
+                onSuccess = {
+                    app.events.info("controle", "tela_ver: print de ${jpeg.size / 1024} KB descrito (${it.length} car.)")
+                    ToolResult.Success(JSONObject().put("visao", it).toString())
+                },
+                onFailure = {
+                    app.events.warn("controle", "tela_ver falhou: ${it.message}")
+                    ToolResult.Failure("não consegui olhar o print: ${it.message}. Use tela_ler.")
+                },
+            )
+    }
+}
+
+private class ScreenTapPoint(context: Context) : ScreenTool(
+    context, "tela_tocar_ponto",
+    "Toca num ponto da tela em porcentagem (x da esquerda, y de cima, de 0 a 100), com as posições que tela_ver devolveu. " +
+        "Use quando tela_tocar pelo nome não funcionar.",
+    RiskLevel.WRITE_REVERSIBLE,
+    """"x":{"type":"number","description":"0-100, da esquerda"},"y":{"type":"number","description":"0-100, de cima"}""",
+    listOf("x", "y"),
+) {
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult {
+        fun num(k: String): Double? = args.opt(k)?.toString()?.trim()?.removeSuffix("%")?.replace(',', '.')?.toDoubleOrNull()
+        val x = num("x") ?: return ToolResult.Failure("informe x (0-100)")
+        val y = num("y") ?: return ToolResult.Failure("informe y (0-100)")
+        return result(service.tapPercent(x, y))
+    }
 }
 
 private class ScreenTap(context: Context) : ScreenTool(
@@ -113,18 +169,29 @@ private class ScreenType(context: Context) : ScreenTool(
 }
 
 private class ScreenScroll(context: Context) : ScreenTool(
-    context, "tela_rolar", "Rola a tela para baixo ou para cima.", RiskLevel.WRITE_REVERSIBLE,
-    """"direcao":{"type":"string","enum":["baixo","cima"]}""",
+    context, "tela_rolar",
+    "Rola a tela no ritmo de uma pessoa (um pedaço por vez, esperando carregar): baixo, cima, direita ou esquerda. " +
+        "Com 'procurar', continua rolando sozinho até o texto aparecer ou a lista acabar — use isso em vez de rolar várias vezes.",
+    RiskLevel.WRITE_REVERSIBLE,
+    """"direcao":{"type":"string","enum":["baixo","cima","direita","esquerda"]},"procurar":{"type":"string","description":"texto a achar rolando (opcional)"}""",
 ) {
-    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult =
-        result(service.scroll(forward = !args.optString("direcao").startsWith("c", ignoreCase = true)))
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult {
+        val d = com.joctaeng.jarvis.tools.normalize(args.optString("direcao"))
+        val direction = when {
+            d.startsWith("c") -> "cima"
+            d.startsWith("dir") || d.startsWith("prox") -> "proximo"
+            d.startsWith("esq") || d.startsWith("ant") -> "anterior"
+            else -> "baixo"
+        }
+        val find = args.optString("procurar").trim()
+        return result(if (find.isNotEmpty()) service.scrollUntil(find, direction) else service.swipe(direction))
+    }
 }
 
 private class ScreenSwipe(context: Context) : ScreenTool(
     context, "tela_deslizar",
-    "Desliza o dedo na tela: 'proximo' passa para a próxima página/semana/mês/foto (dedo da direita para a esquerda), " +
-        "'anterior' volta (dedo da esquerda para a direita); 'baixo'/'cima' rolam por gesto quando tela_rolar não funciona. " +
-        "Use para 'vai para a direita', 'passa para a próxima semana', 'volta um mês'. Depois use tela_ler para conferir.",
+    "Desliza para a próxima ('proximo') ou anterior ('anterior') página/semana/mês/foto, no ritmo de uma pessoa e esperando carregar. " +
+        "Use para 'passa para a próxima semana', 'volta um mês'.",
     RiskLevel.WRITE_REVERSIBLE,
     """"direcao":{"type":"string","enum":["proximo","anterior","baixo","cima"]}""", listOf("direcao"),
 ) {

@@ -40,7 +40,11 @@ const st = {
   top: 0,
   height: 0,
   framing: 'busto',
+  bust: 0.37, // fração da altura no "busto"
 };
+
+// Modelos de proporção realista (cabeça pequena em relação ao corpo) pedem um busto mais fechado para o rosto aparecer.
+const BUST_BY_MODEL = { guardiao: 0.26 };
 
 function resize() {
   const w = canvas.clientWidth || window.innerWidth;
@@ -57,7 +61,7 @@ function frame() {
   // Pelo tamanho real do modelo (serve para qualquer VRM): busto = ~37% de cima; corpo = ~62%.
   const H = st.height > 0.3 ? st.height : 1.6;
   const top = st.height > 0.3 ? st.top : st.headY + 0.2;
-  const span = H * (st.framing === 'corpo' ? 0.62 : 0.37);
+  const span = H * (st.framing === 'corpo' ? 0.62 : st.bust);
   const centerY = top - span * 0.47;
   const dist = (span / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.min(1, camera.aspect);
   camera.position.set(0, centerY, dist);
@@ -200,10 +204,25 @@ window.Avatar = {
   setPaused(p) { st.paused = !!p; },
   setFraming(f) { st.framing = f === 'corpo' ? 'corpo' : 'busto'; frame(); },
   status() { return JSON.stringify({ loaded: st.loaded, error: st.error, mode: st.mode }); },
+  /** Foto do avatar agora (PNG em data URL), para a miniatura no chat e na tela inicial. */
+  snapshot() { if (!st.vrm) return ''; renderer.render(scene, camera); return canvas.toDataURL('image/png'); },
+  /** Diagnóstico: alturas dos ossos (para conferir o enquadramento). */
+  bones() {
+    if (!st.vrm) return '{}';
+    const o = { top: st.top, height: st.height, headY: st.headY };
+    for (const n of ['hips', 'spine', 'chest', 'upperChest', 'neck', 'head', 'leftEye']) {
+      const b = st.vrm.humanoid.getNormalizedBoneNode(n);
+      if (b) { const p = new THREE.Vector3(); b.getWorldPosition(p); o[n] = +p.y.toFixed(3); }
+    }
+    return JSON.stringify(o);
+  },
   value(name) { return st.vrm && st.vrm.expressionManager ? st.vrm.expressionManager.getValue(name) : null; },
 };
 
 resize();
 loop();
 const params = new URLSearchParams(location.search);
-load(params.get('model') || 'models/avatar.vrm');
+const modelUrl = params.get('model') || 'models/avatar.vrm';
+const modelId = (modelUrl.split('/').pop() || '').replace(/\.vrm$/, '');
+if (BUST_BY_MODEL[modelId]) st.bust = BUST_BY_MODEL[modelId];
+load(modelUrl);

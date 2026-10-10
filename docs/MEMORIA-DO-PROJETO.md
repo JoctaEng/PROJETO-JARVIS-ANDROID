@@ -63,6 +63,7 @@ Histórico completo e atualizado em `docs/FASE-2.md`. Resumo:
 
 ## 8. Pedidos do usuário (diário curto; acrescente no fim)
 Lista completa e com situação: `docs/PEDIDOS-DO-USUARIO.md`. Diário de sessões: `docs/HANDOFF.md` §11.
+- 10/10/2026 (pedido 66): ordem de fazer a v0.25 + Guardião 3D como mais um avatar + avatar igual em todos os lugares → **v0.25.0**.
 - 10/10/2026 (pedido 65): bugs do avatar (2D ao fundo), agente mais humano (minimizar antes, esperar, rolar como gente, print da tela, tentar em silêncio), dezenas de skills, tarefas programadas, plano até a v1 comercial.
 - 09/10/2026: pediu que esta memória em .md exista para nunca esquecer fases e ajustes; colou a conversa original (conceito + lista de nomes) para ser lembrada.
 

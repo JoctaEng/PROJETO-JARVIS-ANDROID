@@ -3,11 +3,12 @@
 > **Status: só planejado. Nada aqui começa sem ordem do usuário.** A ordem pode mudar a pedido dele.
 > Origem: pedidos 39–65 (`docs/PEDIDOS-DO-USUARIO.md`), ROTEIRO §12 (fases 2–4) e o teste da 0.24.0 (`docs/TESTE-V0.14.0.md`).
 
-## v0.25 — "Age direito" (correções do teste da 0.24 + jeito de agir)
+## v0.25 — "Age direito" (correções do teste da 0.24 + jeito de agir) — **FEITA na 0.25.0 (aguarda teste)**
 **Avatar (pedido 65a)**
 - Com o 3D ligado, **nunca mostrar o 2D**: portal de entrada, "tchau" e troca de personagem passam a usar a animação do próprio 3D (ou um fade), sem o "boneco da boca lascada" ao fundo.
 - Cabeçalho do chat, tela inicial e sessão de toque mostram uma **miniatura do 3D escolhido**, não o 2D.
-- Testar no aparelho o **Guardião 3D** (v0.24.1, sessão local; ADR 0013): rosto pequeno no busto, ajustar enquadramento.
+- **Guardião 3D** (v0.24.1, sessão local; ADR 0013) como mais um avatar, com busto fechado no rosto (pedido 66).
+- Ao trocar de avatar, ele muda em **todos os lugares** (tela, chat, tela inicial, sessão de toque) (pedido 66).
 
 **Agente (pedido 65b)**
 - **Se minimizar antes de agir**: ao usar qualquer `tela_*`, ir para o modo agindo (canto, legenda mínima) e só então ler ou tocar.

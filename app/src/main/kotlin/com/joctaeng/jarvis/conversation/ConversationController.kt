@@ -287,7 +287,7 @@ class ConversationController(private val app: JarvisApp) {
         return all.filterNot { cooldown.resting(it.id, now) }.ifEmpty { all }
     }
 
-    private suspend fun respond(speak: Boolean) {
+    private suspend fun respond(speak: Boolean, retried: Boolean = false) {
         val startedAt = System.nanoTime()
         val device = DeviceState.snapshot(app, privateMode = settings.privateMode)
         val providers = configuredProviders()
@@ -358,6 +358,10 @@ class ConversationController(private val app: JarvisApp) {
         var lastNote: String? = null
         var failure: String? = null
         var newRound = false
+        var routedId: String? = null
+        // Um só aviso de progresso ("Agindo… 3 passos") em vez de uma linha por tentativa (pedido 65).
+        var stepNoteId: Long? = null
+        var steps = 0
 
         val generate: (List<ChatMessage>) -> Flow<LlmChunk> = { messages ->
             flow {
@@ -368,11 +372,13 @@ class ConversationController(private val app: JarvisApp) {
                             app.events.info("conversa", "aviso: ${event.text}")
                             addNoteBefore(replyId, event.text)
                         }
-                        is OrchestratorEvent.RoutedTo -> edit(replyId) { it.copy(brain = names[event.providerId]) }
+                        is OrchestratorEvent.RoutedTo -> {
+                            routedId = event.providerId
+                            edit(replyId) { it.copy(brain = names[event.providerId]) }
+                        }
                         is OrchestratorEvent.FellBack -> {
                             cooldown.note(event.fromProviderId, event.reason, System.currentTimeMillis(), com.joctaeng.jarvis.system.resources.RetryHint.millis(event.reason))
                             app.events.warn("conversa", "${names[event.fromProviderId]} falhou (${event.reason}); tentando outro cérebro")
-                            addNoteBefore(replyId, "${names[event.fromProviderId]} falhou (${event.reason}). Tentando outro cérebro…")
                         }
                         is OrchestratorEvent.Failed -> {
                             app.events.error("conversa", "nenhum cérebro respondeu: ${event.reason}")
@@ -386,8 +392,10 @@ class ConversationController(private val app: JarvisApp) {
 
         val request = history.lastOrNull { it.role == Role.USER }?.text.orEmpty()
         var firstChunkAt = 0L
-        val runner = AgentRunner(app.toolbox.gateway(tools), maxRounds = 8)
-        runner.run(history, generate, ToolContext(sessionId, "Pedido: ${request.take(120)}"), app.toolbox::confirm).collect { event ->
+        val runner = AgentRunner(app.toolbox.gateway(tools), maxRounds = 10)
+        // Com ferramentas no prompt, o texto de cada tentativa fica guardado: só a resposta final é mostrada e falada.
+        val toolsInPrompt = prompt.contains("<tools>")
+        runner.run(history, generate, ToolContext(sessionId, "Pedido: ${request.take(120)}"), app.toolbox::confirm, holdToolRoundText = toolsInPrompt).collect { event ->
             when (event) {
                 is AgentEvent.Text -> {
                     if (firstChunkAt == 0L) firstChunkAt = System.nanoTime()
@@ -404,16 +412,20 @@ class ConversationController(private val app: JarvisApp) {
                         if (speak || OverlayBus.acting.value) chunker.feed(visible).forEach(voice::speak)
                     }
                 }
+                is AgentEvent.Aside -> app.events.info("conversa", "tentativa (não falada): ${event.text.take(160)}")
                 is AgentEvent.ToolStarted -> {
                     OverlayBus.anim.value = AnimState.THINKING
-                    addNoteBefore(replyId, "Executando: ${event.call.toolName.replace('_', ' ')}…")
+                    steps++
+                    val label = "$STEP_NOTE (${steps} ${if (steps == 1) "passo" else "passos"}: ${event.call.toolName.replace('_', ' ')})"
+                    val id = stepNoteId
+                    if (id == null) stepNoteId = addNoteBefore(replyId, label) else edit(id) { it.copy(text = label) }
                 }
                 is AgentEvent.ToolFinished -> {
                     newRound = true
                     // A rodada seguinte começa de novo com a etiqueta de emoção ([confuso]...): ela não pode virar texto.
                     parser = StreamingEmotionParser()
+                    // O detalhe de cada tentativa vai para o relatório, não para a conversa.
                     app.events.info("ferramentas", "${event.call.toolName}: ${describe(event.result).take(200)}")
-                    addNoteBefore(replyId, "${event.call.toolName.replace('_', ' ')}: ${describe(event.result)}")
                 }
                 is AgentEvent.Error -> {
                     failure = event.message
@@ -446,6 +458,16 @@ class ConversationController(private val app: JarvisApp) {
         edit(replyId) { it.copy(text = TextCleanup.clean(it.text).trim()) }
         val finalText = _entries.value.firstOrNull { it.id == replyId }?.text.orEmpty()
         record(Role.ASSISTANT, finalText)
+        val emptyFrom = routedId
+        if (failure == null && finalText.isBlank() && !retried && emptyFrom != null && providers.size > 1) {
+            // Alguns cérebros (ex.: gpt-oss no Groq grátis) voltam vazios em pedidos com ferramentas: ele descansa
+            // um pouco e o próximo da lista responde agora, sem pedir para o usuário repetir.
+            cooldown.rest(emptyFrom, EMPTY_REST_MS, System.currentTimeMillis())
+            app.events.warn("conversa", "${names[emptyFrom]} voltou vazio; ele descansa ${EMPTY_REST_MS / 1000} s e o próximo cérebro responde")
+            _entries.update { list -> list.filterNot { it.id == replyId || it.id == stepNoteId } }
+            respond(speak, retried = true)
+            return
+        }
         if (failure == null && finalText.isBlank()) {
             // Antes ficava um balão vazio, sem aviso nem registro.
             app.events.error("conversa", "o cérebro terminou sem texto (1ª palavra=${if (firstChunkAt == 0L) "nunca" else "sim"}); pedido de ${request.length} caracteres")
@@ -470,7 +492,7 @@ class ConversationController(private val app: JarvisApp) {
         if (settings.bargeIn) add("você ouve comandos como \"pera aí\" e \"tchau\" enquanto fala")
         add("mensagens enviadas enquanto você responde entram numa fila e são respondidas juntas")
         if (settings.phoneControl && com.joctaeng.jarvis.control.EunoAccessibilityService.isDeclared(app)) {
-            add(if (com.joctaeng.jarvis.control.EunoAccessibilityService.instance != null) "controle do celular LIGADO: você pode ler a tela e tocar, digitar, rolar e navegar com as ferramentas tela_*"
+            add(if (com.joctaeng.jarvis.control.EunoAccessibilityService.instance != null) "controle do celular LIGADO: você pode ler a tela, VER o print da tela (tela_ver, entende onde fica cada coisa) e tocar (pelo nome ou no ponto), digitar, rolar até achar e navegar com as ferramentas tela_*; antes de agir você vai sozinho para o canto"
             else "controle do celular permitido, mas o serviço de acessibilidade ainda não está ligado no Android")
         } else add("controle do celular por acessibilidade ainda não está disponível neste APK de teste")
         add("o botão Nova guarda um resumo da conversa e começa outra")
@@ -547,7 +569,7 @@ class ConversationController(private val app: JarvisApp) {
         if (users.isEmpty()) return false
         if (compact) return ToolIntent.likely(users.last())
         return users.takeLast(3).any { ToolIntent.likely(it) } ||
-            _entries.value.takeLast(6).any { it.note && it.text.startsWith("Executando:") }
+            _entries.value.takeLast(6).any { it.note && it.text.startsWith(STEP_NOTE) }
     }
 
     private fun add(entry: ChatEntry) {
@@ -565,9 +587,13 @@ class ConversationController(private val app: JarvisApp) {
         }
     }
 
-    private fun addNoteBefore(id: Long, text: String) = _entries.update { list ->
-        val index = list.indexOfFirst { it.id == id }.let { if (it < 0) list.size else it }
-        list.toMutableList().apply { add(index, ChatEntry(nextId++, Role.SYSTEM, text, note = true)) }
+    private fun addNoteBefore(id: Long, text: String): Long {
+        val noteId = nextId++
+        _entries.update { list ->
+            val index = list.indexOfFirst { it.id == id }.let { if (it < 0) list.size else it }
+            list.toMutableList().apply { add(index, ChatEntry(noteId, Role.SYSTEM, text, note = true)) }
+        }
+        return noteId
     }
 
     private fun edit(id: Long, change: (ChatEntry) -> ChatEntry) =
@@ -579,6 +605,9 @@ class ConversationController(private val app: JarvisApp) {
         const val LOCAL_HISTORY = 8
         const val LOCAL_BIO_CHARS = 800
         const val LOCAL_SUMMARY_CHARS = 800
+        const val STEP_NOTE = "Agindo"
+        /** Descanso do cérebro que voltou vazio. */
+        const val EMPTY_REST_MS = 90_000L
     }
 }
 

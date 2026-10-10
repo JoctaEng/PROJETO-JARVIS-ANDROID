@@ -255,6 +255,8 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
                 .onFailure { app.events.warn("avatar3d", "WebView indisponível; usando o personagem 2D: ${it.message}") }
                 .getOrNull()?.let { a ->
                     avatar3d = a
+                    // Com o 3D ligado, o 2D nunca aparece por trás (nem enquanto o 3D carrega): só o portal.
+                    renderer.artHidden = true
                     root.addView(a.view, android.widget.FrameLayout.LayoutParams(-1, -1))
                     a.view.visibility = android.view.View.INVISIBLE
                     a.onStatus = { updateAvatarVisibility() }
@@ -346,7 +348,6 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         engageJob?.cancel()
         renderer.engage(false)
         renderer.dismissToDimension()
-        avatar3d?.setActive(false)
         updateAvatarVisibility()
         collapseJob = lifecycleScope.launch {
             delay(480) // deixa a animação de saída terminar
@@ -383,11 +384,21 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         engage()
     }
 
-    /** 3D quando carregou e o personagem está à vista; 2D (portal, risquinho, falha do 3D) nos outros casos. */
+    /**
+     * 3D quando carregou e o personagem está à vista: ele entra e sai pelo portal com animação própria. A camada 2D
+     * mostra só o portal e o risquinho (o desenho 2D só volta se o 3D falhar de vez).
+     */
     private fun updateAvatarVisibility() {
         val a = avatar3d ?: return
-        val use3d = a.ready && !a.failed && !hidden
-        a.setActive(use3d)
+        if (a.failed) {
+            renderer.artHidden = false
+            a.setActive(false)
+            composeView?.visibility = android.view.View.VISIBLE
+            return
+        }
+        renderer.artHidden = true
+        val use3d = a.ready && !hidden
+        a.appear(use3d)
         composeView?.visibility = if (use3d) android.view.View.INVISIBLE else android.view.View.VISIBLE
     }
 

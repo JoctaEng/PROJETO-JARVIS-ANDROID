@@ -57,7 +57,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.joctaeng.jarvis.JarvisApp
 import com.joctaeng.jarvis.tools.ConfirmationCard
 import com.joctaeng.jarvis.character.CharacterSync
-import com.joctaeng.jarvis.character.CharacterView
 import com.joctaeng.jarvis.character.ComposeCharacterRenderer
 import com.joctaeng.jarvis.conversation.ChatEntry
 import com.joctaeng.jarvis.core.model.Role
@@ -274,7 +273,7 @@ class ChatActivity : ComponentActivity() {
             ) {
                 Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CharacterView(renderer, Modifier.size(52.dp))
+                        com.joctaeng.jarvis.character.AvatarBadge(renderer, Modifier.size(52.dp))
                         Spacer(Modifier.size(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(app.settings.displayName, style = MaterialTheme.typography.titleMedium)

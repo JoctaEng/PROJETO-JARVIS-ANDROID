@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.flow
 /** O que acontece numa resposta com ferramentas, na ordem em que acontece. */
 sealed interface AgentEvent {
     data class Text(val text: String) : AgentEvent
+
+    /** Texto que o cérebro escreveu junto com um pedido de ferramenta ("vou tentar…"): não é a resposta final. */
+    data class Aside(val text: String) : AgentEvent
     data class ToolStarted(val call: ToolCall) : AgentEvent
     data class ToolFinished(val call: ToolCall, val result: ToolResult) : AgentEvent
     data class Error(val message: String) : AgentEvent
@@ -32,12 +35,19 @@ class AgentRunner(
         generate: (List<ChatMessage>) -> Flow<LlmChunk>,
         context: ToolContext,
         confirm: suspend (Tool, ToolCall) -> Boolean,
+        /**
+         * Segura o texto de cada rodada até saber se ela pede ferramenta: se pedir, vira [AgentEvent.Aside] (não é
+         * falado nem mostrado como resposta); se não, sai como a resposta. Assim o usuário ouve só o resultado final,
+         * não cada tentativa (pedido 65). Custa o streaming da resposta quando há ferramentas no prompt.
+         */
+        holdToolRoundText: Boolean = false,
     ): Flow<AgentEvent> = flow {
         val messages = history.toMutableList()
         var counter = 0
         for (round in 1..maxRounds) {
             val filter = ToolCallFilter { "call-${++counter}" }
             val raw = StringBuilder()
+            val held = StringBuilder()
             val calls = mutableListOf<ToolCall>()
             var failed: String? = null
             generate(messages).collect { chunk ->
@@ -45,7 +55,9 @@ class AgentRunner(
                     is LlmChunk.Text -> {
                         raw.append(chunk.text)
                         val out = filter.feed(chunk.text)
-                        if (out.visible.isNotEmpty()) emit(AgentEvent.Text(out.visible))
+                        if (out.visible.isNotEmpty()) {
+                            if (holdToolRoundText) held.append(out.visible) else emit(AgentEvent.Text(out.visible))
+                        }
                         calls += out.calls
                     }
                     is LlmChunk.Error -> failed = chunk.message
@@ -54,8 +66,13 @@ class AgentRunner(
                 }
             }
             val tail = filter.finish()
-            if (tail.visible.isNotEmpty()) emit(AgentEvent.Text(tail.visible))
+            if (tail.visible.isNotEmpty()) {
+                if (holdToolRoundText) held.append(tail.visible) else emit(AgentEvent.Text(tail.visible))
+            }
             calls += tail.calls
+            if (held.isNotBlank()) {
+                if (calls.isEmpty() || failed != null) emit(AgentEvent.Text(held.toString())) else emit(AgentEvent.Aside(held.toString().trim()))
+            }
             failed?.let {
                 emit(AgentEvent.Error(it))
                 return@flow

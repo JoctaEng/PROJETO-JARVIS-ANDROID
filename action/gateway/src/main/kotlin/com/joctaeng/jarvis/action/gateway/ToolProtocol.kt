@@ -29,9 +29,10 @@ object ToolProtocol {
         appendLine("Depois pare e espere o resultado, que chega numa mensagem <tool_response>. Pode usar várias em sequência.")
         appendLine("Use uma ferramenta só quando o pedido for claro e precisar dela; se o pedido estiver confuso, cortado ou ambíguo, pergunte antes de agir. Nunca diga que fez algo antes de o resultado confirmar;")
         appendLine("se vier erro, negado ou cancelado, diga isso com honestidade. Não mostre o JSON ao usuário.")
-        appendLine("AGIR DE VERDADE: se uma ferramenta falhar, leia o motivo e tente outra via antes de desistir (outro nome do botão, tela_ler para ver o que há na tela, tela_rolar, abrir o app antes). Só desista depois de duas tentativas diferentes e diga o que tentou.")
+        appendLine("AGIR DE VERDADE, EM SILÊNCIO: para agir, chame a ferramenta direto, sem anunciar ('vou tentar…'). Se uma falhar, leia o motivo e tente outra via sem comentar (outro nome do botão, tela_ler, tela_ver + tela_tocar_ponto, tela_rolar com procurar, abrir o app antes). Na resposta final diga SÓ o resultado, curto (ex.: 'Pronto, marquei para dia 15.'); não conte as tentativas nem os erros do caminho. Só se no fim não der, diga em uma frase o que impediu.")
+        appendLine("SEM PRESSA NA TELA: as ferramentas já esperam o app carregar e rolam no ritmo de uma pessoa. Não repita a mesma ação em sequência: para achar algo numa lista, use tela_rolar com 'procurar' (ele rola sozinho até achar). Se tela_ler não mostrar o que precisa (ícone sem nome, calendário, imagem) ou o toque pelo nome falhar, use tela_ver (olha o print) e toque com tela_tocar_ponto.")
         appendLine("NUNCA DIGA QUE FEZ ANTES DA HORA: 'agendei', 'salvei', 'enviei', 'abri' só depois de um resultado de ferramenta confirmar (ex.: salvo=true). Se o resultado disser AINDA NÃO SALVO ou salvo=false, diga que ainda falta e resolva (tela_ler + tela_tocar). Com dois pedidos (ex.: dois compromissos), faça os dois antes de responder.")
-        appendLine("NUNCA DIGA 'NÃO CONSIGO' SEM TENTAR: para navegar num app use tela_ler, tela_tocar (ex.: tocar no dia 15), tela_deslizar (próxima/anterior semana ou mês) e tela_rolar. Só diga que não deu depois de tentar.")
+        appendLine("NUNCA DIGA 'NÃO CONSIGO' SEM CONFERIR: antes de dizer que não pode ou não sabe fazer algo, confira a lista <tools> abaixo e o que você sabe sobre si; se houver ferramenta que resolve (mesmo combinando várias: abrir_app + tela_ler + tela_tocar + tela_rolar + tela_ver), use. Só diga que não dá depois de tentar.")
         appendLine("ABRIR x CONSULTAR: 'abra/abrir/abre X' = abrir_app (mostrar o app na tela). Consultar dados (agenda_consultar etc.) só quando a pessoa perguntar o que tem.")
         appendLine("NÃO INVENTE: só diga que leu ou fez algo se o resultado da ferramenta mostrar isso, e nunca descreva de memória o conteúdo de telas, conversas ou apps. tela_ler lê o texto visível de OUTRO app (nunca a conversa do Euno); mensagens de áudio aparecem só com horário e duração, sem o conteúdo.")
         appendLine("VALORES: datas, horas, números, nomes e valores só podem vir do pedido do usuário ou de um resultado de ferramenta DESTA resposta; nunca preencha com um exemplo ou palpite (ex.: mês, horário, quantia). Se faltar, pergunte.")
@@ -82,7 +83,7 @@ object ToolProtocol {
                 }
                 is ToolResult.Failure -> {
                     put("status", "erro"); put("motivo", result.reason)
-                    put("dica", "Não desista: leia o motivo e tente outra via diferente (outro nome, tela_ler, tela_rolar, abrir o app antes). Se faltou um campo, repita com os argumentos dentro de \"arguments\", com os nomes exatos do esquema.")
+                    put("dica", "Não desista e não comente o erro com o usuário: tente outra via diferente (outro nome, tela_ler, tela_ver + tela_tocar_ponto, tela_rolar com procurar, abrir o app antes). Se faltou um campo, repita com os argumentos dentro de \"arguments\", com os nomes exatos do esquema.")
                 }
                 is ToolResult.Denied -> { put("status", "negado"); put("motivo", result.reason) }
                 ToolResult.Cancelled -> { put("status", "cancelado"); put("motivo", "o usuário não confirmou") }

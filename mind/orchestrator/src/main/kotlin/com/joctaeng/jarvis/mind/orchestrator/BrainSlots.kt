@@ -65,6 +65,12 @@ class ProviderCooldown(private val defaultMillis: Long = 60_000L) {
         until[id] = nowMillis + wait + 1_000L
     }
 
+    /** Descanso pedido pelo app (ex.: o cérebro voltou vazio num pedido com ferramentas): sai da frente por [millis]. */
+    @Synchronized
+    fun rest(id: String, millis: Long, nowMillis: Long) {
+        until[id] = maxOf(until[id] ?: 0L, nowMillis + millis)
+    }
+
     @Synchronized
     fun resting(id: String, nowMillis: Long): Boolean = (until[id] ?: 0L) > nowMillis
 

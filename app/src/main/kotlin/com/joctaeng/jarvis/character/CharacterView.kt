@@ -122,6 +122,12 @@ class ComposeCharacterRenderer : CharacterRenderer {
         mouthViseme = viseme
     }
 
+    /**
+     * O avatar 3D está no lugar do desenho: aqui só o portal e o risquinho (nunca o personagem 2D por trás do 3D,
+     * nem ao trocar de avatar ou dizer "tchau").
+     */
+    var artHidden by mutableStateOf(false)
+
     /** Formato de boca do instante (o avatar 3D usa para escolher a boca certa). */
     var mouthViseme by mutableStateOf(com.joctaeng.jarvis.presence.expression.Viseme.X)
         private set
@@ -173,7 +179,8 @@ fun CharacterView(
         }
         // 1. Base dimensional sob os pés (some junto com o personagem)
         drawDimensionalPortal(renderer, time, transition)
-        // 2. Personagem emergindo/em pé
+        // 2. Personagem emergindo/em pé (com o avatar 3D ligado, quem aparece é ele, na WebView por cima)
+        if (renderer.artHidden) return@Canvas
         if (art != null) drawArt(renderer, art, time, blink = animate, transition = transition, engage = engage, fade = fade, aligned = CharacterArt.isAligned(renderer.characterId))
         else drawCharacter(renderer, time, transition = transition)
     }

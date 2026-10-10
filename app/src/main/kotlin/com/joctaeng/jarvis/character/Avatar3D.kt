@@ -110,9 +110,46 @@ class Avatar3D(context: Context) {
         if (ready) view.evaluateJavascript("Avatar.setPaused(${!active});", null)
     }
 
+    /**
+     * Entra (cresce saindo do portal) ou sai (encolhe e afunda no portal) com animação, em vez de sumir de uma vez —
+     * antes, ao dizer "tchau", o 3D sumia e o desenho 2D aparecia no lugar.
+     */
+    fun appear(visible: Boolean) {
+        val v = view
+        v.animate().cancel()
+        v.pivotX = v.width / 2f
+        v.pivotY = v.height * 0.95f
+        if (visible) {
+            if (v.visibility != View.VISIBLE) {
+                v.alpha = 0f
+                v.scaleX = 0.25f
+                v.scaleY = 0.25f
+            }
+            setActive(true)
+            v.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(ANIM_MS).start()
+        } else {
+            if (v.visibility != View.VISIBLE) return
+            v.animate().alpha(0f).scaleX(0.2f).scaleY(0.2f).setDuration(ANIM_MS).withEndAction { setActive(false) }.start()
+        }
+    }
+
     fun destroy() {
         job?.cancel()
         view.destroy()
+    }
+
+    /** Fotografa o avatar importado para usar a mesma imagem no chat e na tela inicial. */
+    private fun saveCustomThumb() {
+        if (!ready) return
+        view.evaluateJavascript("Avatar.snapshot()") { raw ->
+            val data = raw?.trim('"')?.substringAfter("base64,", "").orEmpty()
+            if (data.isBlank()) return@evaluateJavascript
+            runCatching {
+                val bytes = android.util.Base64.decode(data, android.util.Base64.DEFAULT)
+                customThumb(appContext).writeBytes(bytes)
+                app.settings.touch()
+            }.onFailure { app.events.warn("avatar3d", "não salvei a miniatura do avatar: ${it.message}") }
+        }
     }
 
     private inner class Bridge {
@@ -120,7 +157,10 @@ class Avatar3D(context: Context) {
         fun onReady(name: String) {
             ready = true
             app.events.info("avatar3d", "modelo 3D carregado: ${name.take(60)}")
-            view.post { onStatus(true) }
+            view.post {
+                onStatus(true)
+                if (loadedModel.startsWith("files/")) view.postDelayed({ saveCustomThumb() }, 1_500)
+            }
         }
 
         @JavascriptInterface
@@ -162,9 +202,30 @@ class Avatar3D(context: Context) {
     companion object {
         /** Endereço interno (não existe na internet: tudo é respondido pelo app). */
         const val HOST = "avatar.euno.local"
+        private const val ANIM_MS = 420L
 
         fun customDir(context: Context) = File(context.filesDir, "avatar").apply { mkdirs() }
         fun customFile(context: Context) = File(customDir(context), "meu-avatar.vrm")
+
+        /** Miniatura do avatar importado (tirada da própria WebView quando ele carrega). */
+        fun customThumb(context: Context) = File(customDir(context), "meu-avatar-miniatura.png")
+
+        /** Miniatura (rosto) de cada avatar 3D do APK: a mesma em Meu Euno, no chat e na tela inicial. */
+        fun thumbRes(id: String): Int = when (id) {
+            "guardiao" -> com.joctaeng.jarvis.R.drawable.thumb3d_guardiao
+            "victoria" -> com.joctaeng.jarvis.R.drawable.thumb3d_victoria
+            "vita" -> com.joctaeng.jarvis.R.drawable.thumb3d_vita
+            "vivi" -> com.joctaeng.jarvis.R.drawable.thumb3d_vivi
+            "shino" -> com.joctaeng.jarvis.R.drawable.thumb3d_shino
+            "fumiriya" -> com.joctaeng.jarvis.R.drawable.thumb3d_fumiriya
+            "clara" -> com.joctaeng.jarvis.R.drawable.thumb3d_clara
+            else -> com.joctaeng.jarvis.R.drawable.thumb3d_avatar
+        }
+
+        /** Descrição curta do avatar 3D escolhido (para a tela inicial). */
+        fun describe(context: Context, id: String): String =
+            if (customFile(context).isFile) "Seu avatar 3D importado"
+            else MODELS.firstOrNull { it.first == id }?.second?.substringAfter("(", "")?.removeSuffix(")")?.replaceFirstChar { it.uppercase() }.orEmpty()
 
         /**
          * Modelos 3D que vêm no APK (id do arquivo → descrição). CC0 (VRoid), licença VRM (pixiv) ou próprios do Euno

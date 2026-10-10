@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.joctaeng.jarvis.JarvisApp
-import com.joctaeng.jarvis.character.CharacterView
 import com.joctaeng.jarvis.character.ComposeCharacterRenderer
 import com.joctaeng.jarvis.core.model.AnimState
 import com.joctaeng.jarvis.core.model.Emotion
@@ -160,7 +159,7 @@ class TouchSessionActivity : ComponentActivity() {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CharacterView(renderer, Modifier.size(72.dp))
+                        com.joctaeng.jarvis.character.AvatarBadge(renderer, Modifier.size(72.dp))
                         Spacer(Modifier.size(12.dp))
                         Text(
                             if (busy) "Testando…" else "Oi! Sessão de teste (Fase 0)",

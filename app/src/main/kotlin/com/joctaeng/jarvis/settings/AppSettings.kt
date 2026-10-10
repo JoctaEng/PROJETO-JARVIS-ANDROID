@@ -187,6 +187,11 @@ class AppSettings(context: Context) {
 
     private fun string(key: String, default: String) = pref({ prefs.getString(key, default) ?: default }) { putString(key, it) }
     private fun long(key: String, default: Long) = pref({ prefs.getLong(key, default) }) { putLong(key, it) }
+    /** Avisa quem acompanha as configurações (ex.: miniatura nova do avatar importado). */
+    fun touch() {
+        _version.value++
+    }
+
     private fun int(key: String, default: Int) = pref({ prefs.getInt(key, default) }) { putInt(key, it) }
     private fun float(key: String, default: Float) = pref({ prefs.getFloat(key, default) }) { putFloat(key, it) }
     private fun boolean(key: String, default: Boolean) = pref({ prefs.getBoolean(key, default) }) { putBoolean(key, it) }

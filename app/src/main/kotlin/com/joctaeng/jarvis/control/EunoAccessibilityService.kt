@@ -7,6 +7,8 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.joctaeng.jarvis.JarvisApp
+import com.joctaeng.jarvis.system.resources.HumanPace
+import com.joctaeng.jarvis.system.resources.ScreenSettle
 import com.joctaeng.jarvis.system.resources.ScreenText
 import com.joctaeng.jarvis.system.resources.UiNode
 import com.joctaeng.jarvis.system.resources.WindowInfo
@@ -97,38 +99,51 @@ class EunoAccessibilityService : AccessibilityService() {
         data class NeedsConfirmation(val label: String) : Outcome
     }
 
-    /** Toca no elemento que melhor combina com [query]. [confirmed] libera botões sensíveis (depois de o usuário confirmar). */
-    fun tap(query: String, confirmed: Boolean): Outcome {
+    /**
+     * Toca no elemento que melhor combina com [query]. [confirmed] libera botões sensíveis (depois de o usuário confirmar).
+     * Primeiro pede ao app (clique de acessibilidade); se ele recusar (ex.: o dia 15 da agenda, que só aceita toque de
+     * dedo), toca com o dedo virtual no meio do elemento, como uma pessoa faria.
+     */
+    suspend fun tap(query: String, confirmed: Boolean): Outcome {
         val entries = collect()
         val i = ScreenText.bestMatch(entries.map { it.ui }, query)
             ?: return Outcome.Failed(
                 if (entries.isEmpty()) "não há outro app na tela para tocar (só o Euno); abra o app antes"
-                else "não achei \"$query\" na tela; use tela_ler para ver o que há e tente outro nome",
+                else "não achei \"$query\" na tela; use tela_ler (ou tela_ver, que olha o print da tela) e tente outro nome",
             )
         val target = entries[i]
         if (!confirmed && ScreenText.isSensitive(target.ui.label)) return Outcome.NeedsConfirmation(target.ui.label)
+        return click(target)
+    }
+
+    private suspend fun click(target: Entry): Outcome {
         var node: AccessibilityNodeInfo? = target.node
         var hops = 0
         while (node != null && !node.isClickable && hops < 4) { node = node.parent; hops++ }
-        val ok = node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
-        JarvisApp.from(this).events.info("controle", "toque em \"${target.ui.label.take(40)}\": ${if (ok) "feito" else "não aceito"}")
-        return if (ok) Outcome.Done("toquei em \"${target.ui.label}\"") else Outcome.Failed("o app não aceitou o toque em \"${target.ui.label}\"")
+        var ok = node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+        var how = "pelo app"
+        if (!ok) {
+            val r = android.graphics.Rect()
+            target.node.getBoundsInScreen(r)
+            if (!r.isEmpty) {
+                ok = tapAt(r.exactCenterX(), r.exactCenterY())
+                how = "com o dedo"
+            }
+        }
+        JarvisApp.from(this).events.info("controle", "toque em \"${target.ui.label.take(40)}\" ($how): ${if (ok) "feito" else "não aceito"}")
+        if (ok) waitSettled()
+        return if (ok) Outcome.Done("toquei em \"${target.ui.label}\"") else Outcome.Failed("o app não aceitou o toque em \"${target.ui.label}\"; tente tela_ver e tela_tocar_ponto")
     }
 
     /**
      * Toca num botão cujo rótulo é EXATAMENTE um de [labels] (sem acento/maiúscula), ex.: "Salvar" da agenda.
      * Diferente de [tap], não aceita parecidos: evita tocar no título do evento que contenha a palavra.
      */
-    fun tapExact(labels: List<String>): Outcome {
+    suspend fun tapExact(labels: List<String>): Outcome {
         val wanted = labels.map { com.joctaeng.jarvis.tools.normalize(it) }
         val target = collect().firstOrNull { e -> com.joctaeng.jarvis.tools.normalize(e.ui.label) in wanted }
             ?: return Outcome.Failed("não achei ${labels.joinToString("/")} na tela")
-        var node: AccessibilityNodeInfo? = target.node
-        var hops = 0
-        while (node != null && !node.isClickable && hops < 4) { node = node.parent; hops++ }
-        val ok = node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
-        JarvisApp.from(this).events.info("controle", "toque exato em \"${target.ui.label.take(40)}\": ${if (ok) "feito" else "não aceito"}")
-        return if (ok) Outcome.Done("toquei em \"${target.ui.label}\"") else Outcome.Failed("o app não aceitou o toque em \"${target.ui.label}\"")
+        return click(target)
     }
 
     /** Escreve no campo que está com o cursor (ou no primeiro campo de texto da tela). Nunca em campo de senha. */
@@ -144,51 +159,143 @@ class EunoAccessibilityService : AccessibilityService() {
         return if (ok) Outcome.Done("escrevi ${text.length} caracteres no campo") else Outcome.Failed("o campo não aceitou o texto")
     }
 
-    /** Rola a primeira área rolável da tela. */
-    fun scroll(forward: Boolean): Outcome {
-        val target = collect().firstOrNull { it.ui.scrollable } ?: return Outcome.Failed("não há nada para rolar")
-        val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-        return if (target.node.performAction(action)) Outcome.Done(if (forward) "rolei para baixo" else "rolei para cima") else Outcome.Failed("não deu para rolar mais")
+    /**
+     * Rola/desliza como uma pessoa (pedido 65): um terço de tela por vez, sem pressa, esperando a tela parar antes de
+     * devolver. [direction]: baixo, cima, proximo (direita→esquerda), anterior. Primeiro pede ao app (ação de rolar);
+     * se ele não oferecer, usa o dedo virtual.
+     */
+    suspend fun swipe(direction: String): Outcome {
+        val before = signature()
+        val wanted = when (direction) {
+            "proximo" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT
+            "anterior" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT
+            "cima" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD
+            else -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD
+        }
+        pace()
+        val node = collect().firstOrNull { e -> e.node.actionList.any { it.id == wanted.id } }?.node
+        var how = "pelo app"
+        var ok = node != null && node.performAction(wanted.id)
+        if (!ok) {
+            val m = resources.displayMetrics
+            val p = HumanPace.swipePath(direction, m.widthPixels.toFloat(), m.heightPixels.toFloat())
+            val path = android.graphics.Path().apply { moveTo(p[0], p[1]); lineTo(p[2], p[3]) }
+            ok = gesture(path, HumanPace.SCROLL_GESTURE_MS)
+            how = "com o dedo"
+        }
+        lastGestureAt = android.os.SystemClock.uptimeMillis()
+        if (ok) waitSettled(maxMs = 2_000)
+        val moved = ok && signature() != before
+        JarvisApp.from(this).events.info("controle", "rolar/deslizar \"$direction\" ($how): ${if (!ok) "não aceito" else if (moved) "feito" else "nada mudou"}")
+        return when {
+            !ok -> Outcome.Failed("o Android não aceitou o gesto; se for a primeira vez nesta versão, desligue e ligue o Euno em Acessibilidade")
+            !moved -> Outcome.Done("rolei ($direction), mas a tela não mudou: provavelmente chegou ao fim nessa direção")
+            else -> Outcome.Done("rolei ($direction)")
+        }
     }
 
     /**
-     * Desliza para os lados (ou para cima/baixo): [next] = próxima página/semana (dedo da direita para a esquerda).
-     * Primeiro pede ao próprio app (ação de rolar para o lado); se ele não oferecer, faz o gesto com o dedo virtual.
+     * Rola com paciência até [query] aparecer (no máximo [max] vezes) ou a tela parar de mudar (fim da lista).
+     * Evita que o cérebro dispare várias rolagens seguidas às cegas.
      */
-    suspend fun swipe(direction: String): Outcome {
-        val horizontal = direction == "proximo" || direction == "anterior"
-        if (horizontal) {
-            val wanted = if (direction == "proximo") AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT
-            else AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT
-            val node = collect().firstOrNull { e -> e.node.actionList.any { it.id == wanted.id } }?.node
-            if (node != null && node.performAction(wanted.id)) {
-                JarvisApp.from(this).events.info("controle", "deslizar \"$direction\": feito pelo app")
-                return Outcome.Done(if (direction == "proximo") "passei para o próximo" else "voltei para o anterior")
-            }
+    suspend fun scrollUntil(query: String, direction: String, max: Int = 12): Outcome {
+        repeat(max) { n ->
+            val found = ScreenText.bestMatch(collect().map { it.ui }, query)
+            if (found != null) return Outcome.Done("achei \"$query\" na tela depois de rolar $n vez(es)")
+            val before = signature()
+            val r = swipe(direction)
+            if (r is Outcome.Failed) return r
+            if (signature() == before) return Outcome.Failed("rolei até o fim ($direction) e não achei \"$query\"")
         }
+        return Outcome.Failed("rolei $max vezes ($direction) e não achei \"$query\"")
+    }
+
+    /** Toque com o dedo virtual num ponto da tela (pixels). */
+    suspend fun tapAt(x: Float, y: Float): Boolean {
+        pace()
+        val path = android.graphics.Path().apply { moveTo(x, y) }
+        val ok = gesture(path, HumanPace.TAP_MS)
+        lastGestureAt = android.os.SystemClock.uptimeMillis()
+        return ok
+    }
+
+    /** Toca no ponto em porcentagem da tela (0–100), como o print descreve. */
+    suspend fun tapPercent(xPct: Double, yPct: Double): Outcome {
         val m = resources.displayMetrics
-        val w = m.widthPixels.toFloat()
-        val h = m.heightPixels.toFloat()
-        val (x1, y1, x2, y2) = when (direction) {
-            "proximo" -> listOf(w * 0.85f, h * 0.5f, w * 0.15f, h * 0.5f)
-            "anterior" -> listOf(w * 0.15f, h * 0.5f, w * 0.85f, h * 0.5f)
-            "cima" -> listOf(w * 0.5f, h * 0.35f, w * 0.5f, h * 0.75f)
-            else -> listOf(w * 0.5f, h * 0.75f, w * 0.5f, h * 0.35f)
-        }
-        val path = android.graphics.Path().apply { moveTo(x1, y1); lineTo(x2, y2) }
-        val gesture = android.accessibilityservice.GestureDescription.Builder()
-            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 350))
+        val (x, y) = HumanPace.pointFromPercent(xPct, yPct, m.widthPixels, m.heightPixels)
+        val ok = tapAt(x, y)
+        JarvisApp.from(this).events.info("controle", "toque no ponto (${xPct.toInt()}%, ${yPct.toInt()}%): ${if (ok) "feito" else "não aceito"}")
+        if (ok) waitSettled()
+        return if (ok) Outcome.Done("toquei no ponto (${xPct.toInt()}%, ${yPct.toInt()}%)") else Outcome.Failed("o Android não aceitou o toque")
+    }
+
+    private var lastGestureAt = 0L
+
+    /** Não dispara gestos em rajada: espera o intervalo mínimo de uma pessoa. */
+    private suspend fun pace() {
+        val wait = HumanPace.waitBeforeGesture(lastGestureAt, android.os.SystemClock.uptimeMillis())
+        if (wait > 0) kotlinx.coroutines.delay(wait)
+    }
+
+    private suspend fun gesture(path: android.graphics.Path, durationMs: Long): Boolean {
+        val g = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, durationMs))
             .build()
-        val ok = kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { cont ->
-            val sent = dispatchGesture(gesture, object : GestureResultCallback() {
+        return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+            val sent = dispatchGesture(g, object : GestureResultCallback() {
                 override fun onCompleted(gestureDescription: android.accessibilityservice.GestureDescription?) { if (cont.isActive) cont.resumeWith(Result.success(true)) }
                 override fun onCancelled(gestureDescription: android.accessibilityservice.GestureDescription?) { if (cont.isActive) cont.resumeWith(Result.success(false)) }
             }, null)
             if (!sent && cont.isActive) cont.resumeWith(Result.success(false))
         }
-        JarvisApp.from(this).events.info("controle", "deslizar \"$direction\" (gesto): ${if (ok) "feito" else "não aceito"}")
-        return if (ok) Outcome.Done("deslizei ($direction); use tela_ler para ver o que mudou")
-        else Outcome.Failed("o Android não aceitou o gesto; se for a primeira vez nesta versão, desligue e ligue o Euno em Acessibilidade")
+    }
+
+    /** "Impressão digital" do que está na tela agora (0 = nada legível). */
+    fun signature(): Int {
+        val labels = collect().map { it.ui.label }.filter { it.isNotBlank() }
+        if (labels.isEmpty()) return ScreenSettle.EMPTY
+        return (labels.hashCode() * 31 + labels.size).let { if (it == ScreenSettle.EMPTY) 1 else it }
+    }
+
+    /** Espera a tela parar de mudar (app abrindo, lista rolando, animação) — no máximo [maxMs]. */
+    suspend fun waitSettled(maxMs: Long = 3_000) {
+        val settle = ScreenSettle(maxMs = maxMs)
+        while (true) {
+            if (settle.observe(signature(), android.os.SystemClock.uptimeMillis())) return
+            kotlinx.coroutines.delay(150)
+        }
+    }
+
+    /** Print da tela (Android 11+; precisa da permissão de captura do serviço). JPEG reduzido, ou null. */
+    suspend fun screenshotJpeg(maxSide: Int = 1024): ByteArray? {
+        val bmp = kotlinx.coroutines.suspendCancellableCoroutine<android.graphics.Bitmap?> { cont ->
+            runCatching {
+                takeScreenshot(android.view.Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
+                    override fun onSuccess(result: ScreenshotResult) {
+                        val hw = runCatching { android.graphics.Bitmap.wrapHardwareBuffer(result.hardwareBuffer, result.colorSpace) }.getOrNull()
+                        val soft = hw?.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+                        hw?.recycle()
+                        result.hardwareBuffer.close()
+                        if (cont.isActive) cont.resumeWith(Result.success(soft))
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        JarvisApp.from(this@EunoAccessibilityService).events.warn("controle", "print da tela falhou (código $errorCode)")
+                        if (cont.isActive) cont.resumeWith(Result.success(null))
+                    }
+                })
+            }.onFailure {
+                JarvisApp.from(this).events.warn("controle", "print da tela indisponível: ${it.message}")
+                if (cont.isActive) cont.resumeWith(Result.success(null))
+            }
+        } ?: return null
+        val scale = maxSide.toFloat() / maxOf(bmp.width, bmp.height)
+        val small = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true) else bmp
+        val out = java.io.ByteArrayOutputStream()
+        small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out)
+        if (small !== bmp) small.recycle()
+        bmp.recycle()
+        return out.toByteArray()
     }
 
     fun system(action: String): Outcome {
@@ -202,6 +309,7 @@ class EunoAccessibilityService : AccessibilityService() {
         }
         val ok = performGlobalAction(code)
         JarvisApp.from(this).events.info("controle", "navegação \"$action\": ${if (ok) "feito" else "não aceito"}")
+        lastGestureAt = android.os.SystemClock.uptimeMillis()
         return if (ok) Outcome.Done(action) else Outcome.Failed("o Android não aceitou \"$action\"")
     }
 

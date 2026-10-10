@@ -147,7 +147,7 @@ private class OpenApp(context: Context) : AndroidTool(
 
     @Volatile private var opened: String? = null
 
-    /** Espera o app ficar na frente (até 3 s) antes de devolver: senão o tela_ler/tocar seguinte chega antes do app. */
+    /** Espera o app ficar na frente (até 3 s) e carregar antes de devolver: senão o tela_ler/tocar seguinte chega antes do app. */
     override suspend fun afterRun(result: ToolResult): ToolResult {
         val pkg = opened ?: return result
         opened = null
@@ -160,7 +160,9 @@ private class OpenApp(context: Context) : AndroidTool(
         val start = System.currentTimeMillis()
         while (System.currentTimeMillis() - start < 3_000) {
             if (service.foregroundPackage() == pkg) {
-                return ToolResult.Success(JSONObject(result.outputJson).put("na_frente", true).toString())
+                // Na frente não quer dizer carregado: espera a tela do app parar de mudar (antes lia 0,08 s depois).
+                service.waitSettled(maxMs = 3_500)
+                return ToolResult.Success(JSONObject(result.outputJson).put("na_frente", true).put("carregado", true).toString())
             }
             kotlinx.coroutines.delay(150)
         }

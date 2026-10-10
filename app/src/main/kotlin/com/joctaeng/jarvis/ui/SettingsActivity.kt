@@ -433,16 +433,7 @@ class SettingsActivity : ComponentActivity() {
         Section("Personagem") {
             Text("Avatares 3D (falam e mostram emoções)", style = MaterialTheme.typography.labelLarge)
             com.joctaeng.jarvis.character.Avatar3D.MODELS.forEach { (id, label) ->
-                val res = when (id) {
-                    "guardiao" -> com.joctaeng.jarvis.R.drawable.thumb3d_guardiao
-                    "victoria" -> com.joctaeng.jarvis.R.drawable.thumb3d_victoria
-                    "vita" -> com.joctaeng.jarvis.R.drawable.thumb3d_vita
-                    "vivi" -> com.joctaeng.jarvis.R.drawable.thumb3d_vivi
-                    "shino" -> com.joctaeng.jarvis.R.drawable.thumb3d_shino
-                    "fumiriya" -> com.joctaeng.jarvis.R.drawable.thumb3d_fumiriya
-                    "clara" -> com.joctaeng.jarvis.R.drawable.thumb3d_clara
-                    else -> com.joctaeng.jarvis.R.drawable.thumb3d_avatar
-                }
+                val res = com.joctaeng.jarvis.character.Avatar3D.thumbRes(id)
                 val chosen = use3d && model3d == id
                 Row(
                     Modifier.fillMaxWidth().selectable(chosen) {

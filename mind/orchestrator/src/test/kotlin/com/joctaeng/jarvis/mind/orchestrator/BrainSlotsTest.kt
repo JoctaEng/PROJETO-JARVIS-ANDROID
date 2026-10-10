@@ -38,4 +38,11 @@ class BrainSlotsTest {
         assertTrue(c.resting("groq", 20_000))
         assertFalse(c.resting("groq", 23_000))
     }
+
+    @Test fun restAfterEmptyReply() {
+        val c = ProviderCooldown()
+        c.rest("groq", 90_000, 1_000)
+        assertTrue(c.resting("groq", 90_000))
+        assertFalse(c.resting("groq", 91_001))
+    }
 }
