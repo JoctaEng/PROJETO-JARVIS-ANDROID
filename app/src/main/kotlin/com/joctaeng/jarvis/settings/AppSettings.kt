@@ -83,6 +83,10 @@ class AppSettings(context: Context) {
 
     /** Lista de cérebros online (v0.18): um por linha, na ordem de uso; as chaves ficam no SecretStore (BrainStore). */
     var brainSlotsRaw by string("brainSlots", "")
+
+    /** Avatar 3D (VRM) no lugar do desenho 2D na tela; [avatarFraming] = "busto" ou "corpo". */
+    var avatar3d by boolean("avatar3d", true)
+    var avatarFraming by string("avatarFraming", "busto")
     var brainsMigrated by boolean("brainsMigrated", false)
     var cloudPreset by enum("cloudPreset", CloudPreset.NONE)
     var cloudBaseUrl by string("cloudBaseUrl", "")

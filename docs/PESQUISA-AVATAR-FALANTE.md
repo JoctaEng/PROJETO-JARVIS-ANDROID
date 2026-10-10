@@ -35,3 +35,19 @@ Pedido 54: "personagens como verdadeiros avatares, que falem e expressem emoçõ
 - Android, `UtteranceProgressListener.onRangeStart`: https://developer.android.com/reference/android/speech/tts/UtteranceProgressListener
 - Live2D, licença do SDK: https://www.live2d.com/en/sdk/license/
 - MuseTalk (arXiv 2410.10122): https://arxiv.org/abs/2410.10122 ; VASA-1 (Microsoft Research): https://www.microsoft.com/en-us/research/project/vasa-1/
+
+## Avatar 3D (v0.20.0, pedidos 55 e 56)
+- Escolhido: **VRM** (formato aberto de avatar 3D, baseado em glTF) desenhado por **three.js + @pixiv/three-vrm** numa
+  WebView transparente (ver `docs/ADR/0012-avatar-3d-vrm.md`). O VRM já traz bocas de fala (aa, ih, ou, ee, oh),
+  piscar, emoções (feliz, triste, surpreso, bravo, relaxado), olhar e física do cabelo.
+- Modelo padrão: exemplo oficial da pixiv (VRM Public License 1.0, redistribuição permitida). Pode-se importar um
+  `.vrm` próprio (ex.: criado no VRoid Studio, grátis).
+- **Ready Player Me** (avatares 3D com bocas prontas) foi comprado pela Netflix e **saiu do ar em 31/01/2026**; não serve.
+- Testado num Chromium sem tela: o modelo carrega em ~2 s, responde aos comandos gerados pelo app (boca e emoções)
+  e o fundo fica transparente.
+
+Fontes adicionais:
+- three-vrm (pixiv, MIT): https://github.com/pixiv/three-vrm
+- Especificação VRM e licença VRM 1.0: https://vrm.dev/en/ e https://vrm.dev/licenses/1.0/
+- Fim do Ready Player Me (dez/2025–jan/2026): https://genies.com/blog/ready-player-me-shutdown
+- SceneView/Filament (alternativa nativa avaliada): https://central.sonatype.com/artifact/io.github.sceneview/sceneview

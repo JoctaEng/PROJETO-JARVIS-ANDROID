@@ -463,7 +463,73 @@ class SettingsActivity : ComponentActivity() {
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Avatar3DOptions()
         }
+    }
+
+    /** Avatar 3D (VRM): ligar, enquadramento, importar um avatar próprio (ex.: feito no VRoid). */
+    @Composable
+    private fun Avatar3DOptions() {
+        var on by remember { mutableStateOf(settings.avatar3d) }
+        var framing by remember { mutableStateOf(settings.avatarFraming) }
+        var custom by remember { mutableStateOf(com.joctaeng.jarvis.character.Avatar3D.customFile(this).isFile) }
+        var status by remember { mutableStateOf("") }
+        val scope = rememberCoroutineScope()
+        val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            status = "Copiando o avatar…"
+            scope.launch {
+                status = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        val dest = com.joctaeng.jarvis.character.Avatar3D.customFile(this@SettingsActivity)
+                        val tmp = java.io.File(dest.parentFile, "novo.tmp")
+                        contentResolver.openInputStream(uri)!!.use { input -> tmp.outputStream().use { input.copyTo(it) } }
+                        val head = tmp.inputStream().use { val b = ByteArray(4); it.read(b); String(b, Charsets.US_ASCII) }
+                        if (head != "glTF") { tmp.delete(); error("não é um arquivo VRM/GLB") }
+                        tmp.renameTo(dest) || error("não consegui salvar")
+                        app.events.info("avatar3d", "avatar próprio importado (${dest.length() / 1024} KB)")
+                        "Avatar importado. Toque em Aplicar agora."
+                    }.getOrElse { "Não deu: ${it.message}" }
+                }
+                custom = com.joctaeng.jarvis.character.Avatar3D.customFile(this@SettingsActivity).isFile
+            }
+        }
+        Text("Avatar 3D", style = MaterialTheme.typography.labelLarge)
+        Toggle("Usar avatar 3D na tela (fala com a boca e mostra emoções)", on) {
+            on = it
+            settings.avatar3d = it
+        }
+        if (on) {
+            Choice(listOf("busto", "corpo"), framing, { if (it == "busto") "Rosto e ombros" else "Meio corpo" }) {
+                framing = it
+                settings.avatarFraming = it
+            }
+            Hint(
+                if (custom) "Usando o seu avatar importado." else
+                    "Avatar padrão: modelo 3D de exemplo do formato VRM (pixiv, licença VRM: uso e redistribuição permitidos). " +
+                        "Você pode criar o seu (por exemplo, no VRoid Studio, grátis) e importar o arquivo .vrm aqui.",
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }) { Text("Importar avatar .vrm") }
+                if (custom) {
+                    TextButton(onClick = {
+                        com.joctaeng.jarvis.character.Avatar3D.customFile(this@SettingsActivity).delete()
+                        custom = false
+                        status = "Voltou ao avatar padrão. Toque em Aplicar agora."
+                    }) { Text("Usar o padrão") }
+                }
+            }
+        }
+        OutlinedButton(onClick = {
+            com.joctaeng.jarvis.overlay.OverlayService.stop(this@SettingsActivity)
+            status = "Reabrindo o personagem…"
+            scope.launch {
+                delay(900)
+                com.joctaeng.jarvis.overlay.OverlayService.start(this@SettingsActivity)
+                status = "Personagem reaberto com a nova opção."
+            }
+        }) { Text("Aplicar agora") }
+        if (status.isNotEmpty()) Hint(status)
     }
 
     @Composable

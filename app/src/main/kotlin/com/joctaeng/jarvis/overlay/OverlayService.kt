@@ -70,7 +70,9 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
     override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
 
     private lateinit var windowManager: WindowManager
-    private var view: ComposeView? = null
+    private var view: android.view.View? = null
+    private var avatar3d: com.joctaeng.jarvis.character.Avatar3D? = null
+    private var composeView: ComposeView? = null
     private lateinit var params: WindowManager.LayoutParams
     private val renderer = ComposeCharacterRenderer()
     private val framesThisSecond = AtomicInteger(0)
@@ -155,6 +157,8 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         diagnostics.append(Poc.OVERLAY, "event" to "stop", "run" to runId, "battery" to DeviceState.batteryPercent(this))
         bubble?.hide()
         bubble = null
+        avatar3d?.destroy()
+        avatar3d = null
         view?.let { windowManager.removeView(it) }
         view = null
         OverlayBus.running.value = false
@@ -225,7 +229,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         params.x = start.x
         params.y = start.y
 
-        val composeView = ComposeView(this).apply {
+        val compose = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@OverlayService)
             setViewTreeSavedStateRegistryOwner(this@OverlayService)
             setContent {
@@ -237,10 +241,29 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
                     onFrame = ::onFrameDrawn,
                 )
             }
+        }
+        composeView = compose
+        // A moldura recebe todos os toques (arrastar, tocar, pinçar); o 2D e o 3D só desenham.
+        val root = TouchFrame(this).apply {
+            setViewTreeLifecycleOwner(this@OverlayService)
+            setViewTreeSavedStateRegistryOwner(this@OverlayService)
+            addView(compose, android.widget.FrameLayout.LayoutParams(-1, -1))
             setOnTouchListener(DragAndTapListener())
         }
-        windowManager.addView(composeView, params)
-        view = composeView
+        if (app.settings.avatar3d) {
+            runCatching { com.joctaeng.jarvis.character.Avatar3D(this) }
+                .onFailure { app.events.warn("avatar3d", "WebView indisponível; usando o personagem 2D: ${it.message}") }
+                .getOrNull()?.let { a ->
+                    avatar3d = a
+                    root.addView(a.view, android.widget.FrameLayout.LayoutParams(-1, -1))
+                    a.view.visibility = android.view.View.INVISIBLE
+                    a.onStatus = { updateAvatarVisibility() }
+                    a.drive(lifecycleScope, renderer)
+                    a.load()
+                }
+        }
+        windowManager.addView(root, params)
+        view = root
         renderer.play(AnimState.IDLE)
         startFpsMeter()
         CharacterSync.bind(lifecycleScope, renderer, app.voice.speaking, app.voice.lip.pose, { app.voice.lip.updatedAt }, app.voice.sentenceEmotion) { dragging }
@@ -323,6 +346,8 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         engageJob?.cancel()
         renderer.engage(false)
         renderer.dismissToDimension()
+        avatar3d?.setActive(false)
+        updateAvatarVisibility()
         collapseJob = lifecycleScope.launch {
             delay(480) // deixa a animação de saída terminar
             val v = view ?: return@launch
@@ -354,7 +379,24 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner {
         windowManager.updateViewLayout(v, params)
         lastInteractionTime = SystemClock.elapsedRealtime()
         renderer.emergeFromDimension()
+        updateAvatarVisibility()
         engage()
+    }
+
+    /** 3D quando carregou e o personagem está à vista; 2D (portal, risquinho, falha do 3D) nos outros casos. */
+    private fun updateAvatarVisibility() {
+        val a = avatar3d ?: return
+        val use3d = a.ready && !a.failed && !hidden
+        a.setActive(use3d)
+        composeView?.visibility = if (use3d) android.view.View.INVISIBLE else android.view.View.VISIBLE
+    }
+
+    /** Moldura que fica com todos os toques (a WebView do 3D não pode roubar o arrastar/tocar do personagem). */
+    private class TouchFrame(context: android.content.Context) : android.widget.FrameLayout(context) {
+        override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = true
+
+        @android.annotation.SuppressLint("ClickableViewAccessibility")
+        override fun onTouchEvent(event: MotionEvent): Boolean = true
     }
 
     /** Chega mais perto e olha para o usuário por alguns segundos. */

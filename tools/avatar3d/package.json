@@ -1,0 +1,15 @@
+{
+  "name": "euno-avatar3d",
+  "private": true,
+  "description": "Avatar 3D do Euno (VRM): gera app/src/main/assets/avatar3d/avatar.js",
+  "scripts": {
+    "build": "esbuild src/avatar.js --bundle --minify --format=iife --target=chrome100 --outfile=../../app/src/main/assets/avatar3d/avatar.js --legal-comments=eof"
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "3.5.5",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

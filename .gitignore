@@ -17,3 +17,6 @@ mind/provider-llama/src/main/cpp/llama.cpp/
 
 # AAR do sherpa-onnx (baixado pelo CI)
 app/libs/*.aar
+
+# Avatar 3D: dependências de build (o resultado fica em app/src/main/assets/avatar3d)
+tools/avatar3d/node_modules/

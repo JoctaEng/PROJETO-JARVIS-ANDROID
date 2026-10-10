@@ -116,10 +116,15 @@ class ComposeCharacterRenderer : CharacterRenderer {
         private set
 
     /** Sincronia labial: abertura e largura vindas do áudio e do texto (ver LipSync). */
-    fun setMouthShape(open: Float, width: Float) {
+    fun setMouthShape(open: Float, width: Float, viseme: com.joctaeng.jarvis.presence.expression.Viseme = com.joctaeng.jarvis.presence.expression.Viseme.D) {
         mouthLevel = open.coerceIn(0f, 1f)
         mouthWidth = width.coerceIn(0.5f, 1.3f)
+        mouthViseme = viseme
     }
+
+    /** Formato de boca do instante (o avatar 3D usa para escolher a boca certa). */
+    var mouthViseme by mutableStateOf(com.joctaeng.jarvis.presence.expression.Viseme.X)
+        private set
 }
 
 /**

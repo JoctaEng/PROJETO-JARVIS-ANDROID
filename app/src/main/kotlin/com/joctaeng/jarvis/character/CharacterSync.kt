@@ -57,7 +57,7 @@ object CharacterSync {
                         val fresh = lip != null && SystemClock.elapsedRealtime() - lipUpdatedAt() < 300
                         if (fresh) {
                             val p = lip!!.value
-                            if (renderer is ComposeCharacterRenderer) renderer.setMouthShape(p.open, p.width) else renderer.setMouthOpen(p.open)
+                            if (renderer is ComposeCharacterRenderer) renderer.setMouthShape(p.open, p.width, p.viseme) else renderer.setMouthOpen(p.open)
                             delay(33)
                         } else {
                             renderer.setMouthOpen(Random.nextFloat() * 0.8f + 0.2f)
