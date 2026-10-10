@@ -80,6 +80,10 @@ class AppSettings(context: Context) {
     var characterName by string("characterName", "")
     var personaMode by enum("personaMode", PersonaMode.FRIENDLY)
     var brainPreference by enum("brainPreference", BrainPreference.ONLINE_FIRST)
+
+    /** Lista de cérebros online (v0.18): um por linha, na ordem de uso; as chaves ficam no SecretStore (BrainStore). */
+    var brainSlotsRaw by string("brainSlots", "")
+    var brainsMigrated by boolean("brainsMigrated", false)
     var cloudPreset by enum("cloudPreset", CloudPreset.NONE)
     var cloudBaseUrl by string("cloudBaseUrl", "")
     var cloudModel by string("cloudModel", "")

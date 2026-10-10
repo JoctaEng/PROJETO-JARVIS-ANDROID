@@ -271,10 +271,20 @@ class ConversationController(private val app: JarvisApp) {
      * (cota, limite de gasto) e a resposta demorava muito.
      */
     fun configuredProviders(): List<LlmProvider> {
-        val cloud = cloudProvider()
-        val localWanted = cloud == null || settings.brainPreference == BrainPreference.LOCAL_FIRST ||
+        val cloud = cloudProviders()
+        val localWanted = cloud.isEmpty() || settings.brainPreference == BrainPreference.LOCAL_FIRST ||
             settings.brainPreference == BrainPreference.LOCAL_ONLY || !DeviceState.snapshot(app, privateMode = false).online
-        return listOfNotNull(cloud, backupProvider(), if (localWanted) localProvider() else null)
+        return cloud + listOfNotNull(if (localWanted) localProvider() else null)
+    }
+
+    /** Cérebros que bateram limite (429) descansam o tempo pedido pelo provedor e o próximo da lista responde. */
+    private val cooldown = com.joctaeng.jarvis.mind.orchestrator.ProviderCooldown()
+
+    /** Cérebros online na ordem escolhida pelo usuário, sem os que estão descansando (se todos descansam, tenta todos). */
+    private fun cloudProviders(): List<LlmProvider> {
+        val all = app.brains.all().mapNotNull { app.brains.provider(it) }
+        val now = System.currentTimeMillis()
+        return all.filterNot { cooldown.resting(it.id, now) }.ifEmpty { all }
     }
 
     private suspend fun respond(speak: Boolean) {
@@ -360,6 +370,7 @@ class ConversationController(private val app: JarvisApp) {
                         }
                         is OrchestratorEvent.RoutedTo -> edit(replyId) { it.copy(brain = names[event.providerId]) }
                         is OrchestratorEvent.FellBack -> {
+                            cooldown.note(event.fromProviderId, event.reason, System.currentTimeMillis(), com.joctaeng.jarvis.system.resources.RetryHint.millis(event.reason))
                             app.events.warn("conversa", "${names[event.fromProviderId]} falhou (${event.reason}); tentando outro cérebro")
                             addNoteBefore(replyId, "${names[event.fromProviderId]} falhou (${event.reason}). Tentando outro cérebro…")
                         }
@@ -421,7 +432,7 @@ class ConversationController(private val app: JarvisApp) {
         )
         app.events.info(
             "conversa",
-            "turno: cérebro=${providers.firstOrNull()?.id ?: "nenhum"}; prompt=${prompt.length} car.; histórico=${history.size}; " +
+            "turno: cérebro=${_entries.value.firstOrNull { it.id == replyId }?.brain ?: providers.firstOrNull()?.displayName ?: "nenhum"}; prompt=${prompt.length} car.; histórico=${history.size}; " +
                 "ferramentas no prompt=${if (prompt.contains("<tools>")) tools.size else 0}; " +
                 "1ª palavra=${if (firstChunkAt == 0L) "nunca" else "${(firstChunkAt - startedAt) / 1_000_000} ms"}; total=${(System.nanoTime() - startedAt) / 1_000_000} ms",
         )
@@ -508,46 +519,6 @@ class ConversationController(private val app: JarvisApp) {
             delay(6_000)
             OverlayBus.emotion.value = Emotion.NEUTRAL
         }
-    }
-
-    /** Cérebro reserva (ex.: Groq ou Cerebras grátis): entra quando o principal falha, sem gastar a cota do Gemini. */
-    private fun backupProvider(): LlmProvider? {
-        val preset = settings.backupPreset
-        if (preset == CloudPreset.NONE) return null
-        val key = app.secrets.get(SecretStore.BACKUP_API_KEY)
-        val base = settings.backupBaseUrl.ifBlank { preset.baseUrl }
-        val model = settings.backupModel.ifBlank { preset.suggestedModel }
-        if (base.isBlank() || model.isBlank()) return null
-        if (preset.keyRequired && key.isNullOrBlank()) return null
-        return OpenAiCompatibleProvider(
-            CloudConfig(
-                id = "backup",
-                displayName = "${preset.label.substringBefore(" (")} · $model (reserva)",
-                baseUrl = base,
-                apiKey = key,
-                model = model,
-                location = preset.location,
-            ),
-        )
-    }
-
-    private fun cloudProvider(): LlmProvider? {
-        val preset = settings.cloudPreset
-        if (preset == CloudPreset.NONE) return null
-        val key = app.secrets.get(SecretStore.CLOUD_API_KEY)
-        val base = settings.cloudBaseUrl.ifBlank { preset.baseUrl }
-        if (base.isBlank() || settings.cloudModel.isBlank()) return null
-        if (preset.keyRequired && key.isNullOrBlank()) return null
-        return OpenAiCompatibleProvider(
-            CloudConfig(
-                id = "cloud",
-                displayName = "${preset.label} · ${settings.cloudModel}",
-                baseUrl = base,
-                apiKey = key,
-                model = settings.cloudModel,
-                location = preset.location,
-            ),
-        )
     }
 
     /** Cérebro do celular configurado (para o botão de teste em Meu Euno). */

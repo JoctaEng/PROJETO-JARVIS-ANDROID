@@ -16,7 +16,7 @@ import org.json.JSONObject
 object ScreenTools {
     fun all(context: Context): List<Tool> {
         val app = context.applicationContext
-        return listOf(ScreenRead(app), ScreenTap(app), ScreenType(app), ScreenScroll(app), ScreenNav(app))
+        return listOf(ScreenRead(app), ScreenTap(app), ScreenType(app), ScreenScroll(app), ScreenSwipe(app), ScreenNav(app))
     }
 }
 
@@ -118,6 +118,27 @@ private class ScreenScroll(context: Context) : ScreenTool(
 ) {
     override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult =
         result(service.scroll(forward = !args.optString("direcao").startsWith("c", ignoreCase = true)))
+}
+
+private class ScreenSwipe(context: Context) : ScreenTool(
+    context, "tela_deslizar",
+    "Desliza o dedo na tela: 'proximo' passa para a próxima página/semana/mês/foto (dedo da direita para a esquerda), " +
+        "'anterior' volta (dedo da esquerda para a direita); 'baixo'/'cima' rolam por gesto quando tela_rolar não funciona. " +
+        "Use para 'vai para a direita', 'passa para a próxima semana', 'volta um mês'. Depois use tela_ler para conferir.",
+    RiskLevel.WRITE_REVERSIBLE,
+    """"direcao":{"type":"string","enum":["proximo","anterior","baixo","cima"]}""", listOf("direcao"),
+) {
+    override suspend fun run(service: EunoAccessibilityService, args: JSONObject): ToolResult {
+        val d = com.joctaeng.jarvis.tools.normalize(args.optString("direcao"))
+        val direction = when {
+            d.startsWith("prox") || d.startsWith("esq") || d.startsWith("avan") || d.startsWith("frente") -> "proximo"
+            d.startsWith("ant") || d.startsWith("dir") || d.startsWith("volt") || d.startsWith("tras") -> "anterior"
+            d.startsWith("c") -> "cima"
+            d.startsWith("b") -> "baixo"
+            else -> return ToolResult.Failure("direcao deve ser proximo, anterior, baixo ou cima")
+        }
+        return result(service.swipe(direction))
+    }
 }
 
 private class ScreenNav(context: Context) : ScreenTool(

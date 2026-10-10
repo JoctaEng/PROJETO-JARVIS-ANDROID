@@ -49,10 +49,10 @@ class ReportCollector(private val app: JarvisApp) {
             "Voz do Gemini em descanso até" to (s.geminiTtsSkipUntil.takeIf { it > System.currentTimeMillis() }?.let { java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.US).format(java.util.Date(it)) } ?: "não"),
             "Última falha da voz do Gemini" to s.geminiTtsLastError.ifBlank { "nenhuma registrada" },
             "Voz do Azure este mês" to "${runCatching { app.voice.azureCharsThisMonth() }.getOrDefault(0)} caracteres de 500000 grátis; chave=${if (app.secrets.has(com.joctaeng.jarvis.settings.SecretStore.AZURE_SPEECH_KEY)) "salva" else "não"}; região=${s.azureRegion}; voz=${s.azureVoice.ifBlank { "padrão" }}",
-            "Cérebro reserva" to "${s.backupPreset.name}; modelo=${s.backupModel.ifBlank { s.backupPreset.suggestedModel }.ifBlank { "-" }}; chave=${if (app.secrets.has(com.joctaeng.jarvis.settings.SecretStore.BACKUP_API_KEY)) "salva" else "não"}",
+            "Cérebros online (ordem)" to app.brains.all().mapIndexed { i, b -> "${i + 1}) ${b.preset} ${b.model}${if (b.enabled) "" else " [desligado]"}${if (app.brains.hasKey(b.id)) "" else " [sem chave]"}" }.joinToString("; ").ifBlank { "nenhum" },
             "Voz offline Piper" to "escolhida=${s.piperVoice}; baixadas=${com.joctaeng.jarvis.voice.PiperVoice.VOICES.filter { runCatching { app.voice.piper.installed(it) }.getOrDefault(false) }.joinToString(",") { it.id }.ifBlank { "nenhuma" }}",
             "Bateria" to "${runCatching { DeviceState.batteryPercent(app) }.getOrDefault(-1)}%",
-            "Configuração" to "cérebro=${s.brainPreference.name}; nuvem=${s.cloudPreset.name}; voz=${s.voiceEngine.name}; " +
+            "Configuração" to "cérebro=${s.brainPreference.name}; voz=${s.voiceEngine.name}; " +
                 "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; kokoroLento=${s.kokoroTooSlow}; paciência=${s.listenPatienceMs} ms; ouvirEnquantoFala=${s.bargeIn}",
         )
         if (headerOnly) return header.joinToString("\n") { "${it.first}: ${it.second}" }

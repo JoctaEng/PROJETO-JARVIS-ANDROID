@@ -19,4 +19,8 @@ class RetryHintTest {
     fun detectsDailyQuota() {
         assertTrue(RetryHint.isDaily("quotaId: GenerateRequestsPerDayPerProjectPerModel"))
     }
+
+    @Test fun groqTryAgain() {
+        kotlin.test.assertEquals(21_435L, RetryHint.millis("Rate limit reached ... Please try again in 21.435s. Need more tokens?"))
+    }
 }

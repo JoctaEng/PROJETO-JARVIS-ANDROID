@@ -151,6 +151,46 @@ class EunoAccessibilityService : AccessibilityService() {
         return if (target.node.performAction(action)) Outcome.Done(if (forward) "rolei para baixo" else "rolei para cima") else Outcome.Failed("não deu para rolar mais")
     }
 
+    /**
+     * Desliza para os lados (ou para cima/baixo): [next] = próxima página/semana (dedo da direita para a esquerda).
+     * Primeiro pede ao próprio app (ação de rolar para o lado); se ele não oferecer, faz o gesto com o dedo virtual.
+     */
+    suspend fun swipe(direction: String): Outcome {
+        val horizontal = direction == "proximo" || direction == "anterior"
+        if (horizontal) {
+            val wanted = if (direction == "proximo") AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT
+            else AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT
+            val node = collect().firstOrNull { e -> e.node.actionList.any { it.id == wanted.id } }?.node
+            if (node != null && node.performAction(wanted.id)) {
+                JarvisApp.from(this).events.info("controle", "deslizar \"$direction\": feito pelo app")
+                return Outcome.Done(if (direction == "proximo") "passei para o próximo" else "voltei para o anterior")
+            }
+        }
+        val m = resources.displayMetrics
+        val w = m.widthPixels.toFloat()
+        val h = m.heightPixels.toFloat()
+        val (x1, y1, x2, y2) = when (direction) {
+            "proximo" -> listOf(w * 0.85f, h * 0.5f, w * 0.15f, h * 0.5f)
+            "anterior" -> listOf(w * 0.15f, h * 0.5f, w * 0.85f, h * 0.5f)
+            "cima" -> listOf(w * 0.5f, h * 0.35f, w * 0.5f, h * 0.75f)
+            else -> listOf(w * 0.5f, h * 0.75f, w * 0.5f, h * 0.35f)
+        }
+        val path = android.graphics.Path().apply { moveTo(x1, y1); lineTo(x2, y2) }
+        val gesture = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 350))
+            .build()
+        val ok = kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { cont ->
+            val sent = dispatchGesture(gesture, object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: android.accessibilityservice.GestureDescription?) { if (cont.isActive) cont.resumeWith(Result.success(true)) }
+                override fun onCancelled(gestureDescription: android.accessibilityservice.GestureDescription?) { if (cont.isActive) cont.resumeWith(Result.success(false)) }
+            }, null)
+            if (!sent && cont.isActive) cont.resumeWith(Result.success(false))
+        }
+        JarvisApp.from(this).events.info("controle", "deslizar \"$direction\" (gesto): ${if (ok) "feito" else "não aceito"}")
+        return if (ok) Outcome.Done("deslizei ($direction); use tela_ler para ver o que mudou")
+        else Outcome.Failed("o Android não aceitou o gesto; se for a primeira vez nesta versão, desligue e ligue o Euno em Acessibilidade")
+    }
+
     fun system(action: String): Outcome {
         val code = when (action) {
             "voltar" -> GLOBAL_ACTION_BACK

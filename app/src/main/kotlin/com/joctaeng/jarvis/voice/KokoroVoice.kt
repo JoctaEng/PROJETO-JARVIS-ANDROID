@@ -34,7 +34,8 @@ class KokoroVoice(context: Context) {
 
     sealed interface State {
         data object NotInstalled : State
-        data class Downloading(val bytes: Long, val total: Long) : State
+        /** [note]: por que está parado, quando está (na fila, esperando Wi-Fi...). */
+        data class Downloading(val bytes: Long, val total: Long, val note: String = "") : State
         data object Extracting : State
         data object Ready : State
         data class Failed(val reason: String) : State

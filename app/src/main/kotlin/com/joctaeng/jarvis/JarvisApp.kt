@@ -36,7 +36,9 @@ class JarvisApp : Application() {
         private set
     val memory: MemoryStore by lazy { MemoryStore(File(filesDir, "memory/memory.json")) }
     val summaries: com.joctaeng.jarvis.mind.memory.SummaryStore by lazy { com.joctaeng.jarvis.mind.memory.SummaryStore(File(filesDir, "memory/resumos.json")) }
-    val voice: VoiceOutput by lazy { VoiceOutput(this, settings, events) { secrets.get(SecretStore.CLOUD_API_KEY) }.also { it.azureKey = { secrets.get(SecretStore.AZURE_SPEECH_KEY) }; it.start() } }
+    val voice: VoiceOutput by lazy { VoiceOutput(this, settings, events) { brains.geminiKey() }.also { it.azureKey = { secrets.get(SecretStore.AZURE_SPEECH_KEY) }; it.start() } }
+    /** Cérebros online cadastrados (vários, com ordem); na 1ª vez traz as chaves das versões anteriores. */
+    val brains: com.joctaeng.jarvis.settings.BrainStore by lazy { com.joctaeng.jarvis.settings.BrainStore(settings, secrets).also { it.migrate() } }
     val conversation: ConversationController by lazy { ConversationController(this) }
     val transcripts: com.joctaeng.jarvis.system.resources.TranscriptStore by lazy { com.joctaeng.jarvis.system.resources.TranscriptStore(File(filesDir, "conversas")) }
     val voiceSession: com.joctaeng.jarvis.voice.VoiceSession by lazy { com.joctaeng.jarvis.voice.VoiceSession(this) }

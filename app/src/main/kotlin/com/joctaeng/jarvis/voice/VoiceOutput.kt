@@ -134,7 +134,7 @@ class VoiceOutput(
         val azure = if ((engine == VoiceEngine.AUTO || engine == VoiceEngine.AZURE) && net) {
             azureKey()?.takeIf { it.isNotBlank() && settings.azureRegion.isNotBlank() }?.let { AzureSpeech(it, settings.azureRegion) }
         } else null
-        val gemini = if ((engine == VoiceEngine.AUTO || engine == VoiceEngine.GEMINI) && settings.cloudPreset == CloudPreset.GEMINI && net) {
+        val gemini = if ((engine == VoiceEngine.AUTO || engine == VoiceEngine.GEMINI) && net) {
             geminiKey()?.takeIf { it.isNotBlank() }?.let { GeminiSpeech(it, settings.geminiTtsModel.ifBlank { GeminiSpeech.DEFAULT_MODEL }) }
         } else null
         val offline = offlineVoice(engine)

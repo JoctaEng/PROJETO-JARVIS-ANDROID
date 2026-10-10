@@ -504,10 +504,12 @@ private class AgendaCreate(context: Context) : AndroidTool(
         var last = ""
         while (System.currentTimeMillis() - start < 5_000) {
             kotlinx.coroutines.delay(400)
-            when (val o = service.tapExact(SAVE_LABELS)) {
+            // Na Agenda da Xiaomi o botão de salvar se chama "OK"; só vale com um app de agenda na frente.
+            val labels = if (service.foregroundPackage()?.contains("calendar", ignoreCase = true) == true) SAVE_LABELS + "OK" else SAVE_LABELS
+            when (val o = service.tapExact(labels)) {
                 is com.joctaeng.jarvis.control.EunoAccessibilityService.Outcome.Done -> {
                     JarvisApp.from(context).events.info("ferramentas", "agenda_criar: ${o.what}")
-                    return ToolResult.Success(JSONObject(result.outputJson).put("salvo", true).put("obs", "compromisso salvo").toString())
+                    return ToolResult.Success(JSONObject(result.outputJson).put("salvo", true).put("obs", "compromisso salvo na agenda").toString())
                 }
                 is com.joctaeng.jarvis.control.EunoAccessibilityService.Outcome.Failed -> last = o.why
                 else -> Unit
@@ -516,7 +518,7 @@ private class AgendaCreate(context: Context) : AndroidTool(
         JarvisApp.from(context).events.warn("ferramentas", "agenda_criar: não achei o botão Salvar ($last)")
         return ToolResult.Success(
             JSONObject(result.outputJson).put("salvo", false)
-                .put("obs", "agenda aberta e preenchida, mas não achei o botão Salvar; use tela_ler e tela_tocar no botão de salvar (pode ser um ícone ✓)").toString(),
+                .put("obs", "AINDA NÃO SALVO: a agenda está aberta e preenchida, mas não achei o botão de salvar. NÃO diga que agendou. Use tela_ler e tela_tocar no botão de salvar (pode ser OK ou um ícone ✓) e só confirme depois do resultado.").toString(),
         )
     }
 

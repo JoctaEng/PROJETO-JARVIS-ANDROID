@@ -161,7 +161,7 @@ class TestsActivity : ComponentActivity() {
                 val t0 = System.currentTimeMillis(); val sb = StringBuilder(); var err: String? = null
                 try {
                     withTimeout(40_000) {
-                        provider.generate(LlmRequest("Responda só com a palavra ok.", listOf(ChatMessage(Role.USER, "diga ok")), 20)).collect {
+                        provider.generate(LlmRequest("Responda só com a palavra ok.", listOf(ChatMessage(Role.USER, "diga ok")), 512)).collect {
                             when (it) { is LlmChunk.Text -> sb.append(it.text); is LlmChunk.Error -> err = it.message; else -> Unit }
                         }
                     }

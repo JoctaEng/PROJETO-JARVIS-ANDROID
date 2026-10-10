@@ -6,7 +6,7 @@ package com.joctaeng.jarvis.system.resources
  */
 object RetryHint {
     private val delayField = Regex("\"retryDelay\"\\s*:\\s*\"(\\d+(?:\\.\\d+)?)s\"")
-    private val retryIn = Regex("retry in\\s+(?:(\\d+)h)?\\s*(?:(\\d+)m(?!s))?\\s*(?:(\\d+(?:\\.\\d+)?)s)?", RegexOption.IGNORE_CASE)
+    private val retryIn = Regex("(?:retry|try again) in\\s+(?:(\\d+)h)?\\s*(?:(\\d+)m(?!s))?\\s*(?:(\\d+(?:\\.\\d+)?)s)?", RegexOption.IGNORE_CASE)
 
     fun millis(message: String): Long? {
         delayField.find(message)?.let { return (it.groupValues[1].toDouble() * 1000).toLong() }

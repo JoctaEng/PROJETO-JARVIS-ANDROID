@@ -83,7 +83,6 @@ class AiSetupActivity : ComponentActivity() {
                         AzureSection()
                         BackupBrainSection()
                         PiperSection()
-                        GeminiSection()
                     }
                 }
             }
@@ -173,14 +172,15 @@ class AiSetupActivity : ComponentActivity() {
         Section("1. Voz humana: Azure (1ª opção)") {
             Hint("Vozes neurais brasileiras da Microsoft. O plano grátis (F0) dá cerca de 500 mil caracteres por mês. No Automático o Euno para sozinho em ${"%,d".format(AzureSsml.AUTO_STOP_AT).replace(',', '.')} para não passar do grátis.")
             Steps(
-                "Toque em Abrir o portal do Azure e entre com uma conta Microsoft (crie uma grátis se não tiver). A Microsoft pode pedir um cartão só para confirmar a identidade; o plano F0 não cobra.",
-                "Na busca do topo, digite \"Speech\" (Serviço de Fala) e toque em Criar.",
-                "Preencha: Assinatura = a sua; Grupo de recursos = Criar novo (ex.: euno); Região = Brazil South; Nome = qualquer nome único (ex.: euno-voz-2026); Tipo de preço = Free F0.",
-                "Toque em Revisar + criar e depois em Criar. Espere terminar e toque em Ir para o recurso.",
-                "No menu do recurso, abra Chaves e Ponto de Extremidade. Copie a CHAVE 1 e veja a Localização/Região (ex.: brazilsouth).",
+                "Toque em Abrir o portal do Azure e entre com a sua conta Microsoft (Hotmail/Outlook). Se ainda não tiver, crie uma grátis.",
+                "Se aparecer \"Você não tem uma assinatura?\", toque em Iniciar (avaliação gratuita do Azure). A Microsoft pede telefone e cartão só para confirmar a identidade; o plano F0 da voz não cobra. Sem assinatura o portal dá erro (AADSTS16000).",
+                "Volte à página inicial do portal. Na busca do topo, digite \"Speech\" e toque em \"Fala\" (Marketplace). Toque em Criar.",
+                "Preencha: Assinatura = a que você criou; Grupo de recursos = Criar novo (ex.: euno); Região = Brazil South; Nome = qualquer nome único; Tipo de preço = Free F0. Se aparecer algum valor em dinheiro, pare: não é o F0.",
+                "Toque em Examinar + criar e depois em Criar. Espere terminar e toque em Ir para o recurso.",
+                "No recurso, abra Chaves e Ponto de Extremidade (Keys and endpoint). Toque no botão de copiar da CHAVE 1 e confira a Localização/Região (ex.: brazilsouth).",
                 "Cole a chave e a região aqui embaixo e toque em Salvar e testar.",
             )
-            OutlinedButton(onClick = { open("https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices") }) { Text("Abrir o portal do Azure") }
+            OutlinedButton(onClick = { open("https://portal.azure.com/") }) { Text("Abrir o portal do Azure") }
             OutlinedTextField(
                 value = key,
                 onValueChange = { key = it },
@@ -247,126 +247,25 @@ class AiSetupActivity : ComponentActivity() {
 
     @Composable
     private fun BackupBrainSection() {
-        val scope = rememberCoroutineScope()
-        val options = listOf(CloudPreset.NONE, CloudPreset.GROQ, CloudPreset.CEREBRAS)
-        var preset by remember { mutableStateOf(settings.backupPreset.takeIf { it in options } ?: CloudPreset.NONE) }
-        var model by remember { mutableStateOf(settings.backupModel.ifBlank { settings.backupPreset.suggestedModel }) }
-        var key by remember { mutableStateOf("") }
-        var keySaved by remember { mutableStateOf(app.secrets.has(SecretStore.BACKUP_API_KEY)) }
-        var models by remember { mutableStateOf<List<String>>(emptyList()) }
-        var status by remember { mutableStateOf("") }
-
-        fun provider() = OpenAiCompatibleProvider(
-            CloudConfig("teste-reserva", preset.label, preset.baseUrl, app.secrets.get(SecretStore.BACKUP_API_KEY), model.ifBlank { "-" }, preset.location),
-        )
-
-        Section("2. Cérebro reserva: Groq ou Cerebras (grátis)") {
-            Hint("Quando o cérebro principal (Gemini) falhar ou bater o limite do dia, o Euno passa sozinho para este. Assim você gasta menos a cota do Gemini e ele não fica mudo.")
+        Section("2. Cérebros: Gemini, Groq, Cerebras (vários juntos)") {
+            Hint("Cadastre quantos quiser, cada um com a sua chave. A lista é a mesma de Meu Euno → Cérebro. O 1º responde; se falhar ou bater o limite, o próximo assume. Sugestão: Gemini em 1º, Groq e Cerebras depois.")
+            Text("Google Gemini", style = MaterialTheme.typography.labelLarge)
+            Steps(
+                "Toque em Adicionar cérebro → Google Gemini e depois em Pegar a chave no site (AI Studio, conta Google).",
+                "Toque em Get API key → Create API key, copie, volte e cole no campo Chave. Toque em Salvar e testar.",
+            )
             Text("Groq", style = MaterialTheme.typography.labelLarge)
             Steps(
-                "Toque em Abrir Groq e entre (pode usar a conta Google).",
-                "No menu, abra API Keys e toque em Create API Key. Dê o nome euno.",
-                "Copie a chave na hora (ela só aparece uma vez) e cole aqui embaixo.",
+                "Adicionar cérebro → Groq → Pegar a chave no site (pode entrar com a conta Google).",
+                "Em API Keys → Create API Key, dê o nome euno e copie na hora (ela só aparece uma vez). Cole e toque em Salvar e testar.",
             )
-            OutlinedButton(onClick = { open("https://console.groq.com/keys") }) { Text("Abrir Groq") }
+            Hint("Groq grátis tem limite por minuto (o modelo sugerido aceita cerca de 8 mil tokens por minuto, e um pedido com ferramentas usa quase isso). Por isso ele funciona melhor como 2º ou 3º da lista.")
             Text("Cerebras", style = MaterialTheme.typography.labelLarge)
             Steps(
-                "Toque em Abrir Cerebras e entre (pode usar a conta Google).",
-                "No menu, abra API Keys, crie uma chave e copie.",
-                "Cole aqui embaixo.",
+                "Adicionar cérebro → Cerebras → Pegar a chave no site.",
+                "Em API Keys, crie e copie a chave. Cole e toque em Salvar e testar.",
             )
-            OutlinedButton(onClick = { open("https://cloud.cerebras.ai/") }) { Text("Abrir Cerebras") }
-
-            Text("Qual usar como reserva", style = MaterialTheme.typography.labelLarge)
-            Choice(options, preset, { if (it == CloudPreset.NONE) "Nenhum" else it.label }) {
-                preset = it
-                settings.backupPreset = it
-                settings.backupBaseUrl = it.baseUrl
-                model = it.suggestedModel
-                settings.backupModel = it.suggestedModel
-                models = emptyList()
-                status = ""
-            }
-            if (preset != CloudPreset.NONE) {
-                OutlinedTextField(
-                    value = key,
-                    onValueChange = { key = it },
-                    label = { Text(if (keySaved) "Chave do ${preset.label.substringBefore(" (")} (salva — cole outra para trocar)" else "Chave do ${preset.label.substringBefore(" (")}") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = model,
-                    onValueChange = {
-                        model = it
-                        settings.backupModel = it.trim()
-                    },
-                    label = { Text("Modelo (já sugerido)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        if (key.isNotBlank()) {
-                            app.secrets.put(SecretStore.BACKUP_API_KEY, key.trim())
-                            keySaved = true
-                            key = ""
-                        }
-                        status = "Testando…"
-                        scope.launch {
-                            val start = System.currentTimeMillis()
-                            val text = StringBuilder()
-                            var error: String? = null
-                            runCatching {
-                                provider().generate(LlmRequest("", listOf(ChatMessage(Role.USER, "Responda apenas: ok")), 16)).collect {
-                                    when (it) {
-                                        is LlmChunk.Text -> text.append(it.text)
-                                        is LlmChunk.Error -> error = it.message
-                                        else -> Unit
-                                    }
-                                }
-                            }.onFailure { error = it.message }
-                            val ms = System.currentTimeMillis() - start
-                            status = error?.let { "Não funcionou: $it" } ?: "Funcionou em $ms ms. O cérebro reserva está pronto."
-                        }
-                    }) { Text("Salvar e testar") }
-                    OutlinedButton(onClick = {
-                        status = "Buscando modelos…"
-                        scope.launch {
-                            status = try {
-                                models = provider().listModels().sorted()
-                                if (models.isEmpty()) "O serviço não listou modelos." else "Toque em um modelo para trocar (opcional)."
-                            } catch (e: Exception) {
-                                "Não consegui listar: ${e.message}"
-                            }
-                        }
-                    }) { Text("Ver modelos") }
-                }
-                if (models.isNotEmpty()) {
-                    Column(Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState())) {
-                        models.forEach { m ->
-                            Text(
-                                m,
-                                Modifier.fillMaxWidth().clickable {
-                                    model = m
-                                    settings.backupModel = m
-                                    models = emptyList()
-                                }.padding(vertical = 6.dp),
-                            )
-                        }
-                    }
-                }
-                if (keySaved) {
-                    TextButton(onClick = {
-                        app.secrets.put(SecretStore.BACKUP_API_KEY, null)
-                        keySaved = false
-                        status = "Chave do cérebro reserva apagada."
-                    }) { Text("Apagar chave") }
-                }
-            }
-            if (status.isNotEmpty()) Hint(status)
-            Hint("Quer usar Groq ou Cerebras como cérebro PRINCIPAL? Escolha em Meu Euno → Cérebro (o modelo já vem preenchido).")
+            BrainListEditor(app) { open(it) }
         }
     }
 
@@ -386,7 +285,7 @@ class AiSetupActivity : ComponentActivity() {
         }
 
         Section("3. Voz sem internet: Piper (offline, leve)") {
-            Hint("Funciona sem internet e sem gastar cota. Cada voz tem cerca de 67 MB; baixe no Wi-Fi. São vozes masculinas brasileiras (licença livre).")
+            Hint("Funciona sem internet e sem gastar cota. Cada voz tem cerca de 67 MB; baixe no Wi-Fi, uma de cada vez. São vozes masculinas brasileiras (licença livre). O progresso também aparece na barra de notificações.")
             PiperVoice.VOICES.forEach { o ->
                 val st = states[o.id] ?: KokoroVoice.State.NotInstalled
                 Card(Modifier.fillMaxWidth()) {
@@ -422,7 +321,15 @@ class AiSetupActivity : ComponentActivity() {
                                 }) { Text("Apagar") }
                             }
                             is KokoroVoice.State.Downloading ->
-                                Hint("Baixando: ${st.bytes shr 20} de ${if (st.total > 0) st.total shr 20 else 67} MB… (a preparação no fim leva alguns segundos)")
+                                Column {
+                                    Hint("Baixando: ${st.bytes shr 20} de ${if (st.total > 0) st.total shr 20 else 67} MB… (a preparação no fim leva alguns segundos)")
+                                    if (st.note.isNotEmpty()) Hint("Situação: ${st.note}")
+                                    TextButton(onClick = {
+                                        piper.delete(o)
+                                        piper.cancel(o)
+                                        states[o.id] = KokoroVoice.State.NotInstalled
+                                    }) { Text("Cancelar") }
+                                }
                             KokoroVoice.State.Extracting -> Hint("Preparando a voz…")
                             else -> {
                                 if (st is KokoroVoice.State.Failed) Hint("Falhou: ${st.reason}")
@@ -437,22 +344,6 @@ class AiSetupActivity : ComponentActivity() {
                 }
             }
             Hint("Voz offline feminina: Kokoro (~130 MB), em Meu Euno → Voz.")
-        }
-    }
-
-    @Composable
-    private fun GeminiSection() {
-        Section("4. Cérebro principal: Google Gemini") {
-            Steps(
-                "Toque em Abrir AI Studio e entre com sua conta Google.",
-                "Toque em Get API key → Create API key e copie a chave.",
-                "Volte, toque em Abrir Meu Euno → Cérebro, escolha Google Gemini, cole a chave e toque em Salvar chave.",
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { open("https://aistudio.google.com/apikey") }) { Text("Abrir AI Studio") }
-                OutlinedButton(onClick = { startActivity(Intent(this@AiSetupActivity, SettingsActivity::class.java)) }) { Text("Abrir Meu Euno") }
-            }
-            Hint("O Gemini também fala (voz do Gemini), mas a cota grátis de voz é pequena; por isso o Azure vem primeiro.")
         }
     }
 }

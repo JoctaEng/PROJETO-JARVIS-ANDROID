@@ -65,6 +65,8 @@ class OpenAiCompatibleProvider(private val config: CloudConfig) : LlmProvider {
             put("model", config.model)
             put("stream", true)
             request.maxOutputTokens?.let { put("max_tokens", it) }
+            // Modelos gpt-oss (Groq, Cerebras) "pensam" antes de responder; pensar pouco poupa o limite por minuto e a cota.
+            if (config.model.contains("gpt-oss", ignoreCase = true)) put("reasoning_effort", "low")
             put(
                 "messages",
                 buildJsonArray {

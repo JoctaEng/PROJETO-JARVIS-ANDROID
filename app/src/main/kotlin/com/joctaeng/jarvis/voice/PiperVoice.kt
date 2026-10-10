@@ -47,10 +47,38 @@ class PiperVoice(context: Context) {
         val request = DownloadManager.Request(Uri.parse(o.url))
             .setTitle("Euno: voz offline Piper (${o.label})")
             .setDescription("Cerca de 67 MB")
-            .setAllowedOverMetered(false)
+            // Algumas redes Wi-Fi são vistas pelo Android como "limitadas" e o download ficava parado em 0 MB.
+            .setAllowedOverMetered(true)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(appContext, null, "voz/${archive(o).name}")
         prefs.edit().putLong("id_${o.id}", manager.enqueue(request)).apply()
+        log("download da voz ${o.id} iniciado")
+    }
+
+    private val lastStatus = mutableMapOf<String, String>()
+
+    private fun log(text: String) = runCatching { com.joctaeng.jarvis.JarvisApp.from(appContext).events.info("voz", "Piper: $text") }
+
+    /** Registra só quando o estado muda (para o relatório mostrar por que parou). */
+    private fun note(o: Option, status: String) {
+        if (lastStatus[o.id] == status) return
+        lastStatus[o.id] = status
+        log("${o.id}: $status")
+    }
+
+    private fun pausedReason(reason: Int): String = when (reason) {
+        DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "esperando Wi-Fi (o Android acha que a rede é limitada)"
+        DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "esperando internet"
+        DownloadManager.PAUSED_WAITING_TO_RETRY -> "falha de rede; o Android vai tentar de novo"
+        else -> "pausado pelo Android (motivo $reason)"
+    }
+
+    /** Cancela um download em andamento (o usuário pode tentar de novo depois). */
+    fun cancel(o: Option) {
+        prefs.getLong("id_${o.id}", -1).takeIf { it >= 0 }?.let { manager.remove(it) }
+        prefs.edit().remove("id_${o.id}").apply()
+        archive(o).delete()
+        note(o, "cancelado")
     }
 
     fun delete(o: Option) {
@@ -70,10 +98,12 @@ class PiperVoice(context: Context) {
             }
             when (c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
                 DownloadManager.STATUS_SUCCESSFUL -> {
+                    note(o, "baixado; conferindo e preparando")
                     prefs.edit().remove("id_${o.id}").apply()
                     val file = archive(o)
                     if (sha256(file) != o.sha256) {
                         file.delete()
+                        note(o, "arquivo não confere (SHA-256)")
                         return@withContext KokoroVoice.State.Failed("arquivo baixado não confere (SHA-256); baixe de novo")
                     }
                     runCatching { extract(file) }.fold(
@@ -82,14 +112,24 @@ class PiperVoice(context: Context) {
                     ).also { file.delete() }
                 }
                 DownloadManager.STATUS_FAILED -> {
+                    val reason = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                    note(o, "falhou (código $reason)")
                     prefs.edit().remove("id_${o.id}").apply()
                     manager.remove(id)
-                    KokoroVoice.State.Failed("o download falhou; tente de novo no Wi-Fi")
+                    KokoroVoice.State.Failed("o download falhou (código $reason); tente de novo no Wi-Fi")
                 }
-                else -> KokoroVoice.State.Downloading(
-                    c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)),
-                    c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)),
-                )
+                else -> {
+                    val status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                    val reason = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                    val bytes = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                    val text = when (status) {
+                        DownloadManager.STATUS_PENDING -> "na fila do Android"
+                        DownloadManager.STATUS_PAUSED -> pausedReason(reason)
+                        else -> ""
+                    }
+                    note(o, if (text.isEmpty()) "baixando" else text)
+                    KokoroVoice.State.Downloading(bytes, c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)), text)
+                }
             }
         }
     }

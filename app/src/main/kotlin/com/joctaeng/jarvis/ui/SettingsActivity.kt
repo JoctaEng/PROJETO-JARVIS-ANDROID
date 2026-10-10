@@ -493,17 +493,6 @@ class SettingsActivity : ComponentActivity() {
     private fun BrainSection() {
         val scope = rememberCoroutineScope()
         var preference by remember { mutableStateOf(settings.brainPreference) }
-        var preset by remember { mutableStateOf(settings.cloudPreset) }
-        var baseUrl by remember { mutableStateOf(settings.cloudBaseUrl.ifBlank { settings.cloudPreset.baseUrl }) }
-        var model by remember { mutableStateOf(settings.cloudModel) }
-        var key by remember { mutableStateOf("") }
-        var keySaved by remember { mutableStateOf(app.secrets.has(SecretStore.CLOUD_API_KEY)) }
-        var models by remember { mutableStateOf<List<String>>(emptyList()) }
-        var status by remember { mutableStateOf("") }
-
-        fun provider() = OpenAiCompatibleProvider(
-            CloudConfig("teste", preset.label, baseUrl, app.secrets.get(SecretStore.CLOUD_API_KEY), model.ifBlank { "-" }, preset.location),
-        )
 
         Section("Cérebro") {
             Text("Preferência", style = MaterialTheme.typography.labelLarge)
@@ -519,113 +508,11 @@ class SettingsActivity : ComponentActivity() {
                 settings.brainPreference = it
             }
 
-            Text("Cérebro online", style = MaterialTheme.typography.labelLarge)
-            Choice(CloudPreset.entries, preset, { it.label }) {
-                preset = it
-                settings.cloudPreset = it
-                baseUrl = it.baseUrl
-                settings.cloudBaseUrl = it.baseUrl
-                model = it.suggestedModel
-                settings.cloudModel = it.suggestedModel
-                models = emptyList()
-                status = ""
+            BrainListEditor(app) { url ->
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
             }
-            if (preset != CloudPreset.NONE) {
-                Hint(preset.help)
-                OutlinedTextField(
-                    value = baseUrl,
-                    onValueChange = {
-                        baseUrl = it
-                        settings.cloudBaseUrl = it.trim()
-                    },
-                    label = { Text(if (preset.baseUrl.isNotEmpty()) "Endereço do serviço (já preenchido)" else "Endereço (termina em /v1)") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (preset.location == ProviderLocation.EXTERNAL_CLOUD && preset.baseUrl.isNotEmpty() && baseUrl.trim() != preset.baseUrl) {
-                    Hint("Este endereço foi alterado. O padrão do ${preset.label} é ${preset.baseUrl}")
-                    TextButton(onClick = {
-                        baseUrl = preset.baseUrl
-                        settings.cloudBaseUrl = preset.baseUrl
-                    }) { Text("Restaurar endereço padrão") }
-                }
-                OutlinedTextField(
-                    value = key,
-                    onValueChange = { key = it },
-                    label = { Text(if (keySaved) "Chave de API (salva — digite para trocar)" else "Chave de API") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        app.secrets.put(SecretStore.CLOUD_API_KEY, key.trim())
-                        keySaved = key.isNotBlank()
-                        key = ""
-                        status = if (keySaved) "Chave salva com segurança (Android Keystore)." else "Chave removida."
-                    }) { Text("Salvar chave") }
-                    OutlinedButton(onClick = {
-                        status = "Buscando modelos…"
-                        scope.launch {
-                            status = try {
-                                models = provider().listModels().sortedByDescending { "flash" in it }
-                                if (models.isEmpty()) "O provedor não listou modelos; digite o nome." else "Toque em um modelo para escolher."
-                            } catch (e: Exception) {
-                                "Não consegui listar: ${e.message}"
-                            }
-                        }
-                    }) { Text("Buscar modelos") }
-                }
-                OutlinedTextField(
-                    value = model,
-                    onValueChange = {
-                        model = it
-                        settings.cloudModel = it.trim()
-                    },
-                    label = { Text("Modelo") },
-                    singleLine = true,
-                    isError = !looksLikeModelId(model),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (!looksLikeModelId(model)) {
-                    Hint("Use o nome técnico do modelo, sem espaços (ex.: gemini-2.5-flash). Toque em Buscar modelos e escolha da lista.")
-                }
-                if (models.isNotEmpty()) {
-                    Column(Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState())) {
-                        models.forEach { m ->
-                            Text(
-                                m,
-                                Modifier.fillMaxWidth().clickable {
-                                    model = m
-                                    settings.cloudModel = m
-                                    models = emptyList()
-                                }.padding(vertical = 6.dp),
-                            )
-                        }
-                    }
-                }
-                OutlinedButton(onClick = {
-                    status = "Testando…"
-                    scope.launch {
-                        val start = System.currentTimeMillis()
-                        val text = StringBuilder()
-                        var error: String? = null
-                        provider().generate(LlmRequest("", listOf(ChatMessage(Role.USER, "Responda apenas: ok")), 16)).collect {
-                            when (it) {
-                                is LlmChunk.Text -> text.append(it.text)
-                                is LlmChunk.Error -> error = it.message
-                                else -> Unit
-                            }
-                        }
-                        val ms = System.currentTimeMillis() - start
-                        status = error?.let { "Falhou: $it" } ?: "Funcionou em $ms ms: \"${text.toString().trim().take(60)}\""
-                    }
-                }) { Text("Testar conexão") }
-            }
-            if (status.isNotEmpty()) Hint(status)
             OutlinedButton(onClick = { startActivity(Intent(this@SettingsActivity, AiSetupActivity::class.java)) }) {
-                Text("Cérebro reserva grátis (Groq/Cerebras): passo a passo")
+                Text("Passo a passo para pegar as chaves grátis")
             }
 
             LocalBrain()
@@ -929,8 +816,8 @@ class SettingsActivity : ComponentActivity() {
                 voice.stop()
             }
             if (naturalEngine == VoiceEngine.AUTO || naturalEngine == VoiceEngine.GEMINI) {
-                if (settings.cloudPreset != CloudPreset.GEMINI) {
-                    Hint("A voz do Gemini usa a mesma chave do Google Gemini do Cérebro. Escolha o Gemini lá para ativá-la.")
+                if (app.brains.geminiKey() == null) {
+                    Hint("A voz do Gemini usa a chave do Google Gemini cadastrada em Cérebro. Adicione o Gemini lá para ativá-la.")
                 } else {
                     val default = GeminiSpeech.defaultVoiceFor(settings.character.id)
                     Choice(listOf("") + GeminiSpeech.VOICES, naturalVoice, { if (it.isEmpty()) "Gemini: padrão de ${settings.displayName} ($default)" else "Gemini: $it" }) {
