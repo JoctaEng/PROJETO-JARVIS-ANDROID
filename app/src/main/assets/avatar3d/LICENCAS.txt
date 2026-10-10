@@ -55,3 +55,10 @@ Origem: https://github.com/pixiv/three-vrm (packages/three-vrm/examples/models).
 == Modelos victoria, vita, vivi, shino, fumiriya, clara (.vrm) ==
 Modelos de exemplo da VRoid (pixiv) marcados como CC0 nos metadados (Victoria Rubin, Vita, Vivi, Sendagaya Shino, Sakurada Fumiriya, HairSample_Female).
 Texturas reduzidas para 1024 px por tools/avatar3d/otimizar_vrm.py. Origem: https://github.com/madjin/vrm-samples (vroid/beta).
+
+== Modelo models/guardiao.vrm (Guardião) ==
+Personagem do Euno, feito a partir da ficha de arte do próprio projeto (docs/arte/guardiao/ficha.png).
+Escultura gerada com TripoSR — MIT License, Copyright (c) 2024 Tripo AI & Stability AI (código e pesos):
+https://github.com/VAST-AI-Research/TripoSR
+Textura: arte da ficha projetada sobre a escultura; boca, olhos, emoções e esqueleto montados no Blender 5.2
+(passo a passo em tools/avatar3d/guardiao/README.md).

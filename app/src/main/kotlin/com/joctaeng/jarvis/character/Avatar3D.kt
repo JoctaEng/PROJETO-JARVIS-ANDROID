@@ -166,8 +166,12 @@ class Avatar3D(context: Context) {
         fun customDir(context: Context) = File(context.filesDir, "avatar").apply { mkdirs() }
         fun customFile(context: Context) = File(customDir(context), "meu-avatar.vrm")
 
-        /** Modelos 3D que vêm no APK (id do arquivo → descrição). Todos CC0 (VRoid) ou licença VRM (pixiv). */
+        /**
+         * Modelos 3D que vêm no APK (id do arquivo → descrição). CC0 (VRoid), licença VRM (pixiv) ou próprios do Euno
+         * (Guardião: escultura gerada por IA a partir da ficha do usuário, montada no Blender; ver docs/ADR/0013).
+         */
         val MODELS = listOf(
+            "guardiao" to "Guardião (guerreiro de armadura e capa azul)",
             "avatar" to "Exemplo (cabelo castanho longo, camiseta branca)",
             "victoria" to "Victoria (loira, vestido rosa)",
             "vita" to "Vita (cabelo prateado, roupa azul)",

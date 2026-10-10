@@ -434,6 +434,7 @@ class SettingsActivity : ComponentActivity() {
             Text("Avatares 3D (falam e mostram emoções)", style = MaterialTheme.typography.labelLarge)
             com.joctaeng.jarvis.character.Avatar3D.MODELS.forEach { (id, label) ->
                 val res = when (id) {
+                    "guardiao" -> com.joctaeng.jarvis.R.drawable.thumb3d_guardiao
                     "victoria" -> com.joctaeng.jarvis.R.drawable.thumb3d_victoria
                     "vita" -> com.joctaeng.jarvis.R.drawable.thumb3d_vita
                     "vivi" -> com.joctaeng.jarvis.R.drawable.thumb3d_vivi

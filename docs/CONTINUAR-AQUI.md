@@ -1,7 +1,7 @@
 # CONTINUAR AQUI — resumo para a próxima sessão (atualizado em 10/10/2026)
 
 > Leia este arquivo primeiro. Ele resume a conversa longa com o usuário até a v0.24.0.
-> Detalhes: `docs/PEDIDOS-DO-USUARIO.md` (pedidos 1–63), `docs/MEMORIA-DO-PROJETO.md`, `docs/HANDOFF.md`, `docs/FASE-2.md`.
+> Detalhes: `docs/PEDIDOS-DO-USUARIO.md` (pedidos 1–64), `docs/MEMORIA-DO-PROJETO.md`, `docs/HANDOFF.md`, `docs/FASE-2.md`.
 
 ## 1. Quem é o usuário e como trabalhar com ele
 - Prof. Joctã (pt-BR). Celular: Redmi Note 13 Pro+ 5G, HyperOS 3, Android 16. Respostas **curtas, em português, honestas**.
@@ -25,6 +25,7 @@
 - **Sincronia labial e emoção** (v0.19): `presence/expression/LipSync.kt` (visemas pt-BR + volume real do áudio), `LipDriver`, emoção por frase (`SentenceMood`).
 - **Avatar 3D** (v0.20+): VRM em WebView (three.js + three-vrm), `assets/avatar3d`, `character/Avatar3D.kt`, comandos de `VrmFace.kt`.
   Modelos no APK: exemplo da pixiv + **Victoria, Vita, Vivi, Shino, Fumiriya, Clara** (CC0 VRoid, texturas reduzidas por `tools/avatar3d/otimizar_vrm.py`).
+  + **Guardião 3D** (v0.24.1, pedido 64: TripoSR + arte projetada + boca/emoções no Blender; ADR 0013).
   Aparecem no topo de Meu Euno → Personagem com miniatura. Importar .vrm próprio também funciona.
 - **Personagens 2D**: Joctã Casual, Luna, Thor, **Guardião** (recortado da ficha do usuário `docs/arte/guardiao/ficha.png`, ampliado 4x com Real-ESRGAN em NumPy: `tools/arte/ampliar_esrgan.py`).
 - O usuário **odiou** os 3D feitos por código (Joctã/Luna — removidos) e a boca "colada" do Guardião. **Gostou** dos avatares VRoid e do exemplo.
@@ -32,6 +33,7 @@
 ## 3. Decisões em vigor
 - **Personagem é bônus, não a essência** (pedido 63). Não mexer em personagem sem pedido. Uma sessão local do Claude no PC dele cria 3D por imagem
   (ex.: `euno-3d-personagem.glb` no Drive = relevo da imagem, sem esqueleto/boca) — **não integrar sem pedido**.
+  Exceção já feita: o **Guardião 3D** foi integrado na 0.24.1 a pedido explícito dele (pedido 64).
 - Se um dia voltar ao personagem: boca boa exige variações da MESMA imagem só com a boca mudando (9 formas) — prompts estão na conversa/pedido 60–63.
 - Foco agora: **melhorias e novas fases**.
 

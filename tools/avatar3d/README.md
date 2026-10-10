@@ -12,3 +12,4 @@ Página que desenha o avatar 3D do Euno com three.js + @pixiv/three-vrm, usada p
   `models/luna.vrm` (formas simples, esqueleto humanoide em pose T, rosto com formas de boca e emoções). O app usa o
   modelo do personagem escolhido quando existe (`Avatar3D.modelPath`). Para criar outro personagem, escreva uma função
   como `jocta()`/`luna()` (cores, cabelo, roupa) e chame `build(...)` em `main()`.
+- **Guardião** (`models/guardiao.vrm`): escultura do TripoSR + arte da ficha projetada + boca/emoções montadas no Blender. Passo a passo e scripts em `tools/avatar3d/guardiao/` (ADR 0013).
