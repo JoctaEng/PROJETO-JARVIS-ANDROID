@@ -29,3 +29,25 @@ FALHOU:
 2. **WhatsApp visível?** nenhum app com "whats" no nome. O WhatsApp Business abre por pacote (`com.whatsapp.w4b`), então o rótulo do app provavelmente não contém "whats" (hipótese: "WA Business"). O teste procura só por nome; deve procurar também pelos pacotes conhecidos.
 
 Observações: o teste "Buscar contato" grava telefones reais no arquivo exportado; no futuro mostrar só a contagem. O teste de voz e o de tocar/digitar só provam algo com o serviço conectado.
+
+# Teste da v0.15.0 (build 73) — relato do usuário e "Testar funções" (10/10/2026)
+
+No Drive só chegou o resultado de "Testar funções" (arquivo "DOC-20261009-WA0030."). A conversa e o relatório completo da 0.15.0 **ainda não estavam lá**.
+
+## Testar funções (0.15.0)
+PASSOU: acessibilidade conectada; **ler a tela de OUTRO app** (leu `com.xiaomi.calendar`, nunca o Euno: correção funcionando); digitar; WhatsApp Business achado por pacote (rótulo do app não contém "whats"); abrir "Google Agenda"; demais ferramentas e cérebro (729 ms).
+FALHOU, mas é defeito do teste, não do app: (a) "Tocar num botão" leu a Agenda porque o teste anterior abre a Agenda e volta à tela de testes sem esperar; (b) "Rolar a tela" falhou só no passo "cima" (já estava no topo; "baixo" funcionou).
+
+## Relato do usuário (conversando de verdade)
+Ao encolher para o canto superior esquerdo o Euno "trava": não ouve mais, não age, tocar nele não faz nada, não aparece caixa de mensagem; no começo funciona e depois não consegue abrir a Agenda. Nos testes tudo passa. Ele quer o comportamento do Gemini: analisar a tela e continuar ouvindo ao mesmo tempo.
+
+## Causa encontrada no código (confirmada)
+1. **A escuta e a legenda moram na `ChatActivity`.** `onStop()` chama `stopListening()` e `stopBarge()`, e a continuação por voz só roda em `repeatOnLifecycle(RESUMED)`. Quando o Euno abre outro app (WhatsApp, Agenda) a `ChatActivity` vai para segundo plano: **para de ouvir, para de ouvir comandos enquanto fala, e a legenda/confirmação somem**. O personagem (serviço) continua falando, mas não escuta. Já era assim antes da 0.15.0; o modo "agindo na tela" só deixou a falha visível.
+2. **Tocar no personagem durante o modo agindo** abre a `ChatActivity`, que vê `acting=true` e mostra só o chip "Agindo na tela…": parece que "não faz nada" e não há botão de parar.
+3. Os testes passam porque chamam as ferramentas direto, sem o cérebro. Na conversa real quem decide chamar a ferramenta é o modelo; **se o Euno diz que fez e não faz, só a conversa exportada da 0.15.0 mostra o porquê** (falta ver).
+
+## Correção prevista (aguarda ordem)
+- Mover a escuta e a conversa por voz para o **serviço do personagem** (não depende de nenhuma tela): continua ouvindo enquanto lê/age, inclusive comandos ("pera aí", "para").
+- **Balão de legenda em janela de sobreposição** (visível por cima de qualquer app, com a confirmação e um botão "Parar"), em vez de depender da `ChatActivity`.
+- Tocar no personagem em modo agindo = parar a ação e abrir o chat.
+- Consertar os testes (esperar a tela de testes voltar; "rolar" só exige "baixo" ou "cima" com sucesso).
