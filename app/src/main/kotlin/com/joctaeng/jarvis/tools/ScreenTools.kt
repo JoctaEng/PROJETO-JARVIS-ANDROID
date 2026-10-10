@@ -43,7 +43,7 @@ private abstract class ScreenTool(
         }
         if (service == null) {
             runCatching {
-                this.context.startActivity(com.joctaeng.jarvis.control.AccessibilityLink.intent(this.context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                com.joctaeng.jarvis.control.AccessibilityLink.open(this.context)
             }
             app.events.warn("controle", "tela_*: serviço ${if (EunoAccessibilityService.isEnabled(this.context)) "ligado no Android mas NÃO conectado ao Euno" else "desligado no Android"}")
             return ToolResult.Failure(

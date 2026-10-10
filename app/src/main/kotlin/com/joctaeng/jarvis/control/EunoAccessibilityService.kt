@@ -115,6 +115,22 @@ class EunoAccessibilityService : AccessibilityService() {
         return if (ok) Outcome.Done("toquei em \"${target.ui.label}\"") else Outcome.Failed("o app não aceitou o toque em \"${target.ui.label}\"")
     }
 
+    /**
+     * Toca num botão cujo rótulo é EXATAMENTE um de [labels] (sem acento/maiúscula), ex.: "Salvar" da agenda.
+     * Diferente de [tap], não aceita parecidos: evita tocar no título do evento que contenha a palavra.
+     */
+    fun tapExact(labels: List<String>): Outcome {
+        val wanted = labels.map { com.joctaeng.jarvis.tools.normalize(it) }
+        val target = collect().firstOrNull { e -> com.joctaeng.jarvis.tools.normalize(e.ui.label) in wanted }
+            ?: return Outcome.Failed("não achei ${labels.joinToString("/")} na tela")
+        var node: AccessibilityNodeInfo? = target.node
+        var hops = 0
+        while (node != null && !node.isClickable && hops < 4) { node = node.parent; hops++ }
+        val ok = node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+        JarvisApp.from(this).events.info("controle", "toque exato em \"${target.ui.label.take(40)}\": ${if (ok) "feito" else "não aceito"}")
+        return if (ok) Outcome.Done("toquei em \"${target.ui.label}\"") else Outcome.Failed("o app não aceitou o toque em \"${target.ui.label}\"")
+    }
+
     /** Escreve no campo que está com o cursor (ou no primeiro campo de texto da tela). Nunca em campo de senha. */
     fun type(text: String): Outcome {
         val entries = collect()

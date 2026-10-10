@@ -13,4 +13,17 @@ object AccessibilityLink {
             .putExtra("android.intent.extra.COMPONENT_NAME", component)
         return if (details.resolveActivity(context.packageManager) != null) details else Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
     }
+
+    /**
+     * Abre a página. Em alguns Androids (ex.: HyperOS) a página de detalhes exige uma permissão de sistema e dá
+     * SecurityException; aí cai para a lista geral de Acessibilidade em vez de fechar o app.
+     */
+    fun open(context: Context) {
+        val flags = if (context is android.app.Activity) 0 else Intent.FLAG_ACTIVITY_NEW_TASK
+        try {
+            context.startActivity(intent(context).addFlags(flags))
+        } catch (e: Exception) {
+            runCatching { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(flags)) }
+        }
+    }
 }

@@ -245,7 +245,7 @@ class SettingsActivity : ComponentActivity() {
                 Text("Falta você liberar: ${pending.joinToString(", ")}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                 if (pending.any { it.startsWith("serviço de acessibilidade") }) {
                     TextButton(onClick = {
-                        startActivity(com.joctaeng.jarvis.control.AccessibilityLink.intent(this))
+                        com.joctaeng.jarvis.control.AccessibilityLink.open(this)
                     }) { Text("Abrir acessibilidade do Android") }
                 }
                 if (pending.any { it.startsWith("acesso a Não perturbe") }) {
@@ -418,7 +418,7 @@ class SettingsActivity : ComponentActivity() {
             if (!com.joctaeng.jarvis.control.EunoAccessibilityService.isDeclared(this@SettingsActivity)) {
                 Text("Este APK não inclui o serviço de acessibilidade.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             } else if (!enabled) {
-                Button(onClick = { startActivity(com.joctaeng.jarvis.control.AccessibilityLink.intent(this)) }) { Text("Ligar em Acessibilidade") }
+                Button(onClick = { com.joctaeng.jarvis.control.AccessibilityLink.open(this) }) { Text("Ligar em Acessibilidade") }
                 Hint("Na tela que abrir, procure \"Euno - controle do celular\" (pode estar em Apps instalados/Serviços) e ative. O Android mostra um aviso: é normal.")
             }
         }
@@ -525,8 +525,8 @@ class SettingsActivity : ComponentActivity() {
                 settings.cloudPreset = it
                 baseUrl = it.baseUrl
                 settings.cloudBaseUrl = it.baseUrl
-                model = ""
-                settings.cloudModel = ""
+                model = it.suggestedModel
+                settings.cloudModel = it.suggestedModel
                 models = emptyList()
                 status = ""
             }
@@ -624,6 +624,9 @@ class SettingsActivity : ComponentActivity() {
                 }) { Text("Testar conexão") }
             }
             if (status.isNotEmpty()) Hint(status)
+            OutlinedButton(onClick = { startActivity(Intent(this@SettingsActivity, AiSetupActivity::class.java)) }) {
+                Text("Cérebro reserva grátis (Groq/Cerebras): passo a passo")
+            }
 
             LocalBrain()
         }
@@ -916,6 +919,9 @@ class SettingsActivity : ComponentActivity() {
                     delay(1000)
                 }
             }
+            OutlinedButton(onClick = { startActivity(Intent(this@SettingsActivity, AiSetupActivity::class.java)) }) {
+                Text("Configurar Azure, Piper e cérebro reserva (passo a passo)")
+            }
             Text("Voz natural", style = MaterialTheme.typography.labelLarge)
             Choice(VoiceEngine.entries, naturalEngine, { it.label }) {
                 naturalEngine = it
@@ -934,7 +940,7 @@ class SettingsActivity : ComponentActivity() {
                     Hint("Cada fala consome cota da sua chave do Gemini.")
                 }
             }
-            if (naturalEngine != VoiceEngine.ANDROID && naturalEngine != VoiceEngine.GEMINI) {
+            if (naturalEngine == VoiceEngine.AUTO || naturalEngine == VoiceEngine.KOKORO) {
                 when (val k = kokoroState) {
                     KokoroVoice.State.Ready -> {
                         val default = KokoroVoice.defaultSpeakerFor(settings.character.id, settings.character.gender == Gender.FEMALE)

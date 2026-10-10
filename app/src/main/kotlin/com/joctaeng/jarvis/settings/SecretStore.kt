@@ -58,6 +58,8 @@ class SecretStore(context: Context) {
 
     companion object {
         const val CLOUD_API_KEY = "cloud_api_key"
+        const val AZURE_SPEECH_KEY = "azure_speech_key"
+        const val BACKUP_API_KEY = "backup_api_key"
         private const val KEYSTORE = "AndroidKeyStore"
         private const val ALIAS = "jarvis_secrets"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"

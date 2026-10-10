@@ -437,17 +437,18 @@ internal fun findContacts(context: Context, query: String): Map<String, List<Str
 /** Abre a conversa do WhatsApp com o texto já escrito; quem toca em enviar é o usuário. */
 private class WhatsAppMessage(context: Context) : AndroidTool(
     context, "whatsapp_mensagem",
-    "Abre o WhatsApp na conversa com um contato, com a mensagem já escrita; para enviar, use depois tela_tocar \"Enviar\" (o app pede a confirmação ao usuário). " +
+    "Abre o WhatsApp na conversa com um contato. Com mensagem: o texto já vem escrito; para enviar, use depois tela_tocar \"Enviar\" (o app pede a confirmação ao usuário). " +
+        "Sem mensagem (deixe vazia): só abre a conversa, para 'abre a conversa com a Maria'. " +
         "Use para 'manda mensagem para a Maria dizendo que já saí'. Escreva a mensagem na voz do usuário, pronta para enviar.",
     RiskLevel.WRITE_REVERSIBLE,
-    """"contato":{"type":"string","description":"nome do contato na agenda"},"mensagem":{"type":"string"},"business":{"type":"boolean","description":"true = usar o WhatsApp Business"}""",
-    listOf("contato", "mensagem"),
+    """"contato":{"type":"string","description":"nome do contato na agenda"},"mensagem":{"type":"string","description":"texto a escrever; vazio = só abrir a conversa"},"business":{"type":"boolean","description":"true = usar o WhatsApp Business"}""",
+    listOf("contato"),
 ) {
     override fun run(args: JSONObject): ToolResult {
         missingPermission(Manifest.permission.READ_CONTACTS, "ler os contatos")?.let { return it }
         val name = args.optString("contato").trim()
         val text = args.optString("mensagem").trim()
-        if (name.isBlank() || text.isBlank()) return ToolResult.Failure("informe o contato e a mensagem")
+        if (name.isBlank()) return ToolResult.Failure("informe o contato")
         val found = runCatching { findContacts(context, name) }.getOrElse { return ToolResult.Failure("Não consegui ler os contatos: ${it.message}") }
         if (found.isEmpty()) return ToolResult.Failure("Nenhum contato com \"$name\".")
         if (found.size > 1) return ToolResult.Failure("Mais de um contato combina com \"$name\": ${found.keys.joinToString(", ")}. Pergunte qual.")
@@ -457,10 +458,11 @@ private class WhatsAppMessage(context: Context) : AndroidTool(
         val installed = listOf("com.whatsapp", "com.whatsapp.w4b").filter { pm.getLaunchIntentForPackage(it) != null }
         val wanted = if (args.optBoolean("business")) "com.whatsapp.w4b" else "com.whatsapp"
         val pkg = installed.firstOrNull { it == wanted } ?: installed.firstOrNull()
-        val uri = Uri.parse("https://wa.me/$number?text=" + Uri.encode(text))
+        val uri = Uri.parse(if (text.isEmpty()) "https://wa.me/$number" else "https://wa.me/$number?text=" + Uri.encode(text))
         val intent = Intent(Intent.ACTION_VIEW, uri).also { if (pkg != null) it.setPackage(pkg) }
         JarvisApp.from(context).events.info("ferramentas", "whatsapp_mensagem: abrindo conversa (app=${pkg ?: "padrão"}, texto ${text.length} caracteres)")
-        return if (start(intent)) ok("aberto" to "conversa com $contact", "app" to (pkg ?: "navegador/padrão"), "obs" to "texto escrito, NÃO enviado ainda; para enviar use tela_tocar com \"Enviar\"")
+        val obs = if (text.isEmpty()) "conversa aberta, sem texto" else "texto escrito, NÃO enviado ainda; para enviar use tela_tocar com \"Enviar\""
+        return if (start(intent)) ok("aberto" to "conversa com $contact", "app" to (pkg ?: "navegador/padrão"), "obs" to obs)
         else ToolResult.Failure("O Android não deixou abrir o WhatsApp.")
     }
 }
@@ -485,8 +487,41 @@ private class AgendaCreate(context: Context) : AndroidTool(
             .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
             .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, start + minutes * 60_000L)
         args.optString("local").takeIf { it.isNotBlank() }?.let { intent.putExtra(CalendarContract.Events.EVENT_LOCATION, it) }
-        return if (start(intent)) ok("aberto" to "novo compromisso", "titulo" to title, "obs" to "o usuário toca em salvar")
+        opened = start(intent)
+        return if (opened) ok("aberto" to "novo compromisso", "titulo" to title)
         else ToolResult.Failure("Nenhum app de agenda disponível.")
+    }
+
+    @Volatile private var opened = false
+
+    /** Com o controle do celular ligado, toca em Salvar sozinho (o usuário já pediu para criar); senão, ele salva. */
+    override suspend fun afterRun(result: ToolResult): ToolResult {
+        if (!opened || result !is ToolResult.Success) return result
+        opened = false
+        val service = com.joctaeng.jarvis.control.EunoAccessibilityService.instance
+            ?: return ToolResult.Success(JSONObject(result.outputJson).put("obs", "agenda aberta e preenchida; o usuário toca em Salvar").toString())
+        val start = System.currentTimeMillis()
+        var last = ""
+        while (System.currentTimeMillis() - start < 5_000) {
+            kotlinx.coroutines.delay(400)
+            when (val o = service.tapExact(SAVE_LABELS)) {
+                is com.joctaeng.jarvis.control.EunoAccessibilityService.Outcome.Done -> {
+                    JarvisApp.from(context).events.info("ferramentas", "agenda_criar: ${o.what}")
+                    return ToolResult.Success(JSONObject(result.outputJson).put("salvo", true).put("obs", "compromisso salvo").toString())
+                }
+                is com.joctaeng.jarvis.control.EunoAccessibilityService.Outcome.Failed -> last = o.why
+                else -> Unit
+            }
+        }
+        JarvisApp.from(context).events.warn("ferramentas", "agenda_criar: não achei o botão Salvar ($last)")
+        return ToolResult.Success(
+            JSONObject(result.outputJson).put("salvo", false)
+                .put("obs", "agenda aberta e preenchida, mas não achei o botão Salvar; use tela_ler e tela_tocar no botão de salvar (pode ser um ícone ✓)").toString(),
+        )
+    }
+
+    private companion object {
+        val SAVE_LABELS = listOf("Salvar", "Save", "Concluído", "Concluido", "Done", "Guardar")
     }
 }
 

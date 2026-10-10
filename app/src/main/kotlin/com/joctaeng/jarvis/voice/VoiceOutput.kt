@@ -28,6 +28,7 @@ import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import com.joctaeng.jarvis.settings.AppSettings
 import com.joctaeng.jarvis.system.resources.RetryHint
+import com.joctaeng.jarvis.system.resources.AzureSsml
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -88,21 +89,76 @@ class VoiceOutput(
         suspend fun clip(text: String): Spoken
     }
 
-    /** Ordem: Gemini (online) → Kokoro (offline, se instalado) → voz do Android. */
+    val piper = PiperVoice(appContext)
+
+    /** Chave do Azure (fica no SecretStore). */
+    var azureKey: () -> String? = { null }
+
+    @Volatile private var azureSkipUntil = 0L
+
+    /** Caracteres do Azure usados neste mês (zera quando o mês muda). */
+    fun azureCharsThisMonth(): Int {
+        val month = AzureSsml.monthKey(System.currentTimeMillis())
+        if (settings.azureMonth != month) {
+            settings.azureMonth = month
+            settings.azureChars = 0
+        }
+        return settings.azureChars
+    }
+
+    private fun azureVoiceName(): String = settings.azureVoice.ifBlank {
+        if (settings.character.gender == Gender.FEMALE) AzureSpeech.DEFAULT_FEMALE else AzureSpeech.DEFAULT_MALE
+    }
+
+    private fun offlineVoice(engine: VoiceEngine): Synth? {
+        val piperOption = PiperVoice.byId(settings.piperVoice)?.takeIf { piper.installed(it) } ?: piper.anyInstalled()
+        val usePiper = piperOption != null && (engine == VoiceEngine.PIPER || engine == VoiceEngine.AUTO)
+        val useKokoro = kokoro.installed && (engine == VoiceEngine.KOKORO || (engine == VoiceEngine.AUTO && piperOption == null && !settings.kokoroTooSlow))
+        return when {
+            usePiper -> Synth { text -> Spoken(piper.synthesize(text, piperOption!!, settings.ttsRate), "piper", 0) }
+            useKokoro -> Synth { text ->
+                val t0 = SystemClock.elapsedRealtime()
+                val clip = kokoro.synthesize(text, kokoroSpeaker(), settings.ttsRate)
+                noteKokoroSpeed(clip, SystemClock.elapsedRealtime() - t0)
+                Spoken(clip, "kokoro", 0)
+            }
+            else -> null
+        }
+    }
+
+    /** Ordem no Automático: Azure (online) → Gemini (online) → Piper/Kokoro (offline, se baixados) → voz do Android. */
     private fun naturalVoice(): Synth? {
         val engine = settings.voiceEngine
         if (engine == VoiceEngine.ANDROID) return null
-        val gemini = if (engine != VoiceEngine.KOKORO && settings.cloudPreset == CloudPreset.GEMINI && online()) {
+        val net = online()
+        val azure = if ((engine == VoiceEngine.AUTO || engine == VoiceEngine.AZURE) && net) {
+            azureKey()?.takeIf { it.isNotBlank() && settings.azureRegion.isNotBlank() }?.let { AzureSpeech(it, settings.azureRegion) }
+        } else null
+        val gemini = if ((engine == VoiceEngine.AUTO || engine == VoiceEngine.GEMINI) && settings.cloudPreset == CloudPreset.GEMINI && net) {
             geminiKey()?.takeIf { it.isNotBlank() }?.let { GeminiSpeech(it, settings.geminiTtsModel.ifBlank { GeminiSpeech.DEFAULT_MODEL }) }
         } else null
-        val offline = if (engine != VoiceEngine.GEMINI && kokoro.installed && (engine == VoiceEngine.KOKORO || !settings.kokoroTooSlow)) kokoro else null
-        if (gemini == null && offline == null) return null
+        val offline = offlineVoice(engine)
+        if (azure == null && gemini == null && offline == null) return null
         return Synth { text ->
             val t0 = SystemClock.elapsedRealtime()
             var clip: GeminiSpeech.Clip? = null
             var used = "nenhum"
+            // Azure: plano grátis com limite mensal; no Automático para um pouco antes do limite.
+            val underLimit = engine == VoiceEngine.AZURE || azureCharsThisMonth() + text.length < AzureSsml.AUTO_STOP_AT
+            if (azure != null && underLimit && System.currentTimeMillis() >= azureSkipUntil) {
+                val r = runCatching { azure.synthesize(text, azureVoiceName(), settings.ttsRate) }
+                clip = r.getOrNull()
+                if (clip != null) {
+                    used = "azure"
+                    settings.azureChars = azureCharsThisMonth() + AzureSsml.billedChars(text)
+                } else {
+                    val message = r.exceptionOrNull()?.message.orEmpty()
+                    azureSkipUntil = System.currentTimeMillis() + if (message.contains("HTTP 429")) 60_000L else GEMINI_COOLDOWN_MS
+                    events?.warn("voz", "Azure falhou após ${SystemClock.elapsedRealtime() - t0} ms; descansando: ${message.take(300)}")
+                }
+            }
             // Gemini com disjuntor: depois de uma falha ele descansa por 2 min, para não atrasar cada frase.
-            if (gemini != null && System.currentTimeMillis() >= geminiSkipUntil) {
+            if (clip == null && gemini != null && System.currentTimeMillis() >= geminiSkipUntil) {
                 val r = runCatching { gemini.synthesize(text, naturalVoiceName()) }
                 val used0 = countGeminiRequests()
                 clip = r.getOrNull()
@@ -127,14 +183,9 @@ class VoiceOutput(
                 }
             }
             if (clip == null && offline != null) {
-                val r = runCatching { offline.synthesize(text, kokoroSpeaker(), settings.ttsRate) }
-                clip = r.getOrNull()
-                if (clip != null) {
-                    used = "kokoro"
-                    noteKokoroSpeed(clip, SystemClock.elapsedRealtime() - t0)
-                } else {
-                    events?.error("voz", "Kokoro falhou após ${SystemClock.elapsedRealtime() - t0} ms", r.exceptionOrNull())
-                }
+                val r = runCatching { offline.clip(text) }
+                r.getOrNull()?.let { clip = it.clip; used = it.engine }
+                if (clip == null) events?.error("voz", "voz offline falhou após ${SystemClock.elapsedRealtime() - t0} ms", r.exceptionOrNull())
             }
             Spoken(clip, used, SystemClock.elapsedRealtime() - t0)
         }
@@ -164,6 +215,11 @@ class VoiceOutput(
         val hint = RetryHint.millis(message)
         val ms = hint?.plus(2_000) ?: if (RetryHint.isDaily(message)) 600_000L else 60_000L
         return ms.coerceIn(15_000L, 21_600_000L)
+    }
+
+    /** Libera a voz do Azure na hora (depois de salvar ou trocar a chave). */
+    fun resetAzureCooldown() {
+        azureSkipUntil = 0L
     }
 
     /** Libera a voz do Gemini na hora (botão "Testar voz"): o próximo pedido tenta de novo. */

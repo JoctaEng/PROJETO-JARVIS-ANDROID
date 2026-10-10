@@ -152,5 +152,17 @@ class McpClient(
         const val PROTOCOL_VERSION = "2025-06-18"
         /** Erro que um app do celular devolve quando a parte dele que atende o MCP não está aberta. */
         const val APP_NOT_READY = -32001
+
+        private val closedHints = listOf(
+            "fechad", "nao esta abert", "abra o app", "abra o aplicativo", "app nao esta pronto", "nao esta pronto",
+            "not open", "not running", "not ready", "is closed",
+        )
+
+        /** O app respondeu com erro dizendo que está fechado/não pronto (alguns apps devolvem isso como texto, não como código). */
+        fun saysAppClosed(result: McpCallResult): Boolean {
+            if (!result.isError) return false
+            val t = java.text.Normalizer.normalize(result.text.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+            return closedHints.any { it in t }
+        }
     }
 }

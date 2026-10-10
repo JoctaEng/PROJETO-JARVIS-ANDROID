@@ -130,6 +130,10 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Meu Euno") }
             OutlinedButton(
+                onClick = { startActivity(Intent(this@MainActivity, AiSetupActivity::class.java)) },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Configurar IA e voz (passo a passo)") }
+            OutlinedButton(
                 onClick = { startActivity(Intent(this@MainActivity, DiagnosticsActivity::class.java)) },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Diagnóstico (Fase 0)") }

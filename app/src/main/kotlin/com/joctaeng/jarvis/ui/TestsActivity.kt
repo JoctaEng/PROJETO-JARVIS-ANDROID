@@ -208,7 +208,7 @@ class TestsActivity : ComponentActivity() {
             Text("Toque em um botão para testar aquela função. O resultado e o motivo aparecem embaixo.", style = MaterialTheme.typography.bodyMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(enabled = !busy, onClick = { scope.launch { cases.forEach { runCase(it) } } }) { Text("Testar tudo") }
-                OutlinedButton(onClick = { startActivity(AccessibilityLink.intent(this@TestsActivity)) }) { Text("Abrir acessibilidade") }
+                OutlinedButton(onClick = { AccessibilityLink.open(this@TestsActivity) }) { Text("Abrir acessibilidade") }
             }
             OutlinedButton(
                 onClick = { Exporter.exportAndShare(this@TestsActivity, "euno-testes", "Testes rápidos do Euno", summaryText(), asPdf = false) },

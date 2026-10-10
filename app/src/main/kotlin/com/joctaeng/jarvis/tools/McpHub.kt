@@ -82,13 +82,25 @@ class McpHub(private val context: Context, private val networkServers: () -> Lis
     private inner class Handle(private val server: McpServerInfo) : McpServerHandle {
         override val id = server.id
         override val displayName = server.name
-        override suspend fun call(toolName: String, argumentsJson: String): McpCallResult = try {
-            withConnection(server) { it.callTool(toolName, argumentsJson) }
-        } catch (e: McpException) {
-            if (e.code != McpClient.APP_NOT_READY || server.kind != McpServerInfo.Kind.ON_DEVICE) throw e
-            // A parte do app que atende o Euno só roda com o app aberto: abre e tenta de novo.
+        override suspend fun call(toolName: String, argumentsJson: String): McpCallResult {
+            val first = try {
+                withConnection(server) { it.callTool(toolName, argumentsJson) }
+            } catch (e: McpException) {
+                if (e.code != McpClient.APP_NOT_READY || server.kind != McpServerInfo.Kind.ON_DEVICE) throw e
+                // A parte do app que atende o Euno só roda com o app aberto: abre e tenta de novo.
+                openApp(server)
+                return retryUntilReady { withConnection(server) { it.callTool(toolName, argumentsJson) } }
+            }
+            if (server.kind != McpServerInfo.Kind.ON_DEVICE || !McpClient.saysAppClosed(first)) return first
+            // O app respondeu "estou fechado" (ex.: logo depois de abrir, ainda carregando): abre e espera até ~18 s.
             openApp(server)
-            retryUntilReady { withConnection(server) { it.callTool(toolName, argumentsJson) } }
+            var last = first
+            repeat(12) {
+                delay(1_500)
+                last = runCatching { withConnection(server) { it.callTool(toolName, argumentsJson) } }.getOrElse { return@repeat }
+                if (!McpClient.saysAppClosed(last)) return last
+            }
+            return last
         }
     }
 

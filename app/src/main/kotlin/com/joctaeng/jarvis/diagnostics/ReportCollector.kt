@@ -40,6 +40,7 @@ class ReportCollector(private val app: JarvisApp) {
         val s = app.settings
         val header = listOf(
             "Versão do app" to "${pkg?.versionName ?: "?"} (código ${pkg?.longVersionCode ?: "?"})",
+            "Gerado em" to java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss", java.util.Locale.US).format(java.util.Date()),
             "Aparelho" to "${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
             "Assinatura do APK (SHA-256)" to signatureFingerprint(),
             "Memória" to memory,
@@ -47,6 +48,9 @@ class ReportCollector(private val app: JarvisApp) {
             "Voz do Gemini hoje" to "${if (s.geminiTtsDay == java.time.LocalDate.now().toString()) s.geminiTtsCount else 0} pedidos (limite diário da conta gratuita: 100)",
             "Voz do Gemini em descanso até" to (s.geminiTtsSkipUntil.takeIf { it > System.currentTimeMillis() }?.let { java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.US).format(java.util.Date(it)) } ?: "não"),
             "Última falha da voz do Gemini" to s.geminiTtsLastError.ifBlank { "nenhuma registrada" },
+            "Voz do Azure este mês" to "${runCatching { app.voice.azureCharsThisMonth() }.getOrDefault(0)} caracteres de 500000 grátis; chave=${if (app.secrets.has(com.joctaeng.jarvis.settings.SecretStore.AZURE_SPEECH_KEY)) "salva" else "não"}; região=${s.azureRegion}; voz=${s.azureVoice.ifBlank { "padrão" }}",
+            "Cérebro reserva" to "${s.backupPreset.name}; modelo=${s.backupModel.ifBlank { s.backupPreset.suggestedModel }.ifBlank { "-" }}; chave=${if (app.secrets.has(com.joctaeng.jarvis.settings.SecretStore.BACKUP_API_KEY)) "salva" else "não"}",
+            "Voz offline Piper" to "escolhida=${s.piperVoice}; baixadas=${com.joctaeng.jarvis.voice.PiperVoice.VOICES.filter { runCatching { app.voice.piper.installed(it) }.getOrDefault(false) }.joinToString(",") { it.id }.ifBlank { "nenhuma" }}",
             "Bateria" to "${runCatching { DeviceState.batteryPercent(app) }.getOrDefault(-1)}%",
             "Configuração" to "cérebro=${s.brainPreference.name}; nuvem=${s.cloudPreset.name}; voz=${s.voiceEngine.name}; " +
                 "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; kokoroLento=${s.kokoroTooSlow}; paciência=${s.listenPatienceMs} ms; ouvirEnquantoFala=${s.bargeIn}",
@@ -54,8 +58,14 @@ class ReportCollector(private val app: JarvisApp) {
         if (headerOnly) return header.joinToString("\n") { "${it.first}: ${it.second}" }
         val sections = buildList {
             val log = if (full) app.events.readAll() else app.events.tail(1_000_000)
-            add("Resumo de TODOS os avisos, erros e quedas do registro (agrupados)" to ErrorReport.problemSummary(log))
-            add("Eventos, erros e quedas (mais recente no fim)" to log)
+            // A versão atual vem primeiro: o registro guarda 7 dias e pode ter linhas de versões anteriores.
+            val marker = "iniciado: versão ${pkg?.versionName ?: "?"}"
+            val cut = log.indexOf(marker).let { i -> if (i < 0) -1 else log.lastIndexOf('\n', i).coerceAtLeast(0) }
+            val current = if (cut < 0) log else log.substring(cut)
+            val older = if (cut <= 0) "" else log.substring(0, cut)
+            add("Resumo dos avisos, erros e quedas DESTA versão (${pkg?.versionName ?: "?"})" to ErrorReport.problemSummary(current))
+            add("Eventos, erros e quedas DESTA versão (desde a 1ª abertura; mais recente no fim)" to current)
+            if (older.isNotBlank()) add("Registro de versões ANTERIORES (só para comparar; não é desta versão)" to older)
             Poc.all.forEach { poc ->
                 val lines = app.diagnostics.read(poc).takeLast(25).joinToString("\n") { rec -> rec.entries.joinToString(" ") { "${it.key}=${it.value}" } }
                 add("Medições $poc" to lines)

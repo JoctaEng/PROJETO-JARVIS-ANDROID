@@ -110,6 +110,11 @@
             android:name=".ui.DiagnosticsActivity"
             android:exported="false" />
 
+        <!-- v0.17: passo a passo para cadastrar chaves (Azure, Groq, Cerebras, Gemini) e baixar vozes offline. -->
+        <activity
+            android:name=".ui.AiSetupActivity"
+            android:exported="false" />
+
         <!-- Menu do toque longo no personagem (abrir Meu Euno / fechar por completo). -->
         <activity
             android:name=".ui.QuickMenuActivity"

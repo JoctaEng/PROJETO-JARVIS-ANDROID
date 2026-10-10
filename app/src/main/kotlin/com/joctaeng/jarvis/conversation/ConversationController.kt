@@ -274,7 +274,7 @@ class ConversationController(private val app: JarvisApp) {
         val cloud = cloudProvider()
         val localWanted = cloud == null || settings.brainPreference == BrainPreference.LOCAL_FIRST ||
             settings.brainPreference == BrainPreference.LOCAL_ONLY || !DeviceState.snapshot(app, privateMode = false).online
-        return listOfNotNull(cloud, if (localWanted) localProvider() else null)
+        return listOfNotNull(cloud, backupProvider(), if (localWanted) localProvider() else null)
     }
 
     private suspend fun respond(speak: Boolean) {
@@ -311,7 +311,7 @@ class ConversationController(private val app: JarvisApp) {
             ),
             compact = compact,
             // No cérebro local, o prompt precisa caber numa leitura rápida: ferramentas só quando o pedido sugere ação.
-            toolsSection = if (tools.isEmpty() || (compact && !ToolIntent.likely(lastUser))) "" else ToolProtocol.systemSection(tools),
+            toolsSection = if (tools.isEmpty() || !toolsNeeded(compact)) "" else ToolProtocol.systemSection(tools),
             userBio = if (compact) settings.userBio.take(LOCAL_BIO_CHARS) else settings.userBio,
             summaries = if (compact) summaries.take(LOCAL_SUMMARY_CHARS) else summaries,
             selfSection = SelfKnowledge.section(
@@ -510,6 +510,27 @@ class ConversationController(private val app: JarvisApp) {
         }
     }
 
+    /** Cérebro reserva (ex.: Groq ou Cerebras grátis): entra quando o principal falha, sem gastar a cota do Gemini. */
+    private fun backupProvider(): LlmProvider? {
+        val preset = settings.backupPreset
+        if (preset == CloudPreset.NONE) return null
+        val key = app.secrets.get(SecretStore.BACKUP_API_KEY)
+        val base = settings.backupBaseUrl.ifBlank { preset.baseUrl }
+        val model = settings.backupModel.ifBlank { preset.suggestedModel }
+        if (base.isBlank() || model.isBlank()) return null
+        if (preset.keyRequired && key.isNullOrBlank()) return null
+        return OpenAiCompatibleProvider(
+            CloudConfig(
+                id = "backup",
+                displayName = "${preset.label.substringBefore(" (")} · $model (reserva)",
+                baseUrl = base,
+                apiKey = key,
+                model = model,
+                location = preset.location,
+            ),
+        )
+    }
+
     private fun cloudProvider(): LlmProvider? {
         val preset = settings.cloudPreset
         if (preset == CloudPreset.NONE) return null
@@ -543,6 +564,19 @@ class ConversationController(private val app: JarvisApp) {
             localKey = key
         }
         return local
+    }
+
+    /**
+     * Ferramentas no prompt só quando o pedido parece de ação (ou a conversa recente foi de ação): economiza cota e deixa
+     * a conversa simples mais rápida. No cérebro do celular, só o último pedido conta.
+     */
+    private fun toolsNeeded(compact: Boolean): Boolean {
+        if (OverlayBus.acting.value) return true
+        val users = _entries.value.filter { it.role == Role.USER && !it.note }.map { it.text }
+        if (users.isEmpty()) return false
+        if (compact) return ToolIntent.likely(users.last())
+        return users.takeLast(3).any { ToolIntent.likely(it) } ||
+            _entries.value.takeLast(6).any { it.note && it.text.startsWith("Executando:") }
     }
 
     private fun add(entry: ChatEntry) {

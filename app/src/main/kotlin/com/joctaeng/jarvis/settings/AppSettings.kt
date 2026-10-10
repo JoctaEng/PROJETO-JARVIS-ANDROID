@@ -31,11 +31,21 @@ enum class CloudPreset(
     val location: ProviderLocation,
     val keyRequired: Boolean,
     val help: String,
+    /** Modelo sugerido ao escolher o provedor (o usuário pode trocar; "Listar modelos" mostra os disponíveis). */
+    val suggestedModel: String = "",
 ) {
     NONE("Nenhum", "", ProviderLocation.EXTERNAL_CLOUD, false, "Sem cérebro online."),
     GEMINI(
         "Google Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
         ProviderLocation.EXTERNAL_CLOUD, true, "Crie a chave em aistudio.google.com (Get API key).",
+    ),
+    GROQ(
+        "Groq (grátis, muito rápido)", "https://api.groq.com/openai/v1", ProviderLocation.EXTERNAL_CLOUD, true,
+        "Chave grátis em console.groq.com → API Keys.", "openai/gpt-oss-20b",
+    ),
+    CEREBRAS(
+        "Cerebras (grátis, muito rápido)", "https://api.cerebras.ai/v1", ProviderLocation.EXTERNAL_CLOUD, true,
+        "Chave grátis em cloud.cerebras.ai → API Keys.", "gpt-oss-120b",
     ),
     OPENAI("OpenAI", "https://api.openai.com/v1", ProviderLocation.EXTERNAL_CLOUD, true, "Chave em platform.openai.com."),
     OPENROUTER(
@@ -73,6 +83,11 @@ class AppSettings(context: Context) {
     var cloudPreset by enum("cloudPreset", CloudPreset.NONE)
     var cloudBaseUrl by string("cloudBaseUrl", "")
     var cloudModel by string("cloudModel", "")
+
+    /** Cérebro reserva: usado sozinho quando o principal falha ou bate o limite (chave no SecretStore). */
+    var backupPreset by enum("backupPreset", CloudPreset.NONE)
+    var backupBaseUrl by string("backupBaseUrl", "")
+    var backupModel by string("backupModel", "")
     var localModelPath by string("localModelPath", "")
     var localBackend by enum("localBackend", LocalBackend.GPU)
     var placementMode by enum("placementMode", PlacementMode.FREE)
@@ -129,6 +144,15 @@ class AppSettings(context: Context) {
     /** -1 = voz Kokoro padrão do personagem. */
     var kokoroSpeaker by int("kokoroSpeaker", -1)
 
+    /** Voz do Azure: região do recurso (ex.: brazilsouth) e nome da voz (vazio = padrão do personagem). A chave fica no SecretStore. */
+    var azureRegion by string("azureRegion", "brazilsouth")
+    var azureVoice by string("azureVoice", "")
+    /** Contador do mês (AAAA-MM) de caracteres enviados ao Azure: o plano grátis tem limite mensal. */
+    var azureMonth by string("azureMonth", "")
+    var azureChars by int("azureChars", 0)
+    /** Voz Piper offline escolhida (faber, cadu, jeff). */
+    var piperVoice by string("piperVoice", "faber")
+
     /** Nível de autonomia (seção 10.2). Operador: consultas livres, ações pedem confirmação. */
     var autonomy by enum("autonomy", AutonomyLevel.OPERATOR)
     private var disabledToolsRaw by string("disabledTools", "")
@@ -172,8 +196,10 @@ class AppSettings(context: Context) {
 }
 
 enum class VoiceEngine(val label: String) {
-    AUTO("Automático: Gemini com internet, Kokoro sem internet"),
+    AUTO("Automático: Azure → Gemini → voz offline → Android"),
+    AZURE("Azure (online, vozes brasileiras)"),
     GEMINI("Gemini (online)"),
+    PIPER("Piper (offline, leve)"),
     KOKORO("Kokoro (offline, no celular)"),
     ANDROID("Voz do Android"),
 }

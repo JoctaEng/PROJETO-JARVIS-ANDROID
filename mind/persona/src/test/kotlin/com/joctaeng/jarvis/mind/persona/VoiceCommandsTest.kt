@@ -27,6 +27,13 @@ class VoiceCommandsTest {
             .forEach { assertEquals(VoiceCommand.STOP, VoiceCommands.parse(it), it) }
     }
 
+    @Test fun tolerantStops() {
+        listOf("pare, pare", "Euno, pare com isso agora", "para de fazer isso", "cancela", "para tudo", "pare o que está fazendo", "chega, chega")
+            .forEach { assertEquals(VoiceCommand.STOP, VoiceCommands.parse(it), it) }
+        listOf("para que serve isso", "pare na próxima rua à direita", "para o carro do vizinho")
+            .forEach { assertNull(VoiceCommands.parse(it), it) }
+    }
+
     @Test fun normalSentencesAreNotCommands() {
         listOf(
             "como se diz tchau em japonês", "explique o tchau em japonês", "pode ir ao google e pesquisar", "quanto é 2+2",

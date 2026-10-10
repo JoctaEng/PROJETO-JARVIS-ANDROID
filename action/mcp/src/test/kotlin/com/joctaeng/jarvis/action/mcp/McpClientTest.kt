@@ -116,4 +116,11 @@ class McpClientTest {
         assertEquals("edumath_listar_turmas", McpNames.qualified("edumath", "edumath_listar_turmas"))
         assertEquals("meu_pc_abrir_arquivo", McpNames.qualified("Meu PC", "abrir.arquivo"))
     }
+
+    @Test fun recognizesAppClosedErrors() {
+        assertTrue(McpClient.saysAppClosed(McpCallResult("O EduMath está fechado. Abra o app.", null, true)))
+        assertTrue(McpClient.saysAppClosed(McpCallResult("app not ready", null, true)))
+        kotlin.test.assertFalse(McpClient.saysAppClosed(McpCallResult("O EduMath está fechado", null, false)))
+        kotlin.test.assertFalse(McpClient.saysAppClosed(McpCallResult("turma não encontrada", null, true)))
+    }
 }

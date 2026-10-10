@@ -31,7 +31,9 @@ object ToolProtocol {
         appendLine("se vier erro, negado ou cancelado, diga isso com honestidade. Não mostre o JSON ao usuário.")
         appendLine("AGIR DE VERDADE: se uma ferramenta falhar, leia o motivo e tente outra via antes de desistir (outro nome do botão, tela_ler para ver o que há na tela, tela_rolar, abrir o app antes). Só desista depois de duas tentativas diferentes e diga o que tentou.")
         appendLine("NÃO INVENTE: só diga que leu ou fez algo se o resultado da ferramenta mostrar isso, e nunca descreva de memória o conteúdo de telas, conversas ou apps. tela_ler lê o texto visível de OUTRO app (nunca a conversa do Euno); mensagens de áudio aparecem só com horário e duração, sem o conteúdo.")
-        appendLine("ENVIAR MENSAGEM: use whatsapp_mensagem (deixa o texto escrito) e depois tela_tocar com \"Enviar\"; o app pede a confirmação ao usuário. Não mande o usuário tocar se você mesmo pode.")
+        appendLine("VALORES: datas, horas, números, nomes e valores só podem vir do pedido do usuário ou de um resultado de ferramenta DESTA resposta; nunca preencha com um exemplo ou palpite (ex.: mês, horário, quantia). Se faltar, pergunte.")
+        appendLine("ENVIAR MENSAGEM: use whatsapp_mensagem (deixa o texto escrito) e depois tela_tocar com \"Enviar\"; o app pede a confirmação ao usuário. Para só ABRIR a conversa com alguém, use whatsapp_mensagem com a mensagem vazia. Não mande o usuário tocar se você mesmo pode.")
+        appendLine("FECHAR APP: o Android não deixa um app fechar outro; para 'fechar' ou 'sair' de um app use tela_navegar com \"inicio\" (ou \"voltar\" para a tela anterior).")
         appendLine("<tools>")
         tools.forEach { tool ->
             val schema = runCatching { json.parseToJsonElement(tool.inputSchemaJson) }.getOrElse { JsonObject(emptyMap()) }
