@@ -73,3 +73,23 @@ Causa provável (a confirmar com o registro dos argumentos, que hoje não existe
 2. **`abrir_app`** espera o app ficar na frente (até ~3 s) e trata "WhatsApp" como o Business quando só ele está instalado.
 3. **Escuta no serviço + legenda em janela de sobreposição + botão Parar** (pedido 44).
 4. Consertar os dois testes defeituosos.
+
+# Teste da v0.16.0 (build 76) — 09/10/2026, 23:19–23:46 (relatório, conversa e "Testar funções" no Drive)
+
+## Funcionou
+- **Testar funções: tudo PASSOU** (inclusive tocar, digitar, rolar, ler outro app; `abrir_app` com `na_frente: true`).
+- **Argumentos corrigidos:** `agenda_criar` funcionou ("Almoço em família", dia 12); `abrir_app` do Gmail, Calendário Acadêmico, WhatsApp funcionaram; o erro novo mostrou o que chegou (`campos=[contato(11), mensagem(0)]`).
+- **Ouvir enquanto age:** a conversa por voz seguiu com WhatsApp, Gmail e Calendário Acadêmico na frente ("sobe as conversas", "leia a tela", "clique no financeiro").
+- Tela: tocou no grupo da família, rolou, leu o Gmail (assuntos e versículo), tocou em "Financeiro" e "Mês Anterior" no Calendário Acadêmico. Toque no personagem interrompeu a ação (23:37:16).
+
+## Falhas
+1. **Inventou valores** (23:41): disse "setembro R$ 3.850, 42 aulas" sem ter lido a tela naquela resposta; só leu depois que o usuário reclamou (valor real lido: R$ 750, 10 aulas).
+2. **"Abrir a conversa de alguém"** não existe como ferramenta: usou `whatsapp_mensagem` com mensagem vazia e falhou; deve abrir a conversa sem texto.
+3. **`agenda_criar` deixa para o usuário tocar em Salvar**; ele poderia tocar sozinho (Salvar não é ação sensível).
+4. **Ferramentas do EduMath** dizem "o EduMath está fechado" logo depois de abri-lo (precisam esperar o app subir).
+5. "Você não entendeu meu comando de parar" (23:29): o pedido de parar durante a fala não foi atendido (não há registro de comando reconhecido); a causa não está clara.
+6. "Vá para a tela inicial" deu "feito", mas o usuário ainda via o e-mail (23:31). Causa não confirmada.
+7. Ele diz que "não consegue fechar apps"; poderia usar voltar/início.
+
+## Bug grave achado no relatório (de antes, v0.14.0, 18:42)
+**Queda do app** ao abrir a página de acessibilidade: o Android exige a permissão de sistema `OPEN_ACCESSIBILITY_DETAILS_SETTINGS` para a página "detalhes do serviço"; `AccessibilityLink` verifica só se a tela existe e o `startActivity` lança `SecurityException`. Correção: abrir dentro de try/catch e cair na lista de acessibilidade.
