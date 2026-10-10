@@ -126,3 +126,12 @@ Causa provável (a confirmar com o registro dos argumentos, que hoje não existe
 2. **Cérebro trocando**: até ~10:24 o Groq (gpt-oss-20b) era o 1º; ele voltou vazio 5× em pedidos de ação e o Gemini respondia depois (10–15 s). Mesmo pedido, cérebro diferente → comportamento diferente.
 3. **Corpo desligado**: 10:21 o HyperOS fechou o app; 10:29–10:30 a acessibilidade estava ligada mas desconectada → `tela_ler` falhou; voltou só às 10:58.
 4. **Ação apressada/às cegas** (já tratado na 0.25): leitura 80 ms após abrir; 7 deslizes em 4 s; toque recusado no dia 15.
+
+## Conversa exportada (09–10/10, até a 0.24.0) — causas no código (pedido 69)
+Arquivo no Drive "DOC-20261010-WA0085" (tem dados pessoais: **não copiar para o repositório**).
+1. **"Abra o Gmail" → "essa função ainda está em desenvolvimento"** (10:23, 10:24, 10:27, 13:39–13:41), mas às 10:59 e 14:49 abriu. Causa: `SelfKnowledge.notYet` diz ao cérebro que **"e-mail ... ainda não existe; diga que está no roteiro"** — ele confunde "ler e-mails por integração" com "abrir o app Gmail". E, quando o turno vai sem ferramentas, a seção diz "Ferramentas: nenhuma disponível agora; só conversa". Depois que ele recusa uma vez, o histórico reforça a recusa nas próximas.
+2. **Ferramenta fingida**: escreveu "[usando agenda_consultar]" como texto, sem chamar, e disse que o dia 15 estava vazio (13:07, 13:07:42). Nada detecta isso hoje.
+3. **Agenda só consulta hoje/amanhã/7 dias** (`agenda_consultar` sem data específica) e **não existe "abrir a agenda num dia"**: para ir ao dia 15 ele desliza às cegas (caiu em novembro às 13:10; 7 deslizes às 11:10).
+4. **"Voltando para a tela inicial" sem ter chamado a ferramenta** (11:07:48, 13:01:23, 14:48:44): diz que fez sem fazer.
+5. **Nome/gênero do avatar**: "Eu sou **o** Victoria", "**o** Vita" (herdava o Guardião 2D) — corrigido na 0.25.1 (`AvatarPersonas`).
+6. "Pesquise no Gmail" → "não consigo" (tinha tela_tocar + tela_digitar).
