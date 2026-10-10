@@ -5,6 +5,7 @@
 
 ## 1. Quem é o usuário e como trabalhar com ele
 - Prof. Joctã (pt-BR). Celular: Redmi Note 13 Pro+ 5G, HyperOS 3, Android 16. Respostas **curtas, em português, honestas**.
+- **Horários sempre no horário de Brasília** (America/Sao_Paulo, UTC−3), nunca em UTC. As ferramentas (CI, send_later) devolvem UTC: converter antes de falar (ex.: 15:24 UTC = 12:24 de Brasília). Pedido 68.
 - **Não começar a programar sem ordem dele.** Quando ele diz "só anote", apenas registrar nos docs.
 - Ele testa no celular e manda **relatórios e conversas pelo Google Drive** (arquivos "Relatório do Euno", "Testes rápidos do Euno").
   Para ler: `search_files` (modifiedTime recente) → `download_file_content` (vem em base64; arquivos grandes são salvos em disco, decodificar com python).

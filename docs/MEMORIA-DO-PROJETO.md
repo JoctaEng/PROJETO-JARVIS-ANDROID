@@ -29,6 +29,8 @@ Origem: conversa do usuário com outro assistente (ChatGPT) que gerou a especifi
 - Quando o usuário disser que uma ferramenta/ambiente não alcança algo (YouTube, ChatGPT, vídeo grande), dizer o limite e pedir o formato que eu leio (texto colado, prints, documento no Drive).
 - Modelo de IA: ele escolhe qual modelo usar na sessão; não colocar identificador de modelo em commits, docs ou código.
 
+- **Horário: sempre o de Brasília** (UTC−3) ao falar com o usuário; converter o que as ferramentas mostram em UTC (pedido 68).
+
 ## 4. Mapa de fases e estado (atualizar)
 | Fase (ROTEIRO §12) | Meta | Estado em 09/10/2026 |
 |---|---|---|
