@@ -40,7 +40,7 @@
 
 ## 4. Próximo passo
 - **v0.26.0 feita** (duas mãos, Gmail, notificações, atalhos, caminhos; `docs/FASE-2.md`). Aguarda teste. O Gmail precisa do passo a passo do Google Cloud (Meu Euno → Notificações e Gmail).
-- **Joca Finanças** (app do usuário, será vendido): revisão completa feita sobre o backup do Drive (relatório entregue ao usuário, não versionado aqui por ser outro produto). Próximo: acesso ao repositório no GitHub → corrigir críticos de dinheiro → servidor MCP dentro do Joca Finanças (o McpHub do Euno já descobre apps com `com.joctaeng.euno.action.MCP_SERVER`) → dedupe de faturas.
+- **Joca Finanças** (app do usuário, será vendido; repo privado `JoctaEng/joca-financas`, ramo `claude/correcoes-e-euno`): 1.1.0 com CI verde (build 5, 10/10 19:08 de Brasília) — críticos de dinheiro corrigidos, TransactionMatcher (dedupe) e porta MCP `joca_financas` para o Euno. Aguardando teste do usuário (instalar por cima, sem desinstalar). Pendentes: dinheiro em centavos no banco, fatura pelo dia de fechamento, dividir telas gigantes, itens de loja/LGPD (política, ID definitivo, IA por servidor, R8, tirar USE_EXACT_ALARM/RECORD_AUDIO).
 - Depois: v0.27 skills → v0.28 tarefas programadas (`docs/PLANO-ATE-V1.md`).
 
 ## 5. Lembretes técnicos
