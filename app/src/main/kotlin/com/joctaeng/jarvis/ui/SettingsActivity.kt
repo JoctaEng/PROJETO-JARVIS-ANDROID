@@ -288,7 +288,7 @@ class SettingsActivity : ComponentActivity() {
                 settings.listenPatienceMs = (patience * 1000).toInt()
             }, valueRange = 1.2f..6f)
             Hint("Se eu parar no meio para pensar e ele já responder, aumente. Frases que terminam em \"e\", \"mas\", \"porque\" ganham mais tempo sozinhas.")
-            Toggle("Chamar pelo nome (\"Oi $wakeName\")", wake) {
+            Toggle("Chamar pelo nome (\"Oi $wakeName\" ou \"Oi ${settings.displayName.substringBefore(' ')}\")", wake) {
                 wake = it
                 settings.wakeWord = it
                 if (it && androidx.core.content.ContextCompat.checkSelfPermission(this@SettingsActivity, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -300,8 +300,9 @@ class SettingsActivity : ComponentActivity() {
             if (wake) {
                 OutlinedTextField(
                     value = wakeName, onValueChange = { wakeName = it; settings.wakeName = it.trim().ifBlank { "Joca" } },
-                    label = { Text("Nome que me chama") }, singleLine = true,
+                    label = { Text("Chamado geral") }, singleLine = true,
                 )
+                Hint("Ele também atende pelo nome do avatar escolhido (\"Oi ${settings.displayName.substringBefore(' ')}\"). Ao trocar de avatar, o nome muda junto.")
             }
             Hint("Experimental. O microfone fica atento com a tela ligada (gasta bateria) e qualquer voz que diga o nome me chama; ainda não reconheço quem fala. Se o Android negar o microfone em segundo plano, o relatório avisa.")
             Toggle("Conversar só com legenda (sem abrir o chat)", caption) {
@@ -925,7 +926,7 @@ class SettingsActivity : ComponentActivity() {
                 if (app.brains.geminiKey() == null) {
                     Hint("A voz do Gemini usa a chave do Google Gemini cadastrada em Cérebro. Adicione o Gemini lá para ativá-la.")
                 } else {
-                    val default = GeminiSpeech.defaultVoiceFor(settings.character.id)
+                    val default = GeminiSpeech.defaultVoiceFor(settings.persona.id)
                     Choice(listOf("") + GeminiSpeech.VOICES, naturalVoice, { if (it.isEmpty()) "Gemini: padrão de ${settings.displayName} ($default)" else "Gemini: $it" }) {
                         naturalVoice = it
                         settings.geminiVoice = it
@@ -936,7 +937,7 @@ class SettingsActivity : ComponentActivity() {
             if (naturalEngine == VoiceEngine.AUTO || naturalEngine == VoiceEngine.KOKORO) {
                 when (val k = kokoroState) {
                     KokoroVoice.State.Ready -> {
-                        val default = KokoroVoice.defaultSpeakerFor(settings.character.id, settings.character.gender == Gender.FEMALE)
+                        val default = KokoroVoice.defaultSpeakerFor(settings.persona.id, settings.persona.gender == Gender.FEMALE)
                         Choice(listOf(-1) + KokoroVoice.VOICES.keys, kokoroSpeaker, {
                             if (it < 0) "Kokoro: padrão de ${settings.displayName} (${KokoroVoice.VOICES[default]})" else "Kokoro: ${KokoroVoice.VOICES[it]}"
                         }) {

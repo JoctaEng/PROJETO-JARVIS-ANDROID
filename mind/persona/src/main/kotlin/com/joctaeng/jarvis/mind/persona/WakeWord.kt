@@ -9,6 +9,16 @@ object WakeWord {
 
     private val greetings = setOf("oi", "ola", "ei", "hey", "e", "ai", "opa", "fala", "salve", "oii", "eae", "eai", "hei", "ok")
 
+    /**
+     * Atende por qualquer um dos [names] (ex.: o chamado geral "Joca" e o nome do avatar escolhido, "Guardião").
+     * Nomes compostos valem pela primeira palavra ("Oi Victoria").
+     */
+    fun matchAny(heard: String, names: List<String>): Match? = names
+        .map { it.trim().split(Regex("\\s+")).firstOrNull().orEmpty() }
+        .filter { it.isNotBlank() }
+        .distinctBy { normalizeWord(it) }
+        .firstNotNullOfOrNull { match(heard, it) }
+
     fun match(heard: String, name: String): Match? {
         val target = normalizeWord(name)
         if (target.isEmpty()) return null

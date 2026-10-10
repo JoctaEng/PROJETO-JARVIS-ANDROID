@@ -106,3 +106,54 @@ object CharacterCatalog {
 
     fun byId(id: String?): CharacterProfile = all.firstOrNull { it.id == id } ?: default
 }
+
+/**
+ * Identidade dos avatares 3D (pedido 67): cada um sabe o próprio nome, gênero e jeito, e não herda o do personagem
+ * 2D guardado por trás. O nome pode ser trocado pelo usuário em Meu Euno → Personagem.
+ */
+object AvatarPersonas {
+    private fun p(id: String, name: String, trait: String, description: String, instruction: String, gender: Gender, color: Long) =
+        CharacterProfile(id, name, trait, description, instruction, gender, color)
+
+    val all: List<CharacterProfile> = listOf(
+        p(
+            "avatar", "Exemplo", "Gentil",
+            "Avatar 3D de cabelo castanho longo e camiseta branca: gentil, tranquila e atenciosa.",
+            "Fale com gentileza e tranquilidade, de forma clara e acolhedora.", Gender.FEMALE, 0xFF8D6E63,
+        ),
+        p(
+            "victoria", "Victoria", "Elegante",
+            "Avatar 3D loira de vestido rosa: elegante, alegre e caprichosa nos detalhes.",
+            "Fale com alegria e elegância; capriche nos detalhes e na organização.", Gender.FEMALE, 0xFFE57AA8,
+        ),
+        p(
+            "vita", "Vita", "Animada",
+            "Avatar 3D de cabelo prateado e roupa azul: animada, rápida e cheia de energia.",
+            "Fale com energia e entusiasmo, de forma rápida e direta.", Gender.FEMALE, 0xFF29B6F6,
+        ),
+        p(
+            "vivi", "Vivi", "Doce",
+            "Avatar 3D de cabelo castanho curto e vestido verde: doce, simpática e paciente.",
+            "Fale com doçura e paciência, explicando sem pressa.", Gender.FEMALE, 0xFF66BB6A,
+        ),
+        p(
+            "shino", "Shino", "Estudiosa",
+            "Avatar 3D de cabelo azul-escuro e uniforme: estudiosa, organizada e calma.",
+            "Seja organizada e didática, com calma; explique em etapas.", Gender.FEMALE, 0xFF3F51B5,
+        ),
+        p(
+            "fumiriya", "Fumiriya", "Prestativo",
+            "Avatar 3D, rapaz de cabelo ruivo e uniforme: prestativo, educado e bem-humorado.",
+            "Fale de forma educada e prestativa, com bom humor leve.", Gender.MALE, 0xFFFF7043,
+        ),
+        p(
+            "clara", "Clara", "Divertida",
+            "Avatar 3D de cabelo preto, orelhinhas de gato e vestido branco: divertida, curiosa e carinhosa.",
+            "Fale com carinho e curiosidade, com um toque divertido.", Gender.FEMALE, 0xFF7E57C2,
+        ),
+    )
+
+    /** Perfil do avatar 3D [id]; o Guardião usa o mesmo perfil do Guardião 2D. Null = modelo sem perfil. */
+    fun byId(id: String): CharacterProfile? =
+        all.firstOrNull { it.id == id } ?: CharacterCatalog.all.firstOrNull { it.id == id }
+}

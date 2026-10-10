@@ -85,7 +85,7 @@ class MainActivity : ComponentActivity() {
             Text(app.settings.displayName, style = MaterialTheme.typography.headlineMedium)
             // Com avatar 3D, a tela inicial fala dele (e não do personagem 2D guardado por trás).
             val use3d = app.settings.avatar3d
-            Text(if (use3d) "Avatar 3D" else profile.trait, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Text(if (use3d) "Avatar 3D · ${app.settings.persona.trait}" else profile.trait, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Text(
                 if (use3d) com.joctaeng.jarvis.character.Avatar3D.describe(this@MainActivity, app.settings.avatarModel) else profile.description, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

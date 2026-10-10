@@ -117,7 +117,7 @@ class VoiceOutput(
     }
 
     private fun azureVoiceName(): String = settings.azureVoice.ifBlank {
-        if (settings.character.gender == Gender.FEMALE) AzureSpeech.DEFAULT_FEMALE else AzureSpeech.DEFAULT_MALE
+        if (settings.persona.gender == Gender.FEMALE) AzureSpeech.DEFAULT_FEMALE else AzureSpeech.DEFAULT_MALE
     }
 
     private fun offlineVoice(engine: VoiceEngine): Synth? {
@@ -261,14 +261,14 @@ class VoiceOutput(
     }
 
     private fun kokoroSpeaker(): Int = settings.kokoroSpeaker.takeIf { it >= 0 }
-        ?: KokoroVoice.defaultSpeakerFor(settings.character.id, settings.character.gender == Gender.FEMALE)
+        ?: KokoroVoice.defaultSpeakerFor(settings.persona.id, settings.persona.gender == Gender.FEMALE)
 
     private fun online(): Boolean {
         val cm = appContext.getSystemService(ConnectivityManager::class.java) ?: return false
         return cm.getNetworkCapabilities(cm.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
     }
 
-    private fun naturalVoiceName(): String = settings.geminiVoice.ifBlank { GeminiSpeech.defaultVoiceFor(settings.character.id) }
+    private fun naturalVoiceName(): String = settings.geminiVoice.ifBlank { GeminiSpeech.defaultVoiceFor(settings.persona.id) }
 
     /** Fila do Gemini: produtor sintetiza (até 2 frases adiante), consumidor toca em ordem. */
     private inner class CloudPipeline(private val speech: Synth) {

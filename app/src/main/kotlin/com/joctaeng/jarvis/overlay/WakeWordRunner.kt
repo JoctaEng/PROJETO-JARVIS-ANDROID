@@ -41,7 +41,7 @@ class WakeWordRunner(
 
     fun start() {
         if (job != null) return
-        app.events.info("chamado", "escuta do chamado ligada (nome=${app.settings.wakeName})")
+        app.events.info("chamado", "escuta do chamado ligada (nomes=${app.settings.wakeNames.joinToString("/")})")
         job = scope.launch {
             var failures = 0
             while (isActive) {
@@ -58,7 +58,7 @@ class WakeWordRunner(
                     }
                     else -> {
                         failures = 0
-                        val match = WakeWord.match(heard, app.settings.wakeName)
+                        val match = WakeWord.matchAny(heard, app.settings.wakeNames)
                         if (match != null) {
                             app.events.info("chamado", "chamado reconhecido (${heard.length} caracteres ouvidos, pedido junto=${match.rest.isNotEmpty()}, ciclo $cycles)")
                             pauseNow(4_000)

@@ -62,7 +62,16 @@ enum class CloudPreset(
 /** Configurações do usuário ("Meu Euno"). Segredos ficam no [SecretStore]. */
 class AppSettings(context: Context) {
     val character get() = CharacterCatalog.byId(characterId.takeIf(CharacterArt::hasArt) ?: CharacterArt.DEFAULT_ID)
-    val displayName get() = characterName.ifBlank { character.defaultName }
+    /**
+     * Quem o Euno é agora: com avatar 3D, a identidade do avatar (nome, gênero e jeito); senão, o personagem 2D.
+     * Antes o 3D herdava o personagem 2D guardado por trás (pedido 67).
+     */
+    val persona: com.joctaeng.jarvis.mind.persona.CharacterProfile
+        get() = if (avatar3d) com.joctaeng.jarvis.mind.persona.AvatarPersonas.byId(avatarModel) ?: character else character
+    val displayName get() = characterName.ifBlank { persona.defaultName }
+
+    /** Ele atende por "Oi Joca" (chamado geral) e por "Oi <nome do avatar>". */
+    val wakeNames: List<String> get() = listOf(wakeName, displayName).filter { it.isNotBlank() }.distinct()
 
     private val prefs: SharedPreferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     private val _version = MutableStateFlow(0)

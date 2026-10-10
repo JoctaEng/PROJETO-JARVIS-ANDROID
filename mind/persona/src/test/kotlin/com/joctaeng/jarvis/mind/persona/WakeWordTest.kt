@@ -28,3 +28,23 @@ class WakeWordTest {
         assertNull(WakeWord.match("oi jonas", "Joca"))
     }
 }
+
+class WakeWordAnyNameTest {
+    @Test fun answersToJocaOrTheAvatarName() {
+        val names = listOf("Joca", "Guardião")
+        assertEquals("que horas são", WakeWord.matchAny("Oi Joca que horas são", names)?.rest)
+        assertEquals("abre a agenda", WakeWord.matchAny("oi guardiao abre a agenda", names)?.rest)
+        assertEquals(null, WakeWord.matchAny("oi Luna tudo bem", names))
+    }
+
+    @Test fun compoundNameUsesFirstWord() {
+        assertEquals("", WakeWord.matchAny("Olá Victoria", listOf("Joca", "Victoria Rubin"))?.rest)
+    }
+
+    @Test fun avatarPersonasKnowTheirNames() {
+        assertEquals("Victoria", AvatarPersonas.byId("victoria")?.defaultName)
+        assertEquals("Guardião", AvatarPersonas.byId("guardiao")?.defaultName)
+        assertEquals(Gender.MALE, AvatarPersonas.byId("fumiriya")?.gender)
+        assertEquals(null, AvatarPersonas.byId("nao-existe"))
+    }
+}

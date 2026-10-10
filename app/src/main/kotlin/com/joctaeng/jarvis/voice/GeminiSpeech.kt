@@ -138,8 +138,9 @@ class GeminiSpeech(private val apiKey: String, private val model: String = DEFAU
         val VOICES = listOf("Kore", "Aoede", "Puck", "Charon", "Fenrir", "Enceladus")
 
         fun defaultVoiceFor(characterId: String): String = when (characterId) {
-            "luna", "selene", "astra" -> "Aoede"
-            "nina", "maya" -> "Kore"
+            "luna", "selene", "astra", "avatar", "victoria", "vivi", "clara" -> "Aoede"
+            "nina", "maya", "vita", "shino" -> "Kore"
+            "guardiao" -> "Charon"
             "thor" -> "Fenrir"
             "rex" -> "Charon"
             "jocta_estrategista" -> "Enceladus"

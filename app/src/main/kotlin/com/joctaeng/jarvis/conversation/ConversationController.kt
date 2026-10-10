@@ -309,7 +309,7 @@ class ConversationController(private val app: JarvisApp) {
         // Dois prompts: o completo (nuvem) e o enxuto (celular). Cada cérebro recebe só o que cabe nele.
         fun buildPrompt(compact: Boolean): String = PersonaEngine.systemPrompt(
             userName = settings.userName,
-            character = settings.character,
+            character = settings.persona,
             characterName = settings.characterName,
             mode = settings.personaMode,
             memories = memories,
@@ -486,7 +486,7 @@ class ConversationController(private val app: JarvisApp) {
 
     /** O que está ligado agora, para o Euno não negar recursos que tem (ex.: dizia que não podia ser chamado pelo nome). */
     private fun conversationFeatures(): List<String> = buildList {
-        if (settings.wakeWord) add("o usuário pode te chamar dizendo \"Oi ${settings.wakeName}\" com a tela ligada (você ouve o chamado, não a conversa toda)")
+        if (settings.wakeWord) add("o usuário pode te chamar dizendo \"Oi ${settings.wakeNames.joinToString("\" ou \"Oi ")}\" com a tela ligada (você ouve o chamado, não a conversa toda)")
         else add("chamado por voz (\"Oi ${settings.wakeName}\") existe mas está desligado em Ajustes → Conversa")
         if (settings.captionMode) add("ao tocar em você, aparece só uma legenda no pé da tela, sem abrir o chat")
         if (settings.bargeIn) add("você ouve comandos como \"pera aí\" e \"tchau\" enquanto fala")
