@@ -48,8 +48,12 @@ class Template(val source: String) {
             val first = starts.indexOfFirst { it >= g.range.first }
             val last = ends.indexOfLast { it <= g.range.last + 1 }
             if (first < 0 || last < first) continue
-            val words = tokens.subList(first, last + 1).filterNot { it.norm in PLACEHOLDERS }.joinToString(" ") { it.orig }.trim()
+            val span = tokens.subList(first, last + 1)
+            val words = span.filterNot { it.norm in PLACEHOLDERS }.joinToString(" ") { it.orig }.trim()
             if (words.isNotEmpty()) out[name] = words
+            // com as datas/horas/valores como foram ditos ("chego às 8h"): para textos que vão inteiros a outra pessoa
+            val full = span.map { it.orig }.filter { it.isNotBlank() }.joinToString(" ").trim()
+            if (full.isNotEmpty()) out["$name+"] = full
         }
         return out
     }

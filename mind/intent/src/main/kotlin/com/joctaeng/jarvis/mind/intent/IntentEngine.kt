@@ -71,7 +71,12 @@ class IntentEngine(
         return o
     }
 
-    internal fun prepare(raw: String, ctx: Ctx): Extracted {
+    private val nameAlternation: String by lazy { nameWords.joinToString("|") { Regex.escape(it) } }
+    private val verbsAfterName = setOf("mandou", "disse", "falou", "escreveu", "respondeu", "ligou", "chamou", "perguntou", "avisou", "esta", "ta", "vai", "foi", "ja", "nao")
+
+    internal fun prepare(raw0: String, ctx: Ctx): Extracted {
+        // "..., Guardião" no fim só vale com vírgula (sem ela pode ser o contato "Luna": "manda oi para a Luna").
+        val raw = if (nameWords.isEmpty()) raw0 else raw0.replace(Regex("""(?i)\s*,\s*(?:$nameAlternation|euno|joca)\s*[.!?]*\s*$"""), "")
         val ex = Extract.of(raw, ctx.today)
         return ex.copy(toks = stripFillers(ex.toks), raw = raw)
     }
@@ -88,8 +93,9 @@ class IntentEngine(
         val t = Toks(toks.toMutableList())
         // nomes de personagem e "euno" no começo/fim ("Guardião, abre a agenda")
         fun isName(n: String) = n in nameWords || n == "euno" || n == "joca"
-        while (t.list.isNotEmpty() && isName(t.list.first().norm)) t.list.removeAt(0)
-        while (t.list.isNotEmpty() && isName(t.list.last().norm)) t.list.removeAt(t.list.lastIndex)
+        // "Clara me mandou algo" é a Clara dos contatos, não o chamado: só tira o nome se não vier um verbo de quem fala.
+        fun isSubject() = t.list.getOrNull(1)?.norm.let { it in verbsAfterName || (it == "me" && t.list.getOrNull(2)?.norm in verbsAfterName) }
+        while (t.list.size > 1 && isName(t.list.first().norm) && !isSubject()) t.list.removeAt(0)
         var guard = 0
         while (guard++ < 8 && t.replaceFirst(leadPhrases) { _, _ -> Toks.DROP }) Unit
         guard = 0

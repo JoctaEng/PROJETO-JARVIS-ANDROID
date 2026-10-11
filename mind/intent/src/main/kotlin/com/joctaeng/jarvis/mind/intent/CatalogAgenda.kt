@@ -22,6 +22,8 @@ internal object CatalogAgenda {
     fun whenText(d: DateSlot?, today: LocalDate): String {
         if (d == null) return "hoje"
         return when (d.kind) {
+            "lastweek" -> "na semana passada"
+            "lastmonth" -> "no mês passado"
             "week" -> "nesta semana"
             "nextweek" -> "na semana que vem"
             "weekend" -> "no fim de semana"
@@ -355,7 +357,7 @@ internal object CatalogAgenda {
             val titulo = m["titulo"].orEmpty()
             if (titulo.isBlank() && m.date == null && m.time == null) return@IntentDef NoMatch
             if (PtText.fold(titulo).let { it.startsWith("alarme") || it.startsWith("timer") || it.startsWith("tarefa") || it.startsWith("lembrete de tarefa") || it.startsWith("mensagem") || it.startsWith("email") || it.startsWith("memoria") }) return@IntentDef NoMatch
-            if (!m.has("agenda_apagar")) return@IntentDef Kit.noTool(m, "apagar compromissos")
+            if (!m.has("agenda_apagar")) return@IntentDef Kit.noTool(m, "a agenda")
             val askDelete = { item: AgendaItem, c: Ctx ->
                 val what = describeItem(item, m.today, true)
                 val step = Step("agenda_apagar", mapOf("id" to (item.id ?: 0L)))
@@ -377,7 +379,7 @@ internal object CatalogAgenda {
         ) { m ->
             val titulo = m["titulo"] ?: return@IntentDef NoMatch
             if (m.date == null && m.time == null) return@IntentDef NoMatch
-            if (!m.has("agenda_editar")) return@IntentDef Kit.noTool(m, "editar compromissos")
+            if (!m.has("agenda_editar")) return@IntentDef Kit.noTool(m, "a agenda")
             val newHour = m.time?.let { hourOf(it, m.part) }
             if (m.time != null && newHour == null) return@IntentDef Kit.ask(m, "Às ${m.time!!.hour}h da manhã ou da tarde?") { ex, c ->
                 val p = ex.part ?: return@ask null

@@ -65,7 +65,7 @@ internal object Kit {
     fun missing(m: M, vararg tools: String): List<String> = tools.filter { !m.has(it) }
 
     fun noTool(m: M, what: String): Outcome =
-        say(m, "Não tenho acesso a $what agora. Veja em Meu Euno → Ferramentas se está ligado.", "concerned")
+        say(m, "Não consigo usar $what agora. Veja em Meu Euno → Ferramentas se está ligado.", "concerned")
 
     fun cap(s: String): String = Speak.capitalize(s.trim())
 

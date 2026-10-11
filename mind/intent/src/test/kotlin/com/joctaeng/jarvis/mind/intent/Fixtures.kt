@@ -15,7 +15,7 @@ object Fixtures {
         "tela_pesquisar", "tela_navegar", "pesquisar_e_resumir", "pesquisar_na_web", "memoria_guardar", "contatos_buscar", "resumo_do_dia",
         "tarefa_criar", "tarefa_listar", "tarefa_pausar", "tarefa_apagar", "skill_listar",
         "joca_financas_resumo", "joca_financas_lancamentos", "joca_financas_fatura", "joca_financas_lancar", "joca_financas_conferir_documento",
-        "edumath_perguntar", "edumath_listar_turmas", "edumath_sincronizar_agora", "edumath_estado_sincronizacao",
+        "edumath_perguntar", "edumath_listar_turmas", "edumath_sincronizar_agora", "edumath_lancar_nota", "edumath_estado_sincronizacao",
     )
 
     val apps = listOf(

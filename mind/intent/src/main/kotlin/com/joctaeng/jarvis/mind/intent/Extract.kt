@@ -84,7 +84,7 @@ object Extract {
     )
     private val durCues = listOf("daqui a", "daqui", "dentro de", "durante", "cerca de", "uns", "em", "por", "de")
     private const val PERIOD = "(?:da manha|da tarde|da noite|da madrugada)"
-    private const val AT = "(?:(?:as|pras|pelas|das|ate as|depois das|antes das|por volta das|umas) )?"
+    private const val AT = "(?:(?:as|ao|pras|pelas|das|ate as|depois das|antes das|por volta das|umas) )?"
 
     fun of(raw: String, today: LocalDate): Extracted = of(PtText.tokenize(raw), today)
 
@@ -106,6 +106,19 @@ object Extract {
         }
         if (money == null) t.replaceFirst(Regex("""(\d+) centavos?""")) { m, _ ->
             money = MoneySlot(m.groupValues[1].toLong())
+            Tok("xmoneyx", "")
+        }
+
+        // dinheiro sem "reais": "152,30" (sempre com centavos) ou o número logo depois de "despesa de", "gasto de", "valor de"...
+        if (money == null) t.replaceFirst(Regex("""(\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})""")) { m, _ ->
+            val (r, c) = m.groupValues[1].replace(".", "").split(',')
+            money = MoneySlot(r.toLong() * 100 + c.toLong())
+            Tok("xmoneyx", "")
+        }
+        if (money == null) t.replaceFirst(Regex("""(?:despesa|gasto|receita|entrada|saida|valor|pagamento|compra|lancamento|conta) (?:de |no valor de )?(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?(?= |$)""")) { m, _ ->
+            val reais = m.groupValues[1].replace(".", "").toLongOrNull() ?: return@replaceFirst null
+            val cents = m.groupValues[2].takeIf { it.isNotEmpty() }?.let { if (it.length == 1) it.toLong() * 10 else it.toLong() } ?: 0L
+            money = MoneySlot(reais * 100 + cents)
             Tok("xmoneyx", "")
         }
 
@@ -268,6 +281,13 @@ object Extract {
         if (date == null) t.replaceFirst(Regex("""(?:fim|final) de semana""")) { _, _ ->
             val sat = today.plusDays(((DayOfWeek.SATURDAY.value - today.dayOfWeek.value + 7) % 7).toLong())
             setDate(sat, "fim de semana", 2, "weekend")
+        }
+        if (date == null) t.replaceFirst(Regex("""(?:na |a )?semana passada""")) { _, _ ->
+            setDate(today.minusDays((today.dayOfWeek.value - 1 + 7).toLong()), "semana passada", 7, "lastweek")
+        }
+        if (date == null) t.replaceFirst(Regex("""(?:no |do |ao )?(?:mes passado|ultimo mes)""")) { _, _ ->
+            val first = today.withDayOfMonth(1).minusMonths(1)
+            setDate(first, "mês passado", first.lengthOfMonth(), "lastmonth")
         }
         if (date == null) t.replaceFirst(Regex("""(?:nesta|esta|essa|na) semana""")) { _, _ -> setDate(today, "esta semana", 7, "week") }
         if (date == null) t.replaceFirst(Regex("""(?:mes que vem|proximo mes)""")) { _, _ ->

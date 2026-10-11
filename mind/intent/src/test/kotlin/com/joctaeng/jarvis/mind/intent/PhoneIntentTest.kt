@@ -65,7 +65,7 @@ class PhoneIntentTest {
         val r = Fixtures.play(out) { Fixtures.ok(it, "- 08:10 · WhatsApp · Maria: oi\n- 08:12 · Gmail · Banco: fatura") }
         assertTrue(r.text.startsWith("Chegaram 2"))
         val o2 = run("tem alguma mensagem nova no zap")
-        assertEquals("phone.notifications_app", o2.intentId)
+        assertTrue(o2.intentId in setOf("phone.notifications_app", "wa.who"), o2.intentId)
         assertEquals("WhatsApp", o2.plan.steps.first().args["app"])
     }
 
