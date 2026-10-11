@@ -8,7 +8,9 @@ import java.io.File
 
 /**
  * Baixa o modelo recomendado da IA do celular pelo DownloadManager do Android: continua com o app fechado,
- * retoma se a rede cair e só usa Wi-Fi. O arquivo chega como `.download` e só vira `.gguf` quando termina.
+ * retoma se a rede cair e só usa Wi-Fi. O arquivo chega como `.download` e só ganha o nome final quando termina.
+ * Desde a 0.28 (pedido 78) o recomendado é o Gemma 4 E2B no LiteRT-LM (placa de vídeo do celular): o Qwen3-4B no
+ * llama.cpp rodava só no processador e era lento demais.
  */
 class ModelDownload(context: Context, private val store: ModelStore) {
     private val appContext = context.applicationContext
@@ -29,8 +31,8 @@ class ModelDownload(context: Context, private val store: ModelStore) {
         if (current() is State.Running) return
         partial.delete()
         val request = DownloadManager.Request(Uri.parse(RECOMMENDED_URL))
-            .setTitle("Euno: IA do celular (Qwen3-4B)")
-            .setDescription("Cerca de 2,4 GB")
+            .setTitle("Euno: IA do celular (Gemma 4 E2B)")
+            .setDescription("Cerca de 2,6 GB")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setAllowedOverMetered(false)
             .setAllowedOverRoaming(false)
@@ -45,7 +47,7 @@ class ModelDownload(context: Context, private val store: ModelStore) {
         partial.delete()
     }
 
-    /** Consulta o andamento; ao terminar, troca `.download` por `.gguf`. */
+    /** Consulta o andamento; ao terminar, troca `.download` pelo nome final. */
     fun current(): State {
         val id = prefs.getLong(KEY_ID, -1)
         if (id < 0) return if (target.isFile) State.Done(target) else State.Idle
@@ -90,17 +92,20 @@ class ModelDownload(context: Context, private val store: ModelStore) {
     }
 
     private fun failureText(reason: Int) = when (reason) {
-        DownloadManager.ERROR_INSUFFICIENT_SPACE -> "sem espaço livre (precisa de ~2,5 GB)"
+        DownloadManager.ERROR_INSUFFICIENT_SPACE -> "sem espaço livre (precisa de ~2,7 GB)"
+        401, 403 -> "o Hugging Face pediu login/aceite da licença ($reason): abra a página do modelo no navegador, baixe o arquivo .litertlm e use Importar"
         DownloadManager.ERROR_HTTP_DATA_ERROR, DownloadManager.ERROR_CANNOT_RESUME -> "a conexão caiu e não deu para retomar; tente de novo"
         in 400..599 -> "o servidor respondeu erro $reason"
         else -> "erro $reason"
     }
 
     companion object {
-        /** Repositório oficial da Qwen (Apache 2.0), na mesma revisão usada pelo EduMath. */
+        /** Repositório oficial do LiteRT-LM (Google, Gemma 4 com licença Apache 2.0); arquivo genérico (CPU e GPU), ~2,59 GB. */
         const val RECOMMENDED_URL =
-            "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/a9a60d009fa7ff9606305047c2bf77ac25dbec49/Qwen3-4B-Q4_K_M.gguf"
-        const val RECOMMENDED_FILE = "Qwen3-4B-Q4_K_M.gguf"
+            "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+        const val RECOMMENDED_FILE = "gemma-4-E2B-it.litertlm"
+        const val RECOMMENDED_NAME = "Gemma 4 E2B"
+        const val MODEL_PAGE = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm"
         private const val KEY_ID = "id"
     }
 }

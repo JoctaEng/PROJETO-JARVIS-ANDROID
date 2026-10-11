@@ -49,6 +49,10 @@ class LiteRtLmProvider(
 
     val isLoaded: Boolean get() = engine != null
 
+    /** A GPU falhou ao carregar e o modelo está no processador (aparece no relatório). */
+    @Volatile var fellBackToCpu = false
+        private set
+
     override suspend fun isAvailable(context: DeviceContext): Boolean = modelFile.isFile
 
     /** Carrega o modelo e devolve o tempo gasto em ms (0 se já estava carregado). */
@@ -56,22 +60,29 @@ class LiteRtLmProvider(
         if (engine != null) return@withLock 0L
         withContext(Dispatchers.IO) {
             val start = System.nanoTime()
-            val config = EngineConfig(
-                modelPath = modelFile.absolutePath,
-                backend = when (backend) {
-                    LocalBackend.CPU -> Backend.CPU()
-                    LocalBackend.GPU -> Backend.GPU()
-                },
-                cacheDir = cacheDir.absolutePath,
-            )
-            val created = Engine(config)
-            try {
-                created.initialize()
-            } catch (e: Exception) {
-                created.close()
-                throw e
+            fun open(useGpu: Boolean): Engine {
+                val config = EngineConfig(
+                    modelPath = modelFile.absolutePath,
+                    backend = if (useGpu) Backend.GPU() else Backend.CPU(),
+                    cacheDir = cacheDir.absolutePath,
+                )
+                val created = Engine(config)
+                try {
+                    created.initialize()
+                } catch (e: Exception) {
+                    created.close()
+                    throw e
+                }
+                return created
             }
-            engine = created
+            // Placa de vídeo primeiro (bem mais rápida); se o celular recusar, cai para o processador em vez de ficar sem cérebro.
+            engine = if (backend == LocalBackend.GPU) {
+                runCatching { open(true) }.getOrElse { gpuError ->
+                    runCatching { open(false) }.getOrElse { throw gpuError }.also { fellBackToCpu = true }
+                }
+            } else {
+                open(false)
+            }
             (System.nanoTime() - start) / 1_000_000
         }
     }

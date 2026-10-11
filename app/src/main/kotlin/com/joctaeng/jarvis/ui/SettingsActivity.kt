@@ -796,7 +796,7 @@ class SettingsActivity : ComponentActivity() {
         fun refresh() {
             localModels = app.modelStore.list()
             if (localPath.isNotEmpty() && localModels.none { it.path == localPath }) choose("")
-            if (localPath.isEmpty()) localModels.firstOrNull { ModelStore.isGguf(it) }?.let { choose(it.path) }
+            if (localPath.isEmpty()) (localModels.firstOrNull { !ModelStore.isGguf(it) } ?: localModels.firstOrNull())?.let { choose(it.path) }
         }
 
         LaunchedEffect(download is ModelDownload.State.Running) {
@@ -806,6 +806,12 @@ class SettingsActivity : ComponentActivity() {
                 download = app.modelDownload.current()
             }
             refresh()
+            // Gemma 4 recém-baixado passa a ser o cérebro do celular, na placa de vídeo (pedido 78).
+            if (download is ModelDownload.State.Done && app.modelDownload.target.isFile) {
+                choose(app.modelDownload.target.path)
+                backend = com.joctaeng.jarvis.mind.local.LocalBackend.GPU
+                settings.localBackend = backend
+            }
         }
 
         val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -827,14 +833,14 @@ class SettingsActivity : ComponentActivity() {
         }
 
         Text("Cérebro no celular (offline)", style = MaterialTheme.typography.labelLarge)
-        Hint("Funciona sem internet e sem chave. É mais lento que o online: a primeira resposta pode levar meio minuto; as seguintes saem mais rápido.")
+        Hint("Funciona sem internet e sem chave, e entra sozinho quando os cérebros online falham. Recomendado: Gemma 4 E2B, que roda na placa de vídeo do celular (bem mais rápido que o Qwen3-4B, que roda só no processador). Mais lento que o online.")
 
         val recommended = app.modelDownload.target
         if (!recommended.isFile) {
             when (val d = download) {
                 is ModelDownload.State.Running -> {
                     val pct = if (d.totalBytes > 0) " (${d.downloadedBytes * 100 / d.totalBytes}%)" else ""
-                    Hint("Baixando Qwen3-4B: ${d.downloadedBytes shr 20} de ${if (d.totalBytes > 0) d.totalBytes shr 20 else 2400} MB$pct" + (d.waitingReason?.let { " — $it" } ?: ""))
+                    Hint("Baixando ${ModelDownload.RECOMMENDED_NAME}: ${d.downloadedBytes shr 20} de ${if (d.totalBytes > 0) d.totalBytes shr 20 else 2600} MB$pct" + (d.waitingReason?.let { " — $it" } ?: ""))
                     OutlinedButton(onClick = {
                         app.modelDownload.cancel()
                         download = app.modelDownload.current()
@@ -845,8 +851,8 @@ class SettingsActivity : ComponentActivity() {
                     Button(onClick = {
                         app.modelDownload.start()
                         download = app.modelDownload.current()
-                    }) { Text("Baixar Qwen3-4B (2,4 GB, só no Wi-Fi)") }
-                    Hint("Mesmo modelo do EduMath. Pode fechar o app: o download continua e aparece nas notificações.")
+                    }) { Text("Baixar ${ModelDownload.RECOMMENDED_NAME} (2,6 GB, só no Wi-Fi)") }
+                    Hint("Modelo do Google para celular (LiteRT-LM). Pode fechar o app: o download continua e aparece nas notificações. Depois de pronto, ele vira o cérebro do celular sozinho.")
                 }
             }
         }
