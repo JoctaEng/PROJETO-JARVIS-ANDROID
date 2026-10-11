@@ -916,6 +916,20 @@ class SettingsActivity : ComponentActivity() {
                     Hint("Modelo do Google para celular (LiteRT-LM). Pode fechar o app: o download continua e aparece nas notificações. Depois de pronto, ele vira o cérebro do celular sozinho.")
                 }
             }
+            // Se o Hugging Face pedir login: token de leitura (guardado criptografado) ou baixar pelo navegador e Importar.
+            var hfToken by remember { mutableStateOf("") }
+            val hasToken = remember(download) { app.secrets.get(ModelDownload.HF_TOKEN) != null }
+            OutlinedTextField(
+                hfToken, { hfToken = it },
+                label = { Text(if (hasToken) "Token do Hugging Face (salvo)" else "Token do Hugging Face (só se pedir login)") },
+                visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (hfToken.isNotBlank()) TextButton(onClick = { app.secrets.put(ModelDownload.HF_TOKEN, hfToken.trim()); hfToken = ""; status = "Token salvo. Toque em Baixar de novo." }) { Text("Salvar token") }
+                TextButton(onClick = { runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ModelDownload.RECOMMENDED_URL))) } }) { Text("Baixar pelo navegador") }
+                TextButton(onClick = { runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ModelDownload.MODEL_PAGE))) } }) { Text("Página do modelo") }
+            }
+            Hint("Pelo navegador: o arquivo ${ModelDownload.RECOMMENDED_FILE} vai para Downloads; depois toque em Importar.")
         }
 
         OutlinedButton(onClick = { importer.launch(arrayOf("*/*")) }, enabled = !busy) { Text("Importar arquivo .gguf ou .litertlm") }
