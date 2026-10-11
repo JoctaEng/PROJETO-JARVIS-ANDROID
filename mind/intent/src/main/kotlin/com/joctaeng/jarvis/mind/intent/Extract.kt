@@ -82,7 +82,7 @@ object Extract {
         "segunda" to DayOfWeek.MONDAY, "terca" to DayOfWeek.TUESDAY, "quarta" to DayOfWeek.WEDNESDAY, "quinta" to DayOfWeek.THURSDAY,
         "sexta" to DayOfWeek.FRIDAY, "sabado" to DayOfWeek.SATURDAY, "domingo" to DayOfWeek.SUNDAY,
     )
-    private val durCues = listOf("daqui a", "daqui", "dentro de", "durante", "cerca de", "uns", "em", "por", "de")
+    private val durCues = listOf("daqui a", "daqui", "dentro de", "durante", "cerca de", "uns", "em", "por", "de", "para", "pra", "com", "timer", "temporizador", "cronometro", "regressiva")
     private const val PERIOD = "(?:da manha|da tarde|da noite|da madrugada)"
     private const val AT = "(?:(?:as|ao|pras|pelas|das|ate as|depois das|antes das|por volta das|umas) )?"
 
@@ -115,7 +115,7 @@ object Extract {
             money = MoneySlot(r.toLong() * 100 + c.toLong())
             Tok("xmoneyx", "")
         }
-        if (money == null) t.replaceFirst(Regex("""(?:despesa|gasto|receita|entrada|saida|valor|pagamento|compra|lancamento|conta) (?:de |no valor de )?(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?(?= |$)""")) { m, _ ->
+        if (money == null) t.replaceFirst(Regex("""(?:despesa|gasto|receita|entrada|saida|valor|pagamento|compra|lancamento) (?:de |no valor de )?(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?(?= |$)""")) { m, _ ->
             val reais = m.groupValues[1].replace(".", "").toLongOrNull() ?: return@replaceFirst null
             val cents = m.groupValues[2].takeIf { it.isNotEmpty() }?.let { if (it.length == 1) it.toLong() * 10 else it.toLong() } ?: 0L
             money = MoneySlot(reais * 100 + cents)
@@ -192,8 +192,8 @@ object Extract {
             time = mk(m.groupValues[1].toInt(), min, period(m.groupValues[3]), m.groupValues[1].toInt() > 12)
             if (time == null) null else Tok("xtimex", "")
         }
-        if (time == null) t.replaceFirst(Regex("""meio dia(?: e meia)?|meia noite""")) { m, _ ->
-            time = when (m.value) {
+        if (time == null) t.replaceFirst(Regex("""$AT(?:meio dia(?: e meia)?|meia noite)""")) { m, _ ->
+            time = when (m.value.substringAfterLast(" a", "").let { Regex("(meio dia e meia|meio dia|meia noite)$").find(m.value)?.value }) {
                 "meio dia" -> TimeSlot(12, 0, true)
                 "meio dia e meia" -> TimeSlot(12, 30, true)
                 else -> TimeSlot(0, 0, true)

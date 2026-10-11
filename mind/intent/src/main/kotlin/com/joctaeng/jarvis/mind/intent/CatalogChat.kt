@@ -3,7 +3,7 @@ package com.joctaeng.jarvis.mind.intent
 /** WhatsApp (mandar mensagem com confirmação no "Enviar", abrir conversa, quem escreveu) e Instagram (seções do app). */
 internal object CatalogChat {
     private val sendVerbs = "manda|mande|mandar|envia|envie|enviar|escreve|escreva|escrever|diz|diga|dizer|fala|fale|falar|avisa|avise|avisar|pergunta|pergunte|responde|responda|responder"
-    private val sepWords = "dizendo|falando|avisando|perguntando|informando|respondendo|escrevendo|que|:"
+    private val sepWords = "dizendo|falando|avisando|perguntando|informando|respondendo|escrevendo|que"
     private val appTail = Regex("""(?i)\s+(?:no|pelo|pela|via|em)\s+(?:o\s+)?(?:zap|zapzap|whats|whatsapp|watsapp|wpp)(?:\s+(?:business|comercial))?\s*$""")
     private val nonWhats = Regex("""\b(telegram|instagram|insta|direct|email|e mail|gmail|sms|ligacao|ligar|facebook|messenger|linkedin)\b""")
     private val preps = setOf("para", "pra", "pro", "a", "ao", "o", "mensagem", "msg", "uma", "um", "zap", "whats", "whatsapp", "de", "que", "dizendo")
@@ -72,7 +72,7 @@ internal object CatalogChat {
                 "($sendVerbs) {mensagem} (pra|para|pro|ao) (a |o )?{contato} (no zap|no whatsapp|no whats|pelo zap|pelo whatsapp)?",
                 "($sendVerbs) (uma |a )?(mensagem|msg) (no zap|no whatsapp|no whats|pelo zap|pelo whatsapp)? (pra|para|pro|a|ao) (a |o )?{contato}",
                 "(whatsapp|zap|whats) (pra|para|pro|a|ao|do|da)? {contato} ($sepWords) {mensagem}",
-                "(avisa|avise|avisar|pergunta|pergunte|perguntar|responde|responda|responder|fala com|fale com|diz a|diga a|manda um recado para|mande um recado para) (a |o )?{contato} (que|:|dizendo|se|pra|para) {mensagem}",
+                "(avisa|avise|avisar|pergunta|pergunte|perguntar|responde|responda|responder|fala com|fale com|diz a|diga a|manda um recado para|mande um recado para) (a |o )?{contato} (que|dizendo|se|pra|para) {mensagem}",
             ),
             priority = 4,
         ) { m ->
@@ -117,7 +117,7 @@ internal object CatalogChat {
         IntentDef(
             "wa.who", "WhatsApp", "diz quem mandou mensagem no WhatsApp (pelas notificações)",
             templates = listOf(
-                "quem (me )?(mandou|chamou|escreveu|falou|mandaram) (mensagem|msg|no zap|no whatsapp|no whats|agora|hoje|pra mim|por mensagem)?",
+                "quem (me )?(mandou|chamou|escreveu|falou|mandaram) (mensagem|msg|no zap|no whatsapp|no whats|agora|pra mim|por mensagem)? <D?>",
                 "(tem|tenho|chegou|chegaram) (alguma |algum )?(mensagem|mensagens|msg|recado|recados|zap) (nova|novas|nao lida|nao lidas)? (no zap|no whatsapp|no whats|pra mim|de alguem)?",
                 "(o que|oq) (chegou|tem) (no|de) (zap|whatsapp|whats)",
             ),

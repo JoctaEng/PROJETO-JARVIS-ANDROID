@@ -17,6 +17,9 @@ internal object CatalogMail {
             if (list.isEmpty()) Reply(none) else Reply(Replies.mails(list, intro), "happy")
         }
 
+    /** Remetente OU assunto/texto: "email do banco" acha o banco como remetente e como assunto. */
+    private fun fromQuery(who: String) = "{from:\"$who\" \"$who\"}"
+
     private fun senderOf(raw: String?): String? = raw?.trim()?.takeIf { it.length >= 2 && PtText.fold(it) !in setOf("novo", "nova", "ontem", "hoje") }
 
     /** Lê o primeiro e-mail que a busca achar (busca → lê). */
@@ -43,14 +46,14 @@ internal object CatalogMail {
         IntentDef(
             "gmail.unread", "Gmail", "diz os e-mails novos (não lidos)",
             templates = listOf(
-                "(tenho|tem|chegou|chegaram|ha|recebi) (algum|alguma|algum outro)? (email|e mail|emails|e mails|correio) (novo|novos|nao lido|nao lidos|importante|importantes)? (hoje|agora|no gmail)?",
+                "(tenho|tem|chegou|chegaram|ha|recebi) (algum|alguma|algum outro)? (email|e mail|emails|e mails|correio) (novo|novos|nao lido|nao lidos|importante|importantes)? (agora|no gmail)? <D?>",
                 "(tenho|tem|chegou|chegaram|ha|recebi) (alguma )?(mensagem|mensagens|novidade|novidades) (nova|novas)? (no|do|de) (gmail|email|e mail|correio)",
                 "(quais|que|quantos) (sao )?(os )?(meus )?(emails|e mails|emails novos|e mails novos|emails nao lidos) (novos|nao lidos|chegaram|tenho)?",
                 "(le|leia|ler|mostra|mostre|ver|veja|confere|confira|verifica|verifique|checa|cheque|olha|olhe) (os |meus |o |meu )?(meus )?(emails|e mails|email|e mail|gmail|caixa de entrada)( novos| nao lidos)?",
                 "(o que|oq) (chegou|tem|tenho) (no|de) (gmail|email|e mail|correio)",
                 "(meus )?(emails|e mails|email) (novos|nao lidos)",
             ),
-            priority = 1,
+            priority = 4,
         ) { m ->
             gate(m) ?: search(m, "is:unread in:inbox", "Seus e-mails não lidos mais recentes:", "Você não tem e-mails novos.")
         },
@@ -58,16 +61,15 @@ internal object CatalogMail {
             "gmail.from", "Gmail", "e-mails de uma pessoa ou empresa",
             slots = listOf(SlotSpec("quem", "nome do remetente", true)),
             templates = listOf(
-                "(tenho|tem|chegou|chegaram|ha|recebi|recebeu) (algum|alguma|algum outro)? (email|e mail|emails|mensagem) (novo)? (do|da|de|dos|das) {quem}",
+                "(tenho|tem|chegou|chegaram|ha|recebi|recebeu) (algum|alguma|algum outro)? (email|e mail|emails) (novo)? (do|da|de|dos|das) {quem}",
                 "(procura|procure|busca|busque|acha|ache|encontra|encontre|ve|veja|mostra|mostre|me mostra) (os |o |um |algum )?(email|e mail|emails|e mails) (do|da|de|dos|das) {quem}",
-                "(o que|oq) (o|a) {quem} (me )?(mandou|escreveu|enviou) (por|no) (email|e mail|gmail)",
                 "(emails|e mails) (do|da|de|dos|das) {quem}",
             ),
-            priority = 2,
+            priority = 4,
         ) { m ->
             gate(m) ?: run {
                 val who = senderOf(m["quem"]) ?: return@run NoMatch
-                search(m, "from:$who", "E-mails de $who:", "Não achei e-mails de $who.")
+                search(m, fromQuery(who), "E-mails de $who:", "Não achei e-mails de $who.")
             }
         },
         IntentDef(
@@ -93,7 +95,7 @@ internal object CatalogMail {
                 "(tenho|tem|chegou|chegaram|ha|recebi) (alguma|algum|alguma nova|algum novo)? (fatura|faturas|boleto|boletos|cobranca|cobrancas|conta de luz|conta de agua|nota fiscal) (nova|novo|novas|novos)? (no email|no gmail|por email|por e mail)?",
                 "(qual|quais) (e |sao )?(a |as )?(fatura|faturas|boleto|boletos|cobranca|cobrancas) (que chegou|que chegaram|do email|do gmail|no email|no gmail)",
             ),
-            priority = 1,
+            priority = 4,
         ) { m ->
             gate(m) ?: search(m, "(fatura OR boleto OR cobrança OR vencimento) newer_than:30d", "Achei estes e-mails de cobrança dos últimos 30 dias:", "Não achei faturas nem boletos nos últimos 30 dias.")
         },
@@ -112,11 +114,11 @@ internal object CatalogMail {
                 "(le|leia|ler|me le|me leia|abre|abra|mostra|mostre) (o )?(ultimo |mais recente )?(email|e mail) (do|da|de) {quem}",
                 "(o que|oq) (o|a) {quem} (me )?(escreveu|mandou|enviou) (no|por) (email|e mail)",
             ),
-            priority = 4,
+            priority = 5,
         ) { m ->
             gate(m) ?: run {
                 val who = senderOf(m["quem"]) ?: return@run NoMatch
-                readFirst(m, "from:$who", "Não achei e-mails de $who.")
+                readFirst(m, fromQuery(who), "Não achei e-mails de $who.")
             }
         },
     )

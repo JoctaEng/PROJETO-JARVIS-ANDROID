@@ -2,7 +2,7 @@ package com.joctaeng.jarvis.mind.intent
 
 /** Abrir apps, pesquisar dentro de um app, pesquisar na web, e as perguntas do Euno sobre si mesmo. */
 internal object CatalogApps {
-    private val openVerbs = "abre|abra|abrir|abri|inicia|inicie|iniciar|executa|execute|roda|rode|lanca|lance|abre pra mim|vai para|va para|vai pro|vai pra|entra no|entra na|entra em|me leva para|me leva pro|quero abrir|quero usar|preciso do|preciso da|usa|use|usar|liga|ligue|chama|chame"
+    private val openVerbs = "abre|abra|abrir|abri|inicia|inicie|iniciar|executa|execute|roda|rode|abre pra mim|vai para|va para|vai pro|vai pra|entra no|entra na|entra em|me leva para|me leva pro|quero abrir|quero usar|preciso do|preciso da|usa|use|usar|liga|ligue|chama|chame"
     private val searchVerbs = "pesquisa|pesquise|pesquisar|procura|procure|procurar|busca|busque|buscar|acha|ache|achar|encontra|encontre|ve|veja"
 
     val defs: List<IntentDef> = listOf(
@@ -100,7 +100,7 @@ internal object CatalogApps {
                 "(qual|que) (e |eh )?(o )?(seu )?(motor|cerebro) agora",
                 "(quem|o que) (esta |ta )?(respondendo|pensando) (agora|por voce|em voce)",
             ),
-            priority = 2,
+            priority = 3,
         ) { m ->
             val brain = m.ctx.brainName
             val net = if (m.ctx.online) "O celular está com internet" else "O celular está sem internet"

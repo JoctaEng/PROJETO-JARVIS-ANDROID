@@ -33,6 +33,7 @@ object Fixtures {
     ) = Ctx(now, online, tools, gmail, apps, "Joctã", brain)
 
     fun engine() = IntentEngine(names = listOf("Guardião", "Joca", "Euno", "Clara", "Luna"))
+    fun freshEngine() = engine()
 
     /** Resultado "ok" de uma ferramenta. */
     fun ok(step: Step, text: String) = StepResult(step, true, text)

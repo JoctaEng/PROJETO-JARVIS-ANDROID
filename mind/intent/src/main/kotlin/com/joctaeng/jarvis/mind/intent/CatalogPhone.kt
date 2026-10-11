@@ -129,6 +129,7 @@ internal object CatalogPhone {
                 "(cria|crie|criar|coloca|coloque|poe|ponha|programa|programe|define|defina|bota)? (um|o)? alarme (para|pra|as|de)? {rotulo?}",
                 "<T> <R?> alarme {rotulo?}",
             ),
+            priority = 3,
         ) { m ->
             if (!m.has("criar_alarme")) return@IntentDef Kit.noTool(m, "o alarme")
             val t = m.time
@@ -160,6 +161,7 @@ internal object CatalogPhone {
                 "(em|daqui a|daqui|dentro de) <DUR> (me )?(avisa|avise|lembra|lembre|chama|desperta|acorda|alerta) {rotulo?}",
                 "(cria|crie|coloca|coloque|inicia|inicie|programa|programe)? (um|o)? (timer|temporizador|cronometro)",
             ),
+            priority = 3,
         ) { m ->
             if (!m.has("criar_timer")) return@IntentDef Kit.noTool(m, "o timer")
             val d = m.dur
@@ -208,7 +210,7 @@ internal object CatalogPhone {
             "phone.notifications", "Celular", "lê as notificações que chegaram",
             templates = listOf(
                 "(o que|quais|que) (foi que )?(chegou|chegaram|tem|apareceu|teve) (de novo|de novidade|de notificacao|de notificacoes|no celular|ai)?",
-                "(tenho|tem|chegou|chegaram) (alguma |alguma coisa de |algo de )?(notificacao|notificacoes|novidade|novidades|mensagem nova|mensagens novas|aviso|avisos)",
+                "(tenho|tem|chegou|chegaram) (alguma |alguma coisa de |algo de )?(notificacao|notificacoes|novidade|novidades|mensagem nova|mensagens novas|mensagem nao lida|mensagens nao lidas|recado novo|recados novos|aviso|avisos)",
                 "(le|leia|ler|me le|me leia|mostra|mostre|ver|veja|confere|confira|verifica|verifique|checa|cheque) (as |minhas |meus |os )?(minhas )?(notificacoes|notificacao|avisos)",
                 "(minhas|as) notificacoes",
                 "novidades (no celular)?",
@@ -230,13 +232,13 @@ internal object CatalogPhone {
                 "(le|leia|ler|mostra|mostre|ver|veja|confere|confira|verifica|verifique) (as )?(notificacoes|mensagens|avisos) (do|da|de|no|na) {app}",
                 "(notificacoes|novidades|mensagens novas) (do|da|de|no|na) {app}",
             ),
-            priority = 1,
+            priority = 3,
         ) { m ->
             if (!m.has("notificacoes_ler")) return@IntentDef Kit.noTool(m, "as notificações")
             val raw = m["app"] ?: return@IntentDef NoMatch
-            val app = Apps.resolve(raw, m.ctx)
-            if (app == null && PtText.fold(raw).split(' ').all { it in setOf("novo", "nova", "novos", "novas", "novidade", "novidades", "celular", "telefone", "ai", "aqui") }) return@IntentDef NoMatch
-            val filter = app?.first ?: raw
+            val app = Apps.resolve(raw, m.ctx) ?: return@IntentDef NoMatch
+            if (false && PtText.fold(raw).split(' ').all { it in setOf("novo", "nova", "novos", "novas", "novidade", "novidades", "celular", "telefone", "ai", "aqui", "notificacao", "notificacoes", "mensagem", "mensagens", "aviso", "avisos", "coisa", "algo") }) return@IntentDef NoMatch
+            val filter = app.first
             Kit.run(m, Step("notificacoes_ler", mapOf("app" to filter, "quantas" to 15))) { r ->
                 Kit.firstFailure(r)?.let { return@run Kit.failure(it) }
                 Reply(Replies.notifications(ToolText.notifications(r[0].text), appFilter = filter))

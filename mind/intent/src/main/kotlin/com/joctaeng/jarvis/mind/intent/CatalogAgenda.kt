@@ -223,6 +223,7 @@ internal object CatalogAgenda {
                 "<D> (eu )?(tenho|tem) (algo|alguma coisa|compromisso|compromissos|reuniao|aula|aulas)",
                 "<D> (como esta|o que tem na|e) (a )?(minha )?agenda",
             ),
+            priority = 4,
             follow = listOf("e <D>", "e <D> (como fica|tem algo|e a agenda|tem compromisso|e la)", "e", "e (la|ai)? <D>"),
         ) { m ->
             if (!m.has("agenda_consultar")) return@IntentDef Kit.noTool(m, "a agenda")
@@ -243,7 +244,7 @@ internal object CatalogAgenda {
                 "(qual|quando) (o |a )?(meu |minha )?(proximo|proxima) (compromisso|evento|reuniao|aula|consulta)?",
                 "(tenho|tem) (algum|alguma)? (compromisso|reuniao|aula|consulta|evento)? (agora|logo|em breve|mais tarde|daqui a pouco)",
             ),
-            priority = 2,
+            priority = 5,
         ) { m ->
             if (!m.has("agenda_consultar")) return@IntentDef Kit.noTool(m, "a agenda")
             Kit.run(m, Step("agenda_consultar", mapOf("data" to m.today.toString(), "dias" to 14))) { r ->
@@ -262,7 +263,7 @@ internal object CatalogAgenda {
         IntentDef(
             "agenda.count", "Agenda", "conta os compromissos de um dia ou período",
             templates = listOf("quantos (compromissos|eventos|reunioes|aulas|consultas) (eu )?(tenho|tem|ha|vou ter)? <D?>", "(tenho|tem) quantos (compromissos|eventos|reunioes|aulas) <D?>"),
-            priority = 2,
+            priority = 5,
         ) { m ->
             if (!m.has("agenda_consultar")) return@IntentDef Kit.noTool(m, "a agenda")
             Kit.run(m, Step("agenda_consultar", queryArgs(m.date, m.today))) { r ->
@@ -277,11 +278,11 @@ internal object CatalogAgenda {
             "agenda.free", "Agenda", "diz os horários livres de um dia",
             templates = listOf(
                 "(estou|to|fico|vou estar|estarei) livre <D?> <T?>",
-                "(tenho|tem|ha) (algum )?(horario|tempo|janela|espaco) (livre|vago|sobrando|disponivel)? <D?>",
+                "(tenho|tem|ha) (algum )?(horario|tempo|janela) (livre|vago|sobrando|disponivel)? <D?>",
                 "quando (eu )?(estou|to|fico|tenho) (livre|vago|disponivel|um horario livre)? <D?>",
                 "(qual|quais) (e |sao )?(o |os )?(meu |meus )?(horario|horarios) (livre|livres|vago|vagos) <D?>",
             ),
-            priority = 2,
+            priority = 5,
         ) { m ->
             if (!m.has("agenda_consultar")) return@IntentDef Kit.noTool(m, "a agenda")
             val d = m.date
@@ -309,13 +310,13 @@ internal object CatalogAgenda {
         IntentDef(
             "agenda.summary", "Agenda", "resumo do dia: compromissos de hoje e de amanhã",
             templates = listOf(
-                "(resumo|balanco|panorama) (do |de |da )?(meu )?(dia|hoje)",
-                "(como esta|como ta|como vai|qual) (e )?(o )?meu dia (hoje)?",
+                "(resumo|balanco|panorama) (do |de |da )?(meu )?(dia|<D>)",
+                "(como esta|como ta|como vai|qual) (e )?(o )?meu dia <D?>",
                 "meu dia",
-                "(me )?(faz|faca|da|de|passa|passe|fala|fale|conta) (um |o )?(resumo|balanco|panorama) (do dia|de hoje|do meu dia)?",
+                "(me )?(faz|faca|da|de|passa|passe|fala|fale|conta) (um |o )?(resumo|balanco|panorama) (do dia|<D>|do meu dia)?",
                 "(fechar|fecha|feche|encerrar|encerra) (o )?(meu )?dia",
             ),
-            priority = 3,
+            priority = 5,
         ) { m ->
             if (!m.has("agenda_consultar")) return@IntentDef Kit.noTool(m, "a agenda")
             Kit.run(m, Step("agenda_consultar", mapOf("periodo" to "hoje")), Step("agenda_consultar", mapOf("periodo" to "amanha"))) { r ->
@@ -342,6 +343,7 @@ internal object CatalogAgenda {
             val soft = m.ex.toks.firstOrNull()?.norm in setOf("anota", "anote", "anotar", "coloca", "coloque", "poe", "ponha", "por", "bota", "lembra", "lembre", "salva", "salve", "registra", "registre")
             if (soft && m.date == null && m.time == null && m.dur == null && !Regex("""\b($eventWords|agenda|calendario)\b""").containsMatchIn(PtText.fold(Kit.bareText(m.ex)))) return@IntentDef NoMatch
             if (t.startsWith("que ") || t in setOf("isso", "aquilo", "ai", "isto") || m.money != null) return@IntentDef NoMatch
+            if (t.split(' ').first() in setOf("timer", "alarme", "cronometro", "temporizador", "lanterna", "tarefa", "nota", "mensagem", "email", "memoria")) return@IntentDef NoMatch
             create(m, titulo, m.date, m.time)
         },
         IntentDef(
@@ -405,7 +407,7 @@ internal object CatalogAgenda {
             templates = listOf(
                 "(abre|abra|abrir|mostra|mostre|vai para|va para|me leva para|ver|veja) (a |na |minha )?(minha )?agenda (do|da|de|no|na)? {qual?} <D>",
                 "(abre|abra|abrir|mostra|mostre|vai para|va para|me leva para|ver|veja) (a |na |minha )?(minha )?agenda (do|da|de|no|na) {qual}",
-                "(abre|abra|abrir|mostra|mostre|vai para|va para|me leva para|ver|veja) (o )?(dia|calendario) <D>",
+                "(abre|abra|abrir|mostra|mostre|vai para|va para|me leva para|ver|veja) (o )?(dia |calendario )?<D>",
                 "(abre|abra|abrir|mostra|mostre) (o )?(meu )?calendario",
             ),
             priority = 3,

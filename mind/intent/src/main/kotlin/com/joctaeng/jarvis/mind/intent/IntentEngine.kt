@@ -23,7 +23,7 @@ class IntentEngine(
     fun handle(raw: String, ctx: Ctx): Outcome {
         if (raw.isBlank()) return NoMatch
         val ex = prepare(raw, ctx)
-        val whole = resolve(ex, ctx)
+        val whole = resolve(listOf(ex, prepareWhole(raw, ctx)).distinctBy { it.skeleton }, ctx)
         if (whole !is NoMatch) return remember(whole)
         followUp(ex, ctx)?.let { return remember(it.first, it.second) }
         compound(raw, ctx)?.let { return it }
@@ -78,12 +78,20 @@ class IntentEngine(
         // "..., Guardião" no fim só vale com vírgula (sem ela pode ser o contato "Luna": "manda oi para a Luna").
         val raw = if (nameWords.isEmpty()) raw0 else raw0.replace(Regex("""(?i)\s*,\s*(?:$nameAlternation|euno|joca)\s*[.!?]*\s*$"""), "")
         val ex = Extract.of(raw, ctx.today)
-        return ex.copy(toks = stripFillers(ex.toks), raw = raw)
+        return ex.copy(toks = stripFillers(ex.toks), raw = raw0)
+    }
+
+    /** O mesmo pedido sem tirar "quero", "preciso"... (para "quero a lanterna", que sem isso fica "a lanterna"). */
+    private fun prepareWhole(raw0: String, ctx: Ctx): Extracted {
+        val ex = Extract.of(raw0, ctx.today)
+        val toks = ex.toks.toMutableList()
+        while (toks.size > 1 && (toks.first().norm in nameWords || toks.first().norm in setOf("euno", "joca", "oi", "ola", "ei"))) toks.removeAt(0)
+        return ex.copy(toks = toks, raw = raw0)
     }
 
     private val leadPhrases = Regex(
         "^(?:oi|ola|opa|ei|e ai|ai|entao|olha|olhe|escuta|escute|por favor|pf|pode|poderia|podia|consegue|conseguiria|voce|tu|vc|" +
-            "eu quero|quero|eu queria|queria|eu preciso|preciso|gostaria|eu gostaria|me ajuda a|ajuda a|vamos|bora|so|ta|beleza|ok|euno|joca|" +
+            "eu quero|quero|eu queria|queria|eu preciso|preciso|gostaria|eu gostaria|me ajuda a|ajuda a|vamos|bora|so|beleza|ok|euno|joca|" +
             "que voce|que vc|que tu|de novo|mais uma vez)(?= |$)",
     )
     private val trailPhrases = Regex("(?<![^ ])(?:por favor|pf|ai|ne|valeu|obrigado|obrigada|pra mim|para mim|rapido|rapidinho|ta bom|ok|beleza)$")
@@ -105,19 +113,23 @@ class IntentEngine(
         return t.list
     }
 
-    private fun resolve(ex: Extracted, ctx: Ctx): Outcome {
-        val cands = mutableListOf<Cand>()
+    private fun resolve(ex: Extracted, ctx: Ctx): Outcome = resolve(listOf(ex), ctx)
+
+    /** Junta os candidatos de todas as leituras do pedido (sem e com "quero/você...") e fica com o melhor. */
+    private fun resolve(variants: List<Extracted>, ctx: Ctx): Outcome {
+        class C(val c: Cand, val ex: Extracted)
+        val cands = mutableListOf<C>()
         var order = 0
-        for (d in defs) for (tpl in d.compiled) {
+        for (ex in variants) for (d in defs) for (tpl in d.compiled) {
             val caps = tpl.match(ex)
-            if (caps != null) cands += Cand(d, tpl, caps, order)
+            if (caps != null) cands += C(Cand(d, tpl, caps, order), ex)
             order++
         }
-        for (c in cands.sortedWith(compareByDescending<Cand> { it.def.priority }.thenByDescending { it.template.specificity }.thenBy { it.order })) {
-            val m = M(ex, c.caps, ctx, c.def.id)
-            val out = c.def.build(m)
+        for (x in cands.sortedWith(compareByDescending<C> { it.c.def.priority }.thenByDescending { it.c.template.specificity }.thenBy { it.c.order })) {
+            val m = M(x.ex, x.c.caps, ctx, x.c.def.id)
+            val out = x.c.def.build(m)
             if (out !is NoMatch) {
-                last = c.def to m
+                last = x.c.def to m
                 return out
             }
         }

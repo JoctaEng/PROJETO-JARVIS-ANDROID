@@ -97,6 +97,7 @@ internal object CatalogEdu {
         ) { m ->
             if (!m.has(ASK)) return@IntentDef Kit.noTool(m, "o EduMath")
             val q = m["pergunta"]?.trim() ?: return@IntentDef NoMatch
+            if (PtText.fold(q).split(' ').let { it.size < 2 || it.first() in setOf("abre", "abra", "abrir", "app", "aplicativo", "entra", "vai", "va", "inicia", "executa", "lanca", "lance") }) return@IntentDef NoMatch
             Kit.run(m, Step(ASK, mapOf("pergunta" to q))) { r ->
                 Kit.firstFailure(r)?.let { return@run Kit.failure(it) }
                 Reply(speakable(r[0].text), "neutral")

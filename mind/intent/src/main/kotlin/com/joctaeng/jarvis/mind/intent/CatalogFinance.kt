@@ -72,7 +72,7 @@ internal object CatalogFinance {
             templates = listOf(
                 "quanto (eu )?(gastei|gasto|paguei|desembolsei|gastamos) (com|em|no|na|de|nos|nas|do|da)? {cat?} <D?> (mes passado|no mes passado|ultimo mes)?",
                 "(qual|quanto) (foi |e |sao )?(o )?(meu )?(gasto|gastos|total de gastos|total gasto) (com|em|no|na|de|do|da|nos|nas)? {cat?} <D?> (mes passado|no mes passado)?",
-                "(quanto|o que) (ja )?(saiu|foi) (de dinheiro|em gastos)? (com|em|no|na)? {cat?} <D?>",
+                "quanto (ja )?saiu (de dinheiro|em gastos|da conta|do bolso) (com|em|no|na)? {cat?} <D?>",
             ),
             priority = 1,
         ) { m ->

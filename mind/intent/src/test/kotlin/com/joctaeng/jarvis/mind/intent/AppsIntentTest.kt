@@ -24,7 +24,7 @@ class AppsIntentTest {
     }
 
     @Test fun gmailFromAndSearch() {
-        assertEquals("from:Maria", first("chegou email da Maria").args["consulta"])
+        assertEquals("{from:\"Maria\" \"Maria\"}", first("chegou email da Maria").args["consulta"])
         assertEquals("fatura", first("procura no gmail fatura").args["consulta"])
         assertEquals("matrícula", first("procura um email sobre matrícula").args["consulta"])
         assertEquals("gmail.bills", run(e(), "chegou alguma fatura no email").intentId)
