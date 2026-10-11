@@ -111,6 +111,9 @@ private val knownPackages = mapOf(
     "agenda xiaomi" to "com.xiaomi.calendar",
 )
 
+/** (rótulo, pacote) dos apps que abrem, para o motor de pedidos achar o app pelo nome falado. */
+fun installedApps(context: Context): List<Pair<String, String>> = launchables(context).map { it.label to it.packageName }
+
 private fun launchables(context: Context): List<Launchable> {
     val pm = context.packageManager
     val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)

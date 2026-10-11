@@ -10,7 +10,7 @@ internal object CatalogChat {
 
     private fun contactOf(raw: String?): String? {
         val c = raw?.replace(appTail, "")?.trim()?.trim(',', '.')?.replace(Regex("""(?i)^(a|o|para|pra|pro|ao)\s+"""), "")?.trim()
-        return c?.takeIf { it.length >= 2 && PtText.fold(it) !in preps }
+        return c?.takeIf { it.length >= 2 && PtText.fold(it) !in preps && it.split(' ').size <= 3 }
     }
 
     private fun business(ex: Extracted) = Regex("""\b(business|comercial)\b""").containsMatchIn(PtText.fold(ex.raw))
@@ -67,10 +67,10 @@ internal object CatalogChat {
             "wa.send", "WhatsApp", "manda mensagem de WhatsApp para um contato (confirma o Enviar na tela)",
             slots = listOf(SlotSpec("contato", "nome do contato", true), SlotSpec("mensagem", "texto da mensagem, na voz do usuário", true)),
             templates = listOf(
-                "($sendVerbs) (uma |a )?(mensagem|msg|zap|whats|whatsapp|um zap|um whats)? (no zap|no whatsapp|no whats|pelo zap|pelo whatsapp)? (pra|para|pro|a|ao) (a |o )?{contato} ($sepWords) {mensagem}",
+                "($sendVerbs) (uma |a )?(mensagem|msg|zap|whats|whatsapp|um zap|um whats)? (no zap|no whatsapp|no whats|pelo zap|pelo whatsapp)? (business|comercial)? (pra|para|pro|a|ao) (a |o )?{contato} ($sepWords) {mensagem}",
                 "($sendVerbs) (um |uma )?(oi|ola|bom dia|boa tarde|boa noite|abraco|beijo|parabens|obrigado|obrigada|feliz aniversario) (pra|para|pro|ao|a) (a |o )?{contato}",
                 "($sendVerbs) {mensagem} (pra|para|pro|ao) (a |o )?{contato} (no zap|no whatsapp|no whats|pelo zap|pelo whatsapp)?",
-                "($sendVerbs) (uma |a )?(mensagem|msg) (no zap|no whatsapp|no whats|pelo zap|pelo whatsapp)? (pra|para|pro|a|ao) (a |o )?{contato}",
+                "($sendVerbs) (uma |a )?(mensagem|msg) (no zap|no whatsapp|no whats|pelo zap|pelo whatsapp)? (business|comercial)? (pra|para|pro|a|ao) (a |o )?{contato}",
                 "(whatsapp|zap|whats) (pra|para|pro|a|ao|do|da)? {contato} ($sepWords) {mensagem}",
                 "(avisa|avise|avisar|pergunta|pergunte|perguntar|responde|responda|responder|fala com|fale com|diz a|diga a|manda um recado para|mande um recado para) (a |o )?{contato} (que|dizendo|se|pra|para) {mensagem}",
             ),

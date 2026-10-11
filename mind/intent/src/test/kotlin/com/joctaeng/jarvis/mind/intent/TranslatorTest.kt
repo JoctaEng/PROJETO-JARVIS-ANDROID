@@ -56,3 +56,13 @@ class TranslatorTest {
         assertTrue(g is Ask && g.question.contains("Carlos Silva"), "$g")
     }
 }
+
+class FailureTextTest {
+    @Test fun saysWhatHappenedAndWhatStillWorks() {
+        val offline = FailureText.build("todos os cérebros falharam", online = false, localTried = true, localConfigured = true)
+        assertTrue(offline.contains("sem internet") && offline.contains("IA do celular") && offline.contains("continua valendo"), offline)
+        assertTrue(!offline.contains("todos os cérebros"), offline)
+        assertTrue(FailureText.build("HTTP 429 quota exceeded", true, false, false).contains("sem cota"))
+        assertTrue(FailureText.build("Engine is not initialized", true, true, true).contains("não conseguiu carregar"))
+    }
+}

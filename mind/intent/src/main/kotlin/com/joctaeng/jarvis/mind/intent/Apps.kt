@@ -31,6 +31,8 @@ internal object Apps {
     fun resolve(raw: String, ctx: Ctx): Pair<String, String>? {
         val wanted = clean(raw)
         if (wanted.length < 2 || ctx.apps.isEmpty()) return null
+        // nome de app tem poucas palavras; frase comprida com o nome no meio é outro pedido ("abre o gmail que você já pode...")
+        if (wanted.split(' ').size > 4) return null
         val norm = ctx.apps.map { PtText.fold(it.first).replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim() }
         // 1) igual
         norm.indexOfFirst { it == wanted }.takeIf { it >= 0 }?.let { return pick(ctx, wanted, it) }

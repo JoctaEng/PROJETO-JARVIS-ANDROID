@@ -16,6 +16,8 @@ class Ctx(
     val phoneControl: Boolean = true,
     /** Qual agenda é a padrão do usuário: "google", "celular" ou vazio (a do sistema). */
     val defaultAgenda: String = "",
+    /** Como o usuário chama o assistente (o personagem escolhido). */
+    val selfName: String = "",
 ) {
     val today: LocalDate get() = now.toLocalDate()
     fun has(tool: String): Boolean = tool in tools

@@ -23,9 +23,10 @@ class IntentEngine(
     fun handle(raw: String, ctx: Ctx): Outcome {
         if (raw.isBlank()) return NoMatch
         val ex = prepare(raw, ctx)
-        val whole = resolve(listOf(ex, prepareWhole(raw, ctx)).distinctBy { it.skeleton }, ctx)
+        val variants = listOf(ex, prepareWhole(raw, ctx)).let { v -> v + v.map(::withoutPreps) }.distinctBy { it.skeleton }
+        val whole = resolve(variants, ctx)
         if (whole !is NoMatch) return remember(whole)
-        followUp(ex, ctx)?.let { return remember(it.first, it.second) }
+        variants.firstNotNullOfOrNull { followUp(it, ctx) }?.let { return remember(it.first, it.second) }
         compound(raw, ctx)?.let { return it }
         return NoMatch
     }
@@ -78,7 +79,7 @@ class IntentEngine(
         // "..., Guardião" no fim só vale com vírgula (sem ela pode ser o contato "Luna": "manda oi para a Luna").
         val raw = if (nameWords.isEmpty()) raw0 else raw0.replace(Regex("""(?i)\s*,\s*(?:$nameAlternation|euno|joca)\s*[.!?]*\s*$"""), "")
         val ex = Extract.of(raw, ctx.today)
-        return ex.copy(toks = stripFillers(ex.toks), raw = raw0)
+        return ex.copy(toks = collapse(stripFillers(ex.toks)), raw = raw0)
     }
 
     /** O mesmo pedido sem tirar "quero", "preciso"... (para "quero a lanterna", que sem isso fica "a lanterna"). */
@@ -86,16 +87,35 @@ class IntentEngine(
         val ex = Extract.of(raw0, ctx.today)
         val toks = ex.toks.toMutableList()
         while (toks.size > 1 && (toks.first().norm in nameWords || toks.first().norm in setOf("euno", "joca", "oi", "ola", "ei"))) toks.removeAt(0)
-        return ex.copy(toks = toks, raw = raw0)
+        return ex.copy(toks = collapse(toks), raw = raw0)
+    }
+
+    /** "o que que tem" → "o que tem". */
+    private fun collapse(toks: List<Tok>): List<Tok> = toks.filterIndexed { i, t -> !(i > 0 && t.norm == "que" && toks[i - 1].norm == "que") }
+
+    private val prepWords = setOf("para", "pra", "em", "no", "na", "do", "da", "de", "dia", "as", "a", "ao", "pelo", "pela", "ate", "o", "os")
+
+    /** Mesmo pedido sem as preposições/artigos colados na data e na hora ("para o dia 15" → só a data). */
+    private fun withoutPreps(ex: Extracted): Extracted {
+        val t = ex.toks.toMutableList()
+        var i = 0
+        while (i < t.size) {
+            if (t[i].norm in Template.PLACEHOLDERS) {
+                var j = i - 1
+                while (j >= 0 && t[j].norm in prepWords && j > 0) { t.removeAt(j); i--; j-- }
+            }
+            i++
+        }
+        return ex.copy(toks = t)
     }
 
     private val leadPhrases = Regex(
         "^(?:oi|ola|opa|ei|e ai|ai|entao|olha|olhe|escuta|escute|por favor|pf|pode|poderia|podia|consegue|conseguiria|voce|tu|vc|" +
             "eu quero|quero|eu queria|queria|eu preciso|preciso|gostaria|eu gostaria|me ajuda a|ajuda a|vamos|bora|so|beleza|ok|euno|joca|" +
-            "que voce|que vc|que tu|de novo|mais uma vez)(?= |$)",
+            "que voce|que vc|que tu|de novo|mais uma vez|e|verifique|verifica|veja|olha|olhe|confere|confira|checa|cheque|consulte|consulta)(?= |$)",
     )
-    private val trailPhrases = Regex("(?<![^ ])(?:por favor|pf|ai|ne|valeu|obrigado|obrigada|pra mim|para mim|rapido|rapidinho|ta bom|ok|beleza)$")
-    private val midPhrases = Regex("(?<![^ ])(?:por favor|pf|ai)(?= |$)")
+    private val trailPhrases = Regex("(?<![^ ])(?:por favor|pf|ai|ne|valeu|obrigado|obrigada|pra mim|para mim|rapido|rapidinho|ta bom|ok|beleza|da uma olhadinha|da uma olhada|da uma conferida|da uma checada|da uma espiada|da uma vista)$")
+    private val midPhrases = Regex("(?<![^ ])(?:por favor|pf|ai|pra mim|para mim)(?= |$)")
 
     private fun stripFillers(toks: List<Tok>): List<Tok> {
         val t = Toks(toks.toMutableList())

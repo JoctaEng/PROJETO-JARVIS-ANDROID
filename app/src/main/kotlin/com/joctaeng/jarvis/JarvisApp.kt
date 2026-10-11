@@ -43,6 +43,8 @@ class JarvisApp : Application() {
     val transcripts: com.joctaeng.jarvis.system.resources.TranscriptStore by lazy { com.joctaeng.jarvis.system.resources.TranscriptStore(File(filesDir, "conversas")) }
     val voiceSession: com.joctaeng.jarvis.voice.VoiceSession by lazy { com.joctaeng.jarvis.voice.VoiceSession(this) }
     val toolbox: Toolbox by lazy { Toolbox(this) }
+    /** Contagem de quem resolveu cada pedido: motor próprio, IA tradutora ou caminho antigo (v0.29). */
+    val engineStats: com.joctaeng.jarvis.conversation.EngineStats by lazy { com.joctaeng.jarvis.conversation.EngineStats(this) }
 
     /** Caminhos que deram certo em cada app (memória de caminhos, v0.26). */
     val recipes: com.joctaeng.jarvis.mind.memory.RecipeBook by lazy { com.joctaeng.jarvis.mind.memory.RecipeBook(File(filesDir, "memory/caminhos.json")) }

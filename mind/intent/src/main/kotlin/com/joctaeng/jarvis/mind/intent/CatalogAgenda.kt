@@ -221,6 +221,8 @@ internal object CatalogAgenda {
                 "(tenho|tem|ha) (algum|alguma|algum outro)? (algo|alguma coisa|coisa|nada|compromisso|compromissos|reuniao|reunioes|aula|aulas|consulta|consultas|evento|eventos) (marcado|marcada|agendado|agendada|na agenda|pra fazer|para fazer)? <D?>",
                 "(qual|quais) (e |sao )?(a |as |os )?(minha |minhas |meus )?(agenda|programacao|compromissos) <D?>",
                 "<D> (eu )?(tenho|tem) (algo|alguma coisa|compromisso|compromissos|reuniao|aula|aulas)",
+                "como (e que )?(esta|ta|anda|vai) (a |minha )?(minha )?(agenda|calendario) <D?>",
+                "(e )?(o que|que) (tem|tenho|ha) (na|no) (minha )?(agenda|calendario) (para mim)? <D?>",
                 "<D> (como esta|o que tem na|e) (a )?(minha )?agenda",
             ),
             priority = 4,
@@ -340,9 +342,10 @@ internal object CatalogAgenda {
             val titulo = m["titulo"] ?: return@IntentDef NoMatch
             val t = PtText.fold(titulo)
             // "anota"/"coloca" sem data nem hora é anotação, não compromisso: deixa para a memória.
-            val soft = m.ex.toks.firstOrNull()?.norm in setOf("anota", "anote", "anotar", "coloca", "coloque", "poe", "ponha", "por", "bota", "lembra", "lembre", "salva", "salve", "registra", "registre")
+            val soft = m.ex.toks.take(2).any { it.norm in setOf("anota", "anote", "anotar", "coloca", "coloque", "poe", "ponha", "por", "bota", "lembra", "lembre", "salva", "salve", "registra", "registre") }
             if (soft && m.date == null && m.time == null && m.dur == null && !Regex("""\b($eventWords|agenda|calendario)\b""").containsMatchIn(PtText.fold(Kit.bareText(m.ex)))) return@IntentDef NoMatch
             if (t.startsWith("que ") || t in setOf("isso", "aquilo", "ai", "isto") || m.money != null) return@IntentDef NoMatch
+            if (t.split(' ').first() in setOf("abra", "abre", "abrir", "agenda", "calendario", "minha")) return@IntentDef NoMatch
             if (t.split(' ').first() in setOf("timer", "alarme", "cronometro", "temporizador", "lanterna", "tarefa", "nota", "mensagem", "email", "memoria")) return@IntentDef NoMatch
             create(m, titulo, m.date, m.time)
         },
@@ -405,9 +408,9 @@ internal object CatalogAgenda {
             "agenda.open", "Agenda", "abre o app da agenda (Google ou do celular) num dia",
             slots = listOf(SlotSpec("date", "dia AAAA-MM-DD"), SlotSpec("app", "google ou celular")),
             templates = listOf(
-                "(abre|abra|abrir|mostra|mostre|vai para|va para|me leva para|ver|veja) (a |na |minha )?(minha )?agenda (do|da|de|no|na)? {qual?} <D>",
-                "(abre|abra|abrir|mostra|mostre|vai para|va para|me leva para|ver|veja) (a |na |minha )?(minha )?agenda (do|da|de|no|na) {qual}",
-                "(abre|abra|abrir|mostra|mostre|vai para|va para|me leva para|ver|veja) (o )?(dia |calendario )?<D>",
+                "(abre|abra|abrir|vai para|va para|me leva para) (a |na |minha )?(minha )?agenda (do|da|de|no|na)? {qual?} <D>",
+                "(abre|abra|abrir|vai para|va para|me leva para) (a |na |minha )?(minha )?agenda (do|da|de|no|na) {qual}",
+                "(abre|abra|abrir|vai para|va para|me leva para) (o )?(dia |calendario )?<D>",
                 "(abre|abra|abrir|mostra|mostre) (o )?(meu )?calendario",
             ),
             priority = 3,

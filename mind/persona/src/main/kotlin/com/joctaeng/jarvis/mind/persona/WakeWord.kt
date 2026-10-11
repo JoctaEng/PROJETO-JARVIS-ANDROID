@@ -7,6 +7,16 @@ object WakeWord {
     /** [rest] = o que foi dito depois do chamado, já sem pontuação nas pontas (pode ser vazio). */
     data class Match(val rest: String)
 
+    /** Como o reconhecedor de voz costuma entender certos nomes (relatório do teste offline da 0.28: "Guardião" virou "gatinho"). */
+    private val soundAlikes = mapOf(
+        "guardiao" to setOf("gatinho", "guardian", "guardiam", "guardio", "guardia"),
+        "euno" to setOf("eunu", "uno", "juno", "euno"),
+        "joca" to setOf("joka", "jota", "choca", "jocas"),
+    )
+
+    /** Variações de [name] que o reconhecedor pode entregar (para chamar e para tirar do começo do pedido). */
+    fun aliasesOf(name: String): Set<String> = soundAlikes[normalizeWord(name.trim().split(Regex("\\s+")).firstOrNull().orEmpty())].orEmpty()
+
     private val greetings = setOf("oi", "ola", "ei", "hey", "e", "ai", "opa", "fala", "salve", "oii", "eae", "eai", "hei", "ok")
 
     /**
@@ -41,6 +51,7 @@ object WakeWord {
     private fun isName(word: String, target: String): Boolean {
         if (word.isEmpty()) return false
         if (word == target) return true
+        if (word in soundAlikes[target].orEmpty()) return true
         val k = word.replace('k', 'c').replace("qu", "c")
         val t = target.replace('k', 'c').replace("qu", "c")
         if (k == t || k == t + "s") return true

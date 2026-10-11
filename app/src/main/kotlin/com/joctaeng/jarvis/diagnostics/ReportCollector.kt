@@ -51,6 +51,7 @@ class ReportCollector(private val app: JarvisApp) {
             "Voz do Azure este mês" to "${runCatching { app.voice.azureCharsThisMonth() }.getOrDefault(0)} caracteres de 500000 grátis; chave=${if (app.secrets.has(com.joctaeng.jarvis.settings.SecretStore.AZURE_SPEECH_KEY)) "salva" else "não"}; região=${s.azureRegion}; voz=${s.azureVoice.ifBlank { "padrão" }}",
             "Cérebros online (ordem)" to app.brains.all().mapIndexed { i, b -> "${i + 1}) ${b.preset} ${b.model}${if (b.enabled) "" else " [desligado]"}${if (app.brains.hasKey(b.id)) "" else " [sem chave]"}" }.joinToString("; ").ifBlank { "nenhum" },
             "Voz offline Piper" to "escolhida=${s.piperVoice}; baixadas=${com.joctaeng.jarvis.voice.PiperVoice.VOICES.filter { runCatching { app.voice.piper.installed(it) }.getOrDefault(false) }.joinToString(",") { it.id }.ifBlank { "nenhuma" }}",
+            "Pedidos por caminho (desde a instalação)" to runCatching { app.engineStats.summary() }.getOrDefault("?"),
             "Bateria" to "${runCatching { DeviceState.batteryPercent(app) }.getOrDefault(-1)}%",
             "Configuração" to "cérebro=${s.brainPreference.name}; voz=${s.voiceEngine.name}; " +
                 "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; kokoroLento=${s.kokoroTooSlow}; paciência=${s.listenPatienceMs} ms; ouvirEnquantoFala=${s.bargeIn}",

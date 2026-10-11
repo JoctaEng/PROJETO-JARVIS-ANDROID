@@ -12,6 +12,8 @@ data class SelfInfo(
     val article: String = "o ",
     val versionName: String,
     val brainNames: List<String>,
+    /** O cérebro que responde primeiro agora (o primeiro da ordem que não está descansando). */
+    val activeBrain: String = "",
     val voiceName: String,
     val autonomyLabel: String,
     val toolNames: List<String>,
@@ -39,6 +41,7 @@ object SelfKnowledge {
             appendLine("- Você é ${info.article}${info.assistantName}, o personagem do app ${info.appName} (versão ${info.versionName}), um assistente pessoal que vive no celular como personagem flutuante. Seu nome é ${info.assistantName}.")
         }
         appendLine("- Cérebro: ${info.brainNames.ifEmpty { listOf("nenhum configurado") }.joinToString(", ")}. Voz: ${info.voiceName}.")
+        if (info.activeBrain.isNotBlank()) appendLine("- Cérebro respondendo AGORA: ${info.activeBrain} (se ele falhar, o próximo da lista assume). Se perguntarem qual IA você está usando, diga este.")
         appendLine("- Autonomia: ${info.autonomyLabel}. Memórias guardadas: ${info.memoryCount}${if (info.privateMode) " (Modo Privado: nada novo é memorizado)" else ""}.")
         if (info.toolNames.isEmpty()) {
             appendLine("- Ferramentas: não vieram nesta resposta. Se pedirem uma ação, não diga que é incapaz: peça para repetir o pedido de forma direta (ex.: \"abra o Gmail\").")

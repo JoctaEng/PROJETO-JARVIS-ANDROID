@@ -56,7 +56,7 @@ internal object CatalogApps {
         ) { m ->
             if (!m.has("pesquisar_na_web")) return@IntentDef NoMatch
             val q = m["consulta"]?.trim() ?: return@IntentDef NoMatch
-            if (PtText.fold(q).split(' ').size > 14) return@IntentDef NoMatch
+            if (PtText.fold(q).split(' ').size > 14 || PtText.fold(q).split(' ').first() in setOf("no", "na", "em", "pelo", "pela", "do", "da", "dentro")) return@IntentDef NoMatch
             if (!m.ctx.online) return@IntentDef Kit.say(m, "Estou sem internet agora, então não consigo pesquisar \"$q\". Quando voltar a conexão, me peça de novo.", "concerned")
             Kit.run(m, Step("pesquisar_na_web", mapOf("consulta" to q))) { r ->
                 Kit.firstFailure(r)?.let { return@run Kit.failure(it) }
@@ -109,6 +109,40 @@ internal object CatalogApps {
             Kit.say(m, text)
         },
         IntentDef(
+            "screen.home", "Celular", "vai para a tela inicial / fecha o app que está aberto",
+            templates = listOf(
+                "(vai|va|volta|volte|ir|sai|saia|sair|fecha|feche|fechar|leva|leve|me leva) (para|pra|pro|da|do|de|a|o|na|no|ate)? (a |o |minha |meu |nossa )?(tela inicial|tela principal|area principal|pagina inicial|inicio|home|menu principal|area de trabalho)( do celular| do telefone)?",
+                "(fecha|feche|fechar|sai|saia|sair|encerra|encerre) (do |da |de |o |a |esse |este |essa |esta |desse |deste )?(app|aplicativo|programa|{app})",
+                "(sai|saia|sair) (da|do|de) (tela|app|aplicativo)( do celular| do app)?",
+            ),
+            priority = 1,
+        ) { m ->
+            if (!m.has("tela_navegar")) return@IntentDef NoMatch
+            val raw = m["app"]
+            if (raw != null && Apps.resolve(raw, m.ctx) == null && PtText.fold(raw) !in setOf("app", "aplicativo", "programa", "tela", "esse", "este")) return@IntentDef NoMatch
+            Kit.run(m, Step("tela_navegar", mapOf("acao" to "inicio"))) { r ->
+                Kit.firstFailure(r)?.let { return@run Kit.failure(it) }
+                Reply("Pronto, voltei para a tela inicial.")
+            }
+        },
+        IntentDef(
+            "self.name", "Euno", "diz o nome do assistente e o que ele é",
+            templates = listOf("(qual|como) (e|eh) (o )?(seu )?nome", "como (voce )?(se chama|te chamo|posso te chamar)", "quem (e )?(voce|vc)", "(qual|como) (e )?(que )?(voce )?(se chama|e seu nome)", "(qual|como) (o )?(seu )?nome"),
+            priority = 2,
+        ) { m ->
+            val n = m.ctx.selfName.ifBlank { "Euno" }
+            Kit.say(m, "Eu sou ${if (n == "Euno") "o Euno" else n}, seu segundo eu digital aqui no celular. Eu cuido da sua agenda, e-mails, finanças, mensagens e do que mais você pedir.", "happy")
+        },
+        IntentDef(
+            "self.hear", "Euno", "responde que está ouvindo",
+            templates = listOf(
+                "(voce |tu )?(esta|ta|continua|consegue|conseguiu|ainda esta) (me )?(ouvindo|escutando|ouvir|escutar)( agora| direito| bem| mesmo)?",
+                "(me )?(ouve|escuta|ouviu|escutou) (agora|direito|bem)?",
+                "consegue (falar|responder) (comigo|agora)",
+            ),
+            priority = 2,
+        ) { m -> Kit.say(m, Speak.pick(Kit.seed(m), "Estou ouvindo, sim. Pode falar.", "Te ouço bem. Pode falar.", "Estou aqui, ouvindo."), "happy") },
+        IntentDef(
             "self.help", "Euno", "diz o que o Euno sabe fazer sozinho",
             templates = listOf(
                 "(o que|oq) (voce|vc) (sabe|consegue|pode|faz|faz de) (fazer|bom)?",
@@ -116,6 +150,8 @@ internal object CatalogApps {
                 "(me )?(ajuda|ajude|socorro)",
                 "(quais|que) (sao )?(os )?(seus )?(comandos|poderes|recursos|funcoes|habilidades)",
                 "como (te )?(uso|usar|funciona voce|voce funciona)",
+                "o que (e )?(possivel|da pra|da para) (voce )?(fazer|pedir)",
+                "(a )?lista (completa )?(do que|de tudo que|de tudo o que) (voce )?(ja )?(consegue|sabe|pode) (abrir|fazer)?",
             ),
             priority = 1,
         ) { m ->

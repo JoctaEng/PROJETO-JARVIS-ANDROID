@@ -47,4 +47,11 @@ class WakeWordAnyNameTest {
         assertEquals(Gender.MALE, AvatarPersonas.byId("fumiriya")?.gender)
         assertEquals(null, AvatarPersonas.byId("nao-existe"))
     }
+
+    @Test fun recognizerSoundAlikes() {
+        // Teste offline da 0.28: "Oi Guardião" chegou como "oi gatinho".
+        assertEquals("que horas são", WakeWord.match("oi gatinho que horas são", "Guardião")?.rest)
+        assertNull(WakeWord.match("o gatinho subiu no telhado", "Guardião"))
+        assertNotNull(WakeWord.matchAny("ei guardian", listOf("Joca", "Guardião")))
+    }
 }

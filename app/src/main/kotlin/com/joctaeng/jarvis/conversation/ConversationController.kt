@@ -28,6 +28,16 @@ import com.joctaeng.jarvis.mind.orchestrator.BrainPreference
 import com.joctaeng.jarvis.mind.orchestrator.Orchestrator
 import com.joctaeng.jarvis.mind.orchestrator.OrchestratorEvent
 import com.joctaeng.jarvis.mind.orchestrator.RoutingHints
+import com.joctaeng.jarvis.mind.intent.Ask
+import com.joctaeng.jarvis.mind.intent.Ctx
+import com.joctaeng.jarvis.mind.intent.FailureText
+import com.joctaeng.jarvis.mind.intent.IntentEngine
+import com.joctaeng.jarvis.mind.intent.NoMatch
+import com.joctaeng.jarvis.mind.intent.Outcome
+import com.joctaeng.jarvis.mind.intent.Reply
+import com.joctaeng.jarvis.mind.intent.Run
+import com.joctaeng.jarvis.mind.intent.Say
+import com.joctaeng.jarvis.mind.intent.Translator
 import com.joctaeng.jarvis.mind.persona.VoiceCommand
 import com.joctaeng.jarvis.mind.persona.VoiceCommands
 import com.joctaeng.jarvis.diagnostics.Poc
@@ -204,6 +214,11 @@ class ConversationController(private val app: JarvisApp) {
                     if (speak) voice.awaitIdle()
                     return@launch
                 }
+                // Motor do próprio Euno (v0.29): entende e executa sem IA; se não entende, a IA só traduz o pedido para ele.
+                if (tryEngine(clean, speak)) {
+                    if (speak) voice.awaitIdle()
+                    return@launch
+                }
                 val command = MemoryCommands.parse(clean)
                 if (command != null) handleMemory(command, speak) else respond(speak)
                 if (speak) voice.awaitIdle()
@@ -238,6 +253,8 @@ class ConversationController(private val app: JarvisApp) {
 
     fun clearConversation() {
         cancel()
+        engine = newEngine()
+        pendingAsk = null
         _entries.value = emptyList()
         useSummaries = false
     }
@@ -346,6 +363,144 @@ class ConversationController(private val app: JarvisApp) {
         return all.filterNot { cooldown.resting(it.id, now) }.ifEmpty { all }
     }
 
+    // ---------------------------------------------------------------- motor de pedidos (v0.29, pedido 81)
+
+    private fun engineNames(): List<String> =
+        (listOf(settings.displayName, "Euno") + settings.wakeNames + settings.wakeNames.flatMap { com.joctaeng.jarvis.mind.persona.WakeWord.aliasesOf(it) }).filter { it.isNotBlank() }
+
+    private fun newEngine() = IntentEngine(names = engineNames())
+    private var engine = newEngine()
+    private var engineKey = engineNames()
+    private var pendingAsk: Pair<Ask, Long>? = null
+    private val executor by lazy { EngineExecutor(app, sessionId) }
+    private var toolsCache: Pair<Long, List<com.joctaeng.jarvis.core.contracts.Tool>>? = null
+    private var appsCache: Pair<Long, List<Pair<String, String>>>? = null
+
+    /** As ferramentas ligadas, guardadas por 45 s (reunir as do MCP custa até 4 s e o motor roda em todo pedido). */
+    private suspend fun engineTools(): List<com.joctaeng.jarvis.core.contracts.Tool> {
+        val now = System.currentTimeMillis()
+        toolsCache?.takeIf { now - it.first < 45_000 }?.let { return it.second }
+        val tools = if (settings.autonomy == AutonomyLevel.OBSERVER) emptyList() else app.toolbox.enabledTools()
+        toolsCache = now to tools
+        return tools
+    }
+
+    private suspend fun engineCtx(): Ctx {
+        val now = System.currentTimeMillis()
+        val apps = appsCache?.takeIf { now - it.first < 300_000 }?.second
+            ?: runCatching { com.joctaeng.jarvis.tools.installedApps(app) }.getOrDefault(emptyList()).also { appsCache = now to it }
+        return Ctx(
+            now = java.time.ZonedDateTime.now(),
+            online = DeviceState.snapshot(app, privateMode = false).online,
+            tools = engineTools().map { it.name }.toSet(),
+            gmailConnected = settings.gmailConnected,
+            apps = apps,
+            userName = settings.userName,
+            brainName = configuredProviders().firstOrNull()?.displayName,
+            phoneControl = settings.phoneControl,
+            selfName = settings.displayName,
+        )
+    }
+
+    /**
+     * 1º o motor próprio entende e faz (sem IA, igual online e offline); 2º, se não entendeu e o pedido parece ação, a IA
+     * só TRADUZ para uma intenção que o motor executa; 3º, se nada serviu, volta o caminho antigo (conversa / IA com ferramentas).
+     * Devolve true se o pedido foi atendido aqui.
+     */
+    private suspend fun tryEngine(clean: String, speak: Boolean): Boolean {
+        // Skill ensinada pelo usuário ("quando eu disser X, faça Y") vale mais que o motor.
+        app.skills.match(clean)?.let { if (!it.builtIn) return false }
+        val t0 = System.nanoTime()
+        return try {
+            if (engineKey != engineNames()) {
+                engine = newEngine()
+                engineKey = engineNames()
+            }
+            val ctx = engineCtx()
+            var path = EngineStats.Path.ENGINE
+            var outcome: Outcome? = null
+            val pending = pendingAsk?.takeIf { System.currentTimeMillis() - it.second < 120_000 }
+            pendingAsk = null
+            if (pending != null) outcome = engine.answer(pending.first, clean, ctx)
+            if (outcome == null) outcome = engine.handle(clean, ctx)
+            if (outcome is NoMatch) {
+                outcome = translate(clean, ctx)
+                if (outcome != null) path = EngineStats.Path.TRANSLATOR
+            }
+            if (outcome == null || outcome is NoMatch) return false
+            present(outcome, speak, path, t0, clean)
+            true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            app.events.error("motor", "erro no motor (o pedido segue pelo caminho antigo): ${e.javaClass.simpleName}: ${e.message}")
+            false
+        }
+    }
+
+    private suspend fun present(outcome: Outcome, speak: Boolean, path: EngineStats.Path, t0: Long, request: String) {
+        val brain = if (path == EngineStats.Path.TRANSLATOR) "IA traduziu → motor" else "motor do Euno"
+        var intent = "?"
+        val now = System.currentTimeMillis()
+        when (outcome) {
+            is Say -> {
+                intent = outcome.intentId
+                say(outcome.text, emotionOf(outcome.emotion), speak, brain)
+            }
+            is Ask -> {
+                intent = outcome.intentId
+                pendingAsk = outcome to now
+                say(outcome.question, Emotion.NEUTRAL, speak, brain)
+            }
+            is Run -> {
+                intent = outcome.intentId
+                OverlayBus.acting.value = true
+                OverlayBus.anim.value = AnimState.THINKING
+                val reply = try {
+                    executor.execute(outcome.plan, engineTools(), request.take(100))
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Reply("Não consegui terminar: ${e.message ?: e.javaClass.simpleName}", "concerned")
+                }
+                reply.ask?.let { pendingAsk = it to System.currentTimeMillis() }
+                say(reply.text, emotionOf(reply.emotion), speak, brain)
+            }
+            NoMatch -> Unit
+        }
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        app.engineStats.note(path, ms)
+        app.events.info("motor", "«${request.take(80)}» → $intent por ${path.label} em $ms ms")
+    }
+
+    private fun emotionOf(name: String): Emotion = runCatching { Emotion.valueOf(name.uppercase()) }.getOrDefault(Emotion.NEUTRAL)
+
+    /** A IA só traduz: recebe poucas intenções parecidas e devolve uma linha de JSON; quem executa é o motor. */
+    private suspend fun translate(clean: String, ctx: Ctx): Outcome? {
+        if (settings.autonomy == AutonomyLevel.OBSERVER || !ToolIntent.likely(clean)) return null
+        val candidates = engine.candidates(clean, ctx)
+        if (candidates.isEmpty()) return null
+        val providers = configuredProviders()
+        if (providers.isEmpty()) return null
+        val (system, user) = Translator.prompt(clean, candidates, ctx)
+        val device = DeviceState.snapshot(app, privateMode = settings.privateMode)
+        val onlyLocal = providers.all { it.location == ProviderLocation.ON_DEVICE }
+        val text = StringBuilder()
+        OverlayBus.anim.value = AnimState.THINKING
+        val t0 = System.nanoTime()
+        val finished = kotlinx.coroutines.withTimeoutOrNull(if (onlyLocal) 45_000L else 15_000L) {
+            Orchestrator(providers).respond(LlmRequest(system, listOf(ChatMessage(Role.USER, user)), 200), device, RoutingHints(preference = routingPreference())).collect { event ->
+                if (event is OrchestratorEvent.Chunk) (event.chunk as? LlmChunk.Text)?.let { text.append(it.text) }
+            }
+            true
+        }
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        val parsed = Translator.parse(text.toString(), engine.all)
+        app.events.info("motor", "tradutor (${ms} ms${if (finished == null) ", tempo esgotado" else ""}): " + (parsed?.let { "${it.intentId} ${it.slots}" } ?: "sem tradução (${text.toString().take(80).replace('\n', ' ')})"))
+        if (parsed == null) return null
+        return engine.fromTranslation(parsed.intentId, parsed.slots, ctx).takeIf { it !is NoMatch }
+    }
+
     private suspend fun respond(speak: Boolean, retried: Boolean = false) {
         val startedAt = System.nanoTime()
         val device = DeviceState.snapshot(app, privateMode = settings.privateMode)
@@ -400,6 +555,7 @@ class ConversationController(private val app: JarvisApp) {
                     assistantName = settings.displayName,
                     article = settings.persona.gender.article,
                     brainNames = providers.map { it.displayName },
+                    activeBrain = providers.firstOrNull()?.displayName.orEmpty(),
                     voiceName = settings.voiceEngine.name.lowercase(),
                     autonomyLabel = settings.autonomy.name.lowercase(),
                     toolNames = tools.map { it.name },
@@ -557,14 +713,23 @@ class ConversationController(private val app: JarvisApp) {
             // Antes ficava um balão vazio, sem aviso nem registro.
             app.events.error("conversa", "o cérebro terminou sem texto (1ª palavra=${if (firstChunkAt == 0L) "nunca" else "sim"}); pedido de ${request.length} caracteres")
             edit(replyId) { it.copy(text = "Não recebi resposta do cérebro desta vez. Pode repetir?", streaming = false) }
+            record(Role.ASSISTANT, "Não recebi resposta do cérebro desta vez. Pode repetir?")
+            app.engineStats.note(EngineStats.Path.FAILED, (System.nanoTime() - startedAt) / 1_000_000)
             OverlayBus.emotion.value = Emotion.CONFUSED
             if (speak) voice.speak("Não recebi resposta desta vez. Pode repetir?")
         } else if (failure != null && finalText.isBlank()) {
-            edit(replyId) { it.copy(text = "Não consegui responder: $failure", streaming = false, brain = null) }
+            // Dizer o que houve e o que ainda funciona (antes: "todos os cérebros falharam"), e GRAVAR a fala (antes ficava de fora da conversa exportada).
+            val localConfigured = settings.localModelPath.isNotBlank()
+            val text = FailureText.build(failure.orEmpty(), device.online, providers.any { it.location == ProviderLocation.ON_DEVICE }, localConfigured)
+            edit(replyId) { it.copy(text = text, streaming = false, brain = null) }
+            record(Role.ASSISTANT, text)
+            app.events.error("conversa", "sem resposta de IA: ${failure.orEmpty().take(300)}")
+            app.engineStats.note(EngineStats.Path.FAILED, (System.nanoTime() - startedAt) / 1_000_000)
             OverlayBus.emotion.value = Emotion.CONCERNED
-            if (speak) voice.speak("Não consegui responder agora.")
+            if (speak) voice.speak(FailureText.spoken(device.online))
         } else {
             edit(replyId) { it.copy(streaming = false) }
+            app.engineStats.note(EngineStats.Path.LEGACY, (System.nanoTime() - startedAt) / 1_000_000)
             if (failure != null) add(ChatEntry(nextId++, Role.SYSTEM, "Resposta interrompida: $failure", note = true))
             else if (!settings.privateMode) runCatching { app.recipes.record(request, okSteps) }
         }
@@ -644,8 +809,8 @@ class ConversationController(private val app: JarvisApp) {
         }
     }
 
-    private fun say(text: String, emotion: Emotion, speak: Boolean) {
-        add(ChatEntry(nextId++, Role.ASSISTANT, text, brain = settings.displayName))
+    private fun say(text: String, emotion: Emotion, speak: Boolean, brain: String? = null) {
+        add(ChatEntry(nextId++, Role.ASSISTANT, text, brain = brain ?: settings.displayName))
         OverlayBus.emotion.value = emotion
         if (speak) voice.speak(text)
     }

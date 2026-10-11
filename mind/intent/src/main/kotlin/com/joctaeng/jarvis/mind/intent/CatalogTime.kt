@@ -77,6 +77,8 @@ internal object CatalogTime {
         ) { m ->
             val sk = m.ex.skeleton
             val today = m.today
+            // reclamação ou lembrança ("como você disse que hoje era feriado") não é pergunta: vai para a conversa
+            if (Regex("""\b(disse|falou|dizia|era|foi|tinha|errou|errado|errada|mentiu|enganou|porque|por que|como voce|quando voce)\b""").containsMatchIn(sk)) return@IntentDef NoMatch
             if ("proximo" in sk || "quando" in sk) {
                 val (d, name) = BrHolidays.next(today.plusDays(if (m.date == null) 0 else 0))
                 val diff = ChronoUnit.DAYS.between(today, d)

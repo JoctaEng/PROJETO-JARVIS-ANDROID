@@ -236,3 +236,48 @@ class AppsIntentTest {
         }
     }
 }
+
+/** Falas reais dos testes do usuário (nomes trocados): o motor tem de acertar o que é pedido e deixar a conversa para a IA. */
+class RealPhrasesTest {
+    private val ctx = Fixtures.ctx()
+    private fun e() = Fixtures.engine()
+    private fun id(s: String): String? = when (val r = e().handle(s, ctx)) { is Say -> r.intentId; is Run -> r.intentId; is Ask -> r.intentId; NoMatch -> null }
+
+    @Test fun commandsTheEngineMustTake() {
+        for ((s, want) in listOf(
+            "e o que tem na agenda para mim hoje" to "agenda.query",
+            "como é que está minha agenda" to "agenda.query",
+            "Veja a minha agenda da próxima semana" to "agenda.query",
+            "O que tem na minha agenda para dia 15 dá uma olhadinha" to "agenda.query",
+            "e verifique O que que tem na minha agenda para o dia 15" to "agenda.query",
+            "Anote aí no dia 15 de Outubro às 17 horas ir para casa" to "agenda.create",
+            "Anote almoço em família dia 12" to "agenda.create",
+            "manda um oi para meu amor" to "wa.send",
+            "Abra o aplicativo Gmail" to "app.open",
+            "eu quero que você abra o agenda" to "app.open",
+            "abra por favor no meu WhatsApp" to "app.open",
+            "pode fechar o Instagram" to "screen.home",
+            "Vá para a tela inicial" to "screen.home",
+            "tá me ouvindo" to "self.hear",
+            "Olá como é seu nome" to "self.name",
+            "O que é possível fazer" to "self.help",
+            "Que dia é hoje" to "time.date",
+            "e o feriado Nossa Senhora Aparecida é hoje ou é amanhã" to "time.holiday",
+        )) assertEquals(want, id(s), s)
+    }
+
+    @Test fun conversationAndComplaintsGoToTheAi() {
+        for (s in listOf(
+            "E como você disse que hoje era feriado",
+            "você foi burrinho",
+            "eu tô com sono",
+            "Abra o Gmail que você já pode fazer isso sim",
+            "Abra o WhatsApp agora e mande uma mensagem para o meu amor coração vermelho avise para ela que eu estou com saudade e que amo",
+            "Abra o Gmail no dia 15 o Gmail não abra o a agenda eu quero olhar a agenda na minha tela",
+            "O que tem na página do Instagram que você está vendo agora",
+            "Pesquise no Gmail",
+            "agenda Abra a agenda",
+            "o que tem na minha tela agora",
+        )) assertEquals(null, id(s), s)
+    }
+}
