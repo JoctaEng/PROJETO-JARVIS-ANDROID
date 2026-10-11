@@ -59,7 +59,7 @@ Histórico completo e atualizado em `docs/FASE-2.md`. Resumo:
 - **Aparelho de referência**: Redmi Note 13 Pro+ 5G (12 GB, HyperOS/Android 16). O HyperOS (OneKeyClean) encerra o app: exige bateria "Sem restrições", início automático e app travado nos recentes (ação do usuário).
 
 ## 7. O que ainda falta (ordem prevista)
-**Plano atual (10/10/2026): `docs/PLANO-ATE-V1.md`** — v0.25 age direito (pedido 65) → v0.26 visão/notificações → v0.27 biblioteca de skills → v0.28 tarefas programadas → v0.29 Fase 3 → v0.30 Fase 4 → v1.0 comercial. A lista abaixo é a antiga.
+**Plano atual (10/10/2026): `docs/PLANO-ATE-V1.md`** — v0.25 age direito (pedido 65) → v0.26 visão/notificações → v0.27 biblioteca de skills → v0.28 tarefas programadas → v0.29 Euno primeiro, IA depois (motor próprio, entregue) → v0.30 Fase 3 → v0.31 Fase 4 → v1.0 comercial. A lista abaixo é a antiga.
 1. **Resolver a instalação da v0.13.x** (isolar o serviço de acessibilidade) e então devolver o controle do celular.
 2. **Etapa C**: visão ("o que é isto?" com câmera/tela); reconhecer a voz do usuário no "Oi Joca" (pesquisa, pode não valer a pena); "Bom dia" e "Fechar o dia" automáticos em horário escolhido; e-mail e notificações; rotinas ensinadas pelo usuário.
 3. Pendências conhecidas: voz natural do Gemini depende da cota diária; arte dos personagens restantes; chave de assinatura fixa já ativa (conferida no CI); EduMath (ponte MCP) ainda sem teste no aparelho.

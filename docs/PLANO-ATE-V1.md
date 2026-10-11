@@ -44,7 +44,7 @@
 - Agendador do Android (WorkManager/AlarmManager). Ao terminar, avisa por notificação ou fala, conforme a escolha.
 - Ações de risco (enviar, pagar, apagar) **nunca rodam sozinhas**: pedem confirmação. Há histórico de execuções e botão "parar todas".
 
-## v0.29 — "Euno primeiro, IA depois" (pedido 81) — APROVADA; começa depois que o usuário mandar o TXT da conversa offline
+## v0.29 — "Euno primeiro, IA depois" (pedido 81) — ENTREGUE na 0.29.0 (aguarda teste); faltam tarefas por condição e visão local (restos da 0.28)
 - **Motor próprio de pedidos** na frente do cérebro: reconhece o pedido (frases + sinônimos, data/hora/nome/app), extrai os dados e chama a ferramenta direto; responde com frases prontas. Sem IA, sem gasto, igual online e offline.
 - **IA só como tradutora**: se o motor não entende, um prompt curto (sem a lista de ferramentas) pede à IA um comando normalizado (intenção + dados); o Euno executa. Se ainda assim não der, diz o que entendeu e o que faltou (nada de "todos os cérebros falharam").
 - **Catálogo por app**, nesta ordem de prioridade: Google Agenda, agenda local (Xiaomi), Gmail, Joca Finanças, EduMath, WhatsApp, Instagram; depois os demais mais usados. Modelos de frase × verbos × dados geram centenas/milhares de variações, **cada uma coberta por teste**.
