@@ -252,7 +252,7 @@ class ConversationController(private val app: JarvisApp) {
             runCatching {
                 val device = DeviceState.snapshot(app, privateMode = settings.privateMode)
                 val request = LlmRequest(ConversationSummary.SYSTEM_PROMPT, listOf(ChatMessage(Role.USER, transcript)), 400)
-                Orchestrator(providers).respond(request, device, RoutingHints(preference = settings.brainPreference)).collect { event ->
+                Orchestrator(providers).respond(request, device, RoutingHints(preference = routingPreference())).collect { event ->
                     if (event is OrchestratorEvent.Chunk && event.chunk is LlmChunk.Text) text += (event.chunk as LlmChunk.Text).text
                 }
             }.onFailure { app.events.warn("conversa", "resumo pelo cérebro falhou", it) }
@@ -289,8 +289,25 @@ class ConversationController(private val app: JarvisApp) {
         val cloud = cloudProviders()
         val localWanted = cloud.isEmpty() || settings.brainPreference == BrainPreference.LOCAL_FIRST ||
             settings.brainPreference == BrainPreference.LOCAL_ONLY || !DeviceState.snapshot(app, privateMode = false).online
-        return cloud + listOfNotNull(if (localWanted) localProvider() else null)
+        // Com "nuvem primeiro", o cérebro do celular antes nunca entrava: se a nuvem toda falhava, o Euno ficava mudo (pedido 78).
+        val lastResort = settings.localAsLastResort
+        return cloud + listOfNotNull(if (localWanted || lastResort) localProvider() else null)
     }
+
+    @Volatile private var reserveLookup = false
+
+    /**
+     * Antes, em "Automático", o cérebro do celular só entrava sem nuvem. Agora ele entra sempre como último recurso, então
+     * "Automático" com nuvem vira "nuvem primeiro" na ordem — senão o local (lento) passaria à frente nos pedidos simples.
+     */
+    private fun routingPreference(): BrainPreference =
+        if (settings.brainPreference == BrainPreference.AUTO && app.brains.all().any { app.brains.ready(it) }) BrainPreference.ONLINE_FIRST
+        else settings.brainPreference
+
+    /** Cérebros com pouca cota por minuto (Groq grátis): recebem o prompt enxuto. */
+    private fun leanIds(): Set<String> = app.brains.all()
+        .filter { it.preset == com.joctaeng.jarvis.settings.CloudPreset.GROQ.name || it.preset == com.joctaeng.jarvis.settings.CloudPreset.OPENROUTER.name }
+        .map { "brain_${it.id}" }.toSet()
 
     /** Cérebros que bateram limite (429) descansam o tempo pedido pelo provedor e o próximo da lista responde. */
     private val cooldown = com.joctaeng.jarvis.mind.orchestrator.ProviderCooldown()
@@ -300,7 +317,15 @@ class ConversationController(private val app: JarvisApp) {
 
     /** Cérebros online na ordem escolhida pelo usuário, sem os que estão descansando (se todos descansam, tenta todos). */
     private fun cloudProviders(): List<LlmProvider> {
-        val all = app.brains.all().mapNotNull { app.brains.provider(it) }
+        // Reserva automática do Gemini (outro modelo, mesma chave) logo depois do principal (pedido 78).
+        if (settings.geminiReserveModel.isBlank() && !reserveLookup) {
+            reserveLookup = true
+            scope.launch { runCatching { app.brains.ensureGeminiReserve() }.getOrNull()?.let { app.events.info("cerebro", "reserva automática do Gemini: $it") } }
+        }
+        val reserve = app.brains.geminiReserve()
+        val all = app.brains.all().mapNotNull { app.brains.provider(it) }.flatMap { p ->
+            if (reserve != null && reserve.id == p.id + "_reserva") listOf(p, reserve) else listOf(p)
+        }
         val now = System.currentTimeMillis()
         return all.filterNot { cooldown.resting(it.id, now) }.ifEmpty { all }
     }
@@ -328,7 +353,9 @@ class ConversationController(private val app: JarvisApp) {
         val summaries = if (useSummaries) app.summaries.activeContext(if (onlyLocal) LOCAL_SUMMARY_CHARS else PersonaEngine.MAX_SUMMARY_CHARS) else ""
 
         // Dois prompts: o completo (nuvem) e o enxuto (celular). Cada cérebro recebe só o que cabe nele.
-        fun buildPrompt(compact: Boolean): String = PersonaEngine.systemPrompt(
+        // Terceiro prompt (pedido 78): "enxuto" para cérebros com pouca cota por minuto (Groq grátis ~8 mil tokens/min):
+        // só as ferramentas básicas e as do assunto, sem o catálogo de skills.
+        fun buildPrompt(compact: Boolean, lean: Boolean = false): String = PersonaEngine.systemPrompt(
             userName = settings.userName,
             character = settings.persona,
             characterName = settings.characterName,
@@ -342,9 +369,12 @@ class ConversationController(private val app: JarvisApp) {
             ),
             compact = compact,
             // No cérebro local, o prompt precisa caber numa leitura rápida: ferramentas só quando o pedido sugere ação.
-            toolsSection = if (tools.isEmpty() || !toolsNeeded(compact)) "" else ToolProtocol.systemSection(tools) +
+            toolsSection = if (tools.isEmpty() || !toolsNeeded(compact)) "" else ToolProtocol.systemSection(
+                if (!lean) tools else com.joctaeng.jarvis.mind.orchestrator.ToolSelector.select(tools.map { it.name }, lastUser, activeSkill?.steps.orEmpty())
+                    .let { names -> tools.filter { it.name in names } },
+            ) +
                 (activeSkill?.let { "\n" + app.skills.describe(it) }.orEmpty()) +
-                (if (compact) "" else "\nSKILLS (pedidos curtos que viram passos combinados; o usuário ensina novas com \"quando eu disser X, faça Y\" ou skill_ensinar): " + app.skills.catalogLine()) +
+                (if (compact || lean) "" else "\nSKILLS (pedidos curtos que viram passos combinados; o usuário ensina novas com \"quando eu disser X, faça Y\" ou skill_ensinar): " + app.skills.catalogLine()) +
                 (if (compact || activeSkill != null) "" else app.recipes.find(lastUser)?.let { "\n" + app.recipes.describe(it) }.orEmpty()),
             userBio = if (compact) settings.userBio.take(LOCAL_BIO_CHARS) else settings.userBio,
             summaries = if (compact) summaries.take(LOCAL_SUMMARY_CHARS) else summaries,
@@ -370,7 +400,11 @@ class ConversationController(private val app: JarvisApp) {
         val ordered = if (prompt.contains("<tools>")) providers.sortedBy { it.id in toolWeak } else providers
         val effective = if (onlyLocal) ordered else ordered.map { p ->
             // Cérebro do celular no meio da lista (fallback): recebe prompt/histórico enxutos, não os da nuvem.
-            if (p.location == ProviderLocation.ON_DEVICE) CompactProvider(p, buildPrompt(true), LOCAL_HISTORY) else p
+            when {
+                p.location == ProviderLocation.ON_DEVICE -> CompactProvider(p, buildPrompt(true), LOCAL_HISTORY)
+                p.id in leanIds() -> LeanProvider(p, buildPrompt(false, lean = true), LEAN_HISTORY)
+                else -> p
+            }
         }
         val allHistory = _entries.value.filter { !it.note && !it.streaming }.map { ChatMessage(it.role, it.text) }
         val history = if (onlyLocal) localHistory(allHistory) else allHistory.takeLast(HISTORY)
@@ -395,7 +429,7 @@ class ConversationController(private val app: JarvisApp) {
 
         val generate: (List<ChatMessage>) -> Flow<LlmChunk> = { messages ->
             flow {
-                Orchestrator(effective).respond(LlmRequest(prompt, messages, maxTokens), device, RoutingHints(preference = settings.brainPreference)).collect { event ->
+                Orchestrator(effective).respond(LlmRequest(prompt, messages, maxTokens), device, RoutingHints(preference = routingPreference())).collect { event ->
                     when (event) {
                         is OrchestratorEvent.Notice -> if (event.text != lastNote) {
                             lastNote = event.text
@@ -407,7 +441,10 @@ class ConversationController(private val app: JarvisApp) {
                             edit(replyId) { it.copy(brain = names[event.providerId]) }
                         }
                         is OrchestratorEvent.FellBack -> {
-                            cooldown.note(event.fromProviderId, event.reason, System.currentTimeMillis(), com.joctaeng.jarvis.system.resources.RetryHint.millis(event.reason))
+                            val hint = com.joctaeng.jarvis.system.resources.RetryHint.millis(event.reason)
+                            cooldown.note(event.fromProviderId, event.reason, System.currentTimeMillis(), hint)
+                            // Gemini principal sem cota: visão e pesquisa passam para a reserva automática até a cota voltar.
+                            if (event.reason.contains("(429)")) app.brains.noteGeminiLimited(event.fromProviderId, System.currentTimeMillis() + (hint ?: 15 * 60_000L))
                             app.events.warn("conversa", "${names[event.fromProviderId]} falhou (${event.reason}); tentando outro cérebro")
                         }
                         is OrchestratorEvent.Failed -> {
@@ -664,6 +701,7 @@ class ConversationController(private val app: JarvisApp) {
         const val HISTORY = 20
         /** Cérebro local: menos histórico e dossiê menor, para o prefill caber num celular comum. */
         const val LOCAL_HISTORY = 8
+        const val LEAN_HISTORY = 10
         const val LOCAL_BIO_CHARS = 800
         const val LOCAL_SUMMARY_CHARS = 800
         const val STEP_NOTE = "Agindo"
@@ -675,6 +713,13 @@ class ConversationController(private val app: JarvisApp) {
 /** Histórico do cérebro do celular: por tamanho (≈3.000 caracteres), não só por número de mensagens. */
 private fun localHistory(messages: List<ChatMessage>, keep: Int = 8): List<ChatMessage> =
     HistoryTrim.keepRecent(messages, { it.text.length }, 3_000, keep)
+
+/** Cérebro com pouca cota por minuto: prompt com menos ferramentas e histórico mais curto (pedido 78). */
+private class LeanProvider(private val inner: LlmProvider, private val leanPrompt: String, private val keep: Int) : LlmProvider by inner {
+    override fun generate(request: LlmRequest): Flow<LlmChunk> = inner.generate(
+        LlmRequest(leanPrompt, HistoryTrim.keepRecent(request.messages, { it.text.length }, 6_000, keep), request.maxOutputTokens ?: 1_024),
+    )
+}
 
 /** Troca prompt e histórico do pedido por versões enxutas quando o cérebro é o do celular (leitura rápida). */
 private class CompactProvider(private val inner: LlmProvider, private val compactPrompt: String, private val keep: Int) : LlmProvider by inner {

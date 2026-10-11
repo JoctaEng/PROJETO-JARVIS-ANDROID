@@ -47,6 +47,10 @@ enum class CloudPreset(
         "Cerebras (grátis, muito rápido)", "https://api.cerebras.ai/v1", ProviderLocation.EXTERNAL_CLOUD, true,
         "Chave grátis em cloud.cerebras.ai → API Keys.", "gpt-oss-120b",
     ),
+    MISTRAL(
+        "Mistral (visão e ferramentas)", "https://api.mistral.ai/v1", ProviderLocation.EXTERNAL_CLOUD, true,
+        "Chave em console.mistral.ai → API Keys (o plano grátis tem poucos pedidos por minuto; bom como reserva).", "mistral-medium-latest",
+    ),
     OPENAI("OpenAI", "https://api.openai.com/v1", ProviderLocation.EXTERNAL_CLOUD, true, "Chave em platform.openai.com."),
     OPENROUTER(
         "OpenRouter", "https://openrouter.ai/api/v1", ProviderLocation.EXTERNAL_CLOUD, true,
@@ -99,6 +103,10 @@ class AppSettings(context: Context) {
     /** Modelo 3D escolhido (arquivo em assets/avatar3d/models, sem ".vrm"); "avatar" = exemplo. */
     var avatarModel by string("avatar3dModel", "avatar")
     var brainsMigrated by boolean("brainsMigrated", false)
+    /** Reserva automática do Gemini (pedido 78): outro modelo da mesma conta, escolhido pela lista de modelos. */
+    var geminiReserveModel by string("geminiReserveModel", "")
+    /** Cérebro local entra como último recurso quando a nuvem falha (pedido 78), mesmo com "nuvem primeiro". */
+    var localAsLastResort by boolean("localAsLastResort", true)
     var cloudPreset by enum("cloudPreset", CloudPreset.NONE)
     var cloudBaseUrl by string("cloudBaseUrl", "")
     var cloudModel by string("cloudModel", "")
