@@ -76,6 +76,9 @@ import com.joctaeng.jarvis.mind.persona.CharacterCatalog
 import com.joctaeng.jarvis.mind.persona.CharacterProfile
 import com.joctaeng.jarvis.mind.persona.PersonaMode
 import com.joctaeng.jarvis.poc.ModelDownload
+import com.joctaeng.jarvis.poc.ModelIntegrity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.joctaeng.jarvis.poc.ModelStore
 import com.joctaeng.jarvis.settings.CloudPreset
 import com.joctaeng.jarvis.settings.PlacementMode
@@ -979,9 +982,26 @@ class SettingsActivity : ComponentActivity() {
                         val total = System.currentTimeMillis() - start
                         status = error?.let { "Falhou: $it" }
                             ?: "Funcionou: \"${text.toString().trim().take(80)}\" · 1ª palavra em ${first / 1000.0} s · total ${total / 1000.0} s"
+                        // Falhou com um arquivo .litertlm: confere se ele é o original (o arquivo danificado era a causa na 0.28.1).
+                        if (error != null && !ModelStore.isGguf(selected) && selected.name == ModelDownload.RECOMMENDED_FILE) {
+                            status += "\nConferindo o arquivo (leva uns 30 s)…"
+                            val verdict = withContext(Dispatchers.IO) { runCatching { ModelIntegrity.verify(selected) }.getOrNull() }
+                            status = "Falhou: $error\n" + (verdict?.let { ModelIntegrity.describe(it, selected.name) } ?: "Não deu para conferir o arquivo.")
+                        }
                         busy = false
                     }
                 }) { Text("Testar IA do celular") }
+                if (!ModelStore.isGguf(selected) && selected.name == ModelDownload.RECOMMENDED_FILE) {
+                    TextButton(enabled = !busy, onClick = {
+                        busy = true
+                        status = "Conferindo o arquivo… (leva uns 30 s)"
+                        scope.launch {
+                            val verdict = withContext(Dispatchers.IO) { runCatching { ModelIntegrity.verify(selected) }.getOrNull() }
+                            status = verdict?.let { ModelIntegrity.describe(it, selected.name) } ?: "Não deu para conferir o arquivo."
+                            busy = false
+                        }
+                    }) { Text("Conferir arquivo") }
+                }
                 TextButton(enabled = !busy, onClick = {
                     app.conversation.releaseLocalModel()
                     app.modelStore.delete(selected)

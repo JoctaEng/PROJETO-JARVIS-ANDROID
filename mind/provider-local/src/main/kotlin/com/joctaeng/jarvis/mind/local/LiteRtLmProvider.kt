@@ -70,18 +70,23 @@ class LiteRtLmProvider(
                 try {
                     created.initialize()
                 } catch (e: Exception) {
-                    created.close()
+                    // close() num motor que não subiu lança "Engine is not initialized" e escondia o erro verdadeiro
+                    // (teste da 0.28.1: o arquivo do Gemma 4 estava danificado e a tela só mostrava essa frase).
+                    runCatching { created.close() }
                     throw e
                 }
                 return created
             }
+            fun reason(e: Throwable): String = (e.message ?: e.javaClass.simpleName).take(300)
             // Placa de vídeo primeiro (bem mais rápida); se o celular recusar, cai para o processador em vez de ficar sem cérebro.
             engine = if (backend == LocalBackend.GPU) {
                 runCatching { open(true) }.getOrElse { gpuError ->
-                    runCatching { open(false) }.getOrElse { throw gpuError }.also { fellBackToCpu = true }
+                    runCatching { open(false) }.getOrElse { cpuError ->
+                        throw IllegalStateException("GPU: ${reason(gpuError)} | CPU: ${reason(cpuError)}", cpuError)
+                    }.also { fellBackToCpu = true }
                 }
             } else {
-                open(false)
+                runCatching { open(false) }.getOrElse { throw IllegalStateException("CPU: ${reason(it)}", it) }
             }
             (System.nanoTime() - start) / 1_000_000
         }

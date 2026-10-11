@@ -95,8 +95,17 @@ class ModelDownload(context: Context, private val store: ModelStore) {
             val result = runCatching { attempt(progress) }
             val error = result.exceptionOrNull()
             if (error == null) {
-                val done = result.getOrNull()
-                state = done!!
+                var done = result.getOrNull()!!
+                // Tamanho certo não basta: confere o SHA-256 (um arquivo danificado faz o motor dizer só "Engine is not initialized").
+                if (done is State.Done) {
+                    state = State.Running(done.file.length(), done.file.length(), "conferindo o arquivo…").also(progress)
+                    val verdict = runCatching { ModelIntegrity.verify(done.file) }.getOrNull()
+                    if (verdict is ModelIntegrity.Verdict.Damaged) {
+                        done.file.delete()
+                        done = State.Failed(ModelIntegrity.describe(verdict, done.file.name))
+                    }
+                }
+                state = done
                 progress(done)
                 events.info("modelo", "download: ${if (done is State.Done) "concluído (${done.file.length() shr 20} MB)" else (done as? State.Failed)?.reason}")
                 return
