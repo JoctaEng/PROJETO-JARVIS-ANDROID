@@ -44,7 +44,7 @@ object BackgroundTools {
             AgendaSave(app), AgendaEdit(app), AgendaDelete(app), AgendaOpenDay(app),
             WebResearch(app), ReadPage(app), FileSave(app), FileList(app), FileRead(app),
             CopyText(app), ContactCreate(app), NotificationsRead(app),
-        ) + GmailTools.all(app) + SkillTools.all(app)
+        ) + GmailTools.all(app) + SkillTools.all(app) + TaskTools.all(app)
     }
 }
 

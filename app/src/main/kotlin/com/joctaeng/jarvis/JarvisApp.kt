@@ -46,6 +46,8 @@ class JarvisApp : Application() {
 
     /** Caminhos que deram certo em cada app (memória de caminhos, v0.26). */
     val recipes: com.joctaeng.jarvis.mind.memory.RecipeBook by lazy { com.joctaeng.jarvis.mind.memory.RecipeBook(File(filesDir, "memory/caminhos.json")) }
+    /** Tarefas programadas (v0.28). */
+    val tasks: com.joctaeng.jarvis.mind.memory.TaskBook by lazy { com.joctaeng.jarvis.mind.memory.TaskBook(File(filesDir, "memory/tarefas.json")) }
     /** Skills (v0.27): as prontas + as que o usuário ensina. */
     val skills: com.joctaeng.jarvis.mind.memory.SkillBook by lazy { com.joctaeng.jarvis.mind.memory.SkillBook(File(filesDir, "memory/skills.json")) }
 
@@ -60,6 +62,8 @@ class JarvisApp : Application() {
         modelDownload = ModelDownload(this, modelStore)
         settings = AppSettings(this)
         secrets = SecretStore(this)
+        // Alarmes das tarefas programadas (o Android os apaga quando o app é atualizado).
+        runCatching { com.joctaeng.jarvis.tasks.TaskScheduler.rescheduleAll(this) }
     }
 
     /** Registra quedas do app e, na próxima abertura, por que o sistema encerrou o processo (memória, travamento, falha nativa). */

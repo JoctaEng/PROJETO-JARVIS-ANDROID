@@ -112,6 +112,7 @@ class SettingsActivity : ComponentActivity() {
                         PhoneControlSection()
                         ConnectionsSection()
                         SkillsSection()
+                        TasksSection()
                         CharacterSection()
                         ProfileSection()
                         BrainSection()
@@ -424,6 +425,66 @@ class SettingsActivity : ComponentActivity() {
                 Button(onClick = { com.joctaeng.jarvis.control.AccessibilityLink.open(this) }) { Text("Ligar em Acessibilidade") }
                 Hint("Na tela que abrir, procure \"Euno - controle do celular\" (pode estar em Apps instalados/Serviços) e ative. O Android mostra um aviso: é normal.")
             }
+        }
+    }
+
+    /** v0.28: tarefas programadas — o Euno faz um pedido sozinho no horário e avisa o resultado. */
+    @Composable
+    private fun TasksSection() {
+        var version by remember { mutableIntStateOf(0) }
+        val tasks = remember(version) { app.tasks.all() }
+        val history = remember(version) { app.tasks.history().takeLast(8).reversed() }
+        val zone = java.time.ZoneId.systemDefault()
+        val fmt = remember { java.time.format.DateTimeFormatter.ofPattern("dd/MM HH:mm") }
+        val am = remember { getSystemService(android.app.AlarmManager::class.java) }
+        Section("Tarefas programadas") {
+            Hint(
+                "Rotinas que rodam sozinhas no horário: peça, por exemplo, \"todo dia às 7h me diga a agenda e o clima\" ou " +
+                    "\"dias úteis às 18h leia minhas notificações\". O resultado chega numa notificação. Enviar, pagar ou apagar sempre pede a sua confirmação.",
+            )
+            if (!am.canScheduleExactAlarms()) {
+                Hint("Para rodar na hora certa, libere \"Alarmes e lembretes\" para o Euno (sem isso pode atrasar alguns minutos).")
+                OutlinedButton(onClick = {
+                    runCatching { startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName"))) }
+                }) { Text("Liberar alarmes na hora certa") }
+            }
+            if (tasks.isEmpty()) Hint("Nenhuma tarefa ainda.")
+            tasks.forEach { t ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) {
+                        Text(t.name, style = MaterialTheme.typography.bodyMedium)
+                        val next = com.joctaeng.jarvis.mind.memory.TaskSchedule.next(t, java.time.Instant.now(), zone)?.atZone(zone)?.format(fmt)
+                        Hint("${com.joctaeng.jarvis.mind.memory.TaskSchedule.describe(t)} · próxima: ${next ?: "—"}\n${t.instruction}")
+                    }
+                    Switch(checked = t.enabled, onCheckedChange = {
+                        app.tasks.setEnabled(t.id, it)
+                        app.tasks.get(t.id)?.let { task -> com.joctaeng.jarvis.tasks.TaskScheduler.schedule(this@SettingsActivity, task) }
+                        version++
+                    })
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { com.joctaeng.jarvis.tasks.TaskScheduler.runNow(this@SettingsActivity, t.id) }) { Text("Rodar agora") }
+                    TextButton(onClick = {
+                        app.tasks.remove(t.id)
+                        com.joctaeng.jarvis.tasks.TaskScheduler.cancel(this@SettingsActivity, t.id)
+                        version++
+                    }) { Text("Apagar") }
+                }
+            }
+            if (tasks.any { it.enabled }) {
+                OutlinedButton(onClick = {
+                    app.tasks.disableAll()
+                    tasks.forEach { com.joctaeng.jarvis.tasks.TaskScheduler.cancel(this@SettingsActivity, it.id) }
+                    version++
+                }) { Text("Parar todas") }
+            }
+            if (history.isNotEmpty()) {
+                Text("Últimas execuções", style = MaterialTheme.typography.titleSmall)
+                history.forEach { r ->
+                    Hint("${java.time.Instant.ofEpochMilli(r.atMillis).atZone(zone).format(fmt)} · ${r.name} · ${if (r.ok) "feita" else "falhou"}: ${r.summary.take(140)}")
+                }
+            }
+            TextButton(onClick = { version++ }) { Text("Atualizar") }
         }
     }
 

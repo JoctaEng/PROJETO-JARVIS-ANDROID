@@ -26,6 +26,9 @@
     <!-- v0.26 "mãos invisíveis": criar/editar compromissos e contatos em segundo plano (pedido 71). -->
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
+    <!-- v0.28: tarefas programadas (alarme no horário e de novo depois de ligar o celular). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
@@ -176,5 +179,13 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <!-- v0.28: tarefas programadas. -->
+        <receiver android:name=".tasks.TaskAlarmReceiver" android:exported="false" />
+        <receiver android:name=".tasks.TaskBootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

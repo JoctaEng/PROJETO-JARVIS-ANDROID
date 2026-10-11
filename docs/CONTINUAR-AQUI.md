@@ -40,8 +40,9 @@
 
 ## 4. Próximo passo
 - **v0.27.0 feita** (11/10): correções do teste da 0.26.1 (pedido 76) + biblioteca de skills (`mind/memory/SkillBook.kt`, `SkillCatalog.kt`; ferramentas `tools/SkillTools.kt`; Meu Euno → Minhas skills). Aguarda CI e teste. Gmail: o usuário ainda precisa do cliente OAuth no Google Cloud (agora o app registra o motivo exato). **Regra (pedido 77): todo APK = correções do último teste + o próximo passo do plano.**
+- **v0.28.0 feita** (11/10, pedido 78 + plano v0.28): reserva automática do Gemini (`BrainReserve`, `BrainStore.geminiReserve`), prompt enxuto para Groq/OpenRouter (`ToolSelector`, `LeanProvider`), local como último recurso, preset Mistral, Gemma 4 E2B LiteRT-LM recomendado; tarefas programadas (`mind/memory/TaskBook.kt`, `tasks/TaskScheduler.kt`, `tools/TaskTools.kt`, Meu Euno → Tarefas programadas). Aguarda CI e teste.
 - **Joca Finanças** (app do usuário, será vendido; repo privado `JoctaEng/joca-financas`, ramo `claude/correcoes-e-euno`): 1.1.0 com CI verde (build 5, 10/10 19:08 de Brasília) — críticos de dinheiro corrigidos, TransactionMatcher (dedupe) e porta MCP `joca_financas` para o Euno. Aguardando teste do usuário (instalar por cima, sem desinstalar). Pendentes: dinheiro em centavos no banco, fatura pelo dia de fechamento, dividir telas gigantes, itens de loja/LGPD (política, ID definitivo, IA por servidor, R8, tirar USE_EXACT_ALARM/RECORD_AUDIO).
-- Próximo APK: correções do teste da 0.27 + **v0.28 tarefas programadas** (`docs/PLANO-ATE-V1.md`); a lista de skills é ajustada com o usuário.
+- Próximo APK: correções do teste da 0.28 + **tarefas por condição e visão no cérebro do celular** (fim da v0.28) → depois **v0.29 Fase 3** (`docs/PLANO-ATE-V1.md`).
 
 ## 5. Lembretes técnicos
 - App Android só compila no CI; aqui só módulos JVM. Google Maven bloqueado aqui; npm, PyPI e raw.githubusercontent funcionam; Hugging Face não.

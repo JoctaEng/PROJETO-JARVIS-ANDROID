@@ -150,6 +150,22 @@ class ConversationController(private val app: JarvisApp) {
         start(clean, speak, addEntry = true)
     }
 
+    /**
+     * Tarefa programada (v0.28): espera a conversa ficar livre, faz o pedido guardado como se o usuário tivesse falado
+     * (aparece no chat como "Tarefa programada …") e devolve a resposta final, para a notificação.
+     */
+    suspend fun runScheduled(name: String, instruction: String): String? = withContext(Dispatchers.Main) {
+        kotlinx.coroutines.withTimeoutOrNull(120_000L) { while (_busy.value) kotlinx.coroutines.delay(1_000) }
+        if (_busy.value) return@withContext null
+        val before = nextId
+        val finished = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val watcher = scope.launch { turnFinished.collect { finished.complete(Unit) } }
+        start("Tarefa programada \"$name\": $instruction", speak = false, addEntry = true)
+        kotlinx.coroutines.withTimeoutOrNull(4 * 60_000L) { finished.await() }
+        watcher.cancel()
+        _entries.value.lastOrNull { it.id >= before && it.role == Role.ASSISTANT && !it.note && it.text.isNotBlank() }?.text
+    }
+
     private fun start(clean: String, speak: Boolean, addEntry: Boolean) {
         voice.stop()
         job = scope.launch {
@@ -595,6 +611,7 @@ class ConversationController(private val app: JarvisApp) {
             else "acesso às notificações desligado (o usuário liga em Meu Euno → Notificações e Gmail)")
         add(if (settings.gmailConnected) "Gmail CONECTADO (só leitura): gmail_buscar e gmail_ler" else "Gmail ainda não conectado (Meu Euno → Notificações e Gmail → Conectar Gmail)")
         add("o botão Nova guarda um resumo da conversa e começa outra")
+        add("tarefas programadas: ${app.tasks.all().count { it.enabled }} ligadas — rotinas que rodam sozinhas no horário (tarefa_criar/listar/pausar/apagar; Meu Euno → Tarefas programadas)")
         add("skills (habilidades): ${app.skills.all().count { it.enabled }} ligadas — ex.: modo aula, preparar aula, lista de exercícios, lista de compras, o que chegou, fechar o dia; o usuário ensina novas com \"quando eu disser X, faça Y\" ou em Meu Euno → Minhas skills")
         add("guardar fatos na memória só com as ferramentas memoria_guardar/memoria_esquecer ou quando ele diz \"lembre que…\"")
     }

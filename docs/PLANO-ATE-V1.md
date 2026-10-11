@@ -37,7 +37,7 @@
 - Tela "Minhas skills": ligar/desligar, editar o comando e **ensinar uma nova** ("quando eu disser X, faça Y e Z"). Este é o pedido antigo de rotinas ensinadas.
 - A lista final das skills é montada **com o usuário**, pelos gostos e atividades dele.
 
-## v0.28 — Tarefas programadas (pedido 65d)
+## v0.28 — Tarefas programadas (pedido 65d) — por horário entregue na 0.28.0; faltam as por condição
 - Rotinas que rodam **sem ser chamadas**, como as do Claude:
   - por horário: todo dia, dias úteis, uma vez;
   - por condição: chegou notificação de X, bateria baixa, carregando, Wi-Fi de casa, início/fim de compromisso.
