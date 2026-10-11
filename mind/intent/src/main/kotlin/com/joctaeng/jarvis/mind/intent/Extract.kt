@@ -29,6 +29,8 @@ data class Extracted(
     val money: MoneySlot?,
     val part: String?,
     val rec: RecSlot? = null,
+    /** A fala como foi dita (para "sim"/"não" e textos livres). */
+    val raw: String = "",
 ) {
     val skeleton: String get() = PtText.join(toks)
     val numbers: List<Int> get() = toks.filter { it.norm.all(Char::isDigit) && it.norm.length in 1..6 }.map { it.norm.toInt() }

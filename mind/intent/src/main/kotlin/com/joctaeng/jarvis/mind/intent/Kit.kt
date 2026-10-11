@@ -7,10 +7,22 @@ internal object Kit {
     fun say(m: M, text: String, emotion: String = "neutral"): Outcome = Say(text, m.intentId, emotion)
 
     fun run(m: M, vararg steps: Step, confirm: String? = null, reply: (List<StepResult>) -> Reply): Outcome =
-        Run(Plan.simple(*steps, reply = reply), m.intentId, confirm)
+        plan(m, steps.toList(), confirm) { Finish(reply(it)) }
 
-    fun plan(m: M, steps: List<Step>, confirm: String? = null, then: (List<StepResult>) -> Next): Outcome =
-        Run(Plan(steps, then), m.intentId, confirm)
+    fun plan(m: M, steps: List<Step>, confirm: String? = null, then: (List<StepResult>) -> Next): Outcome {
+        if (confirm == null) return Run(Plan(steps, then), m.intentId)
+        // Dinheiro, apagar, enviar: o Euno pergunta com as próprias palavras e só faz depois do "sim".
+        return Ask(confirm, m.intentId) { ex, _ ->
+            when (yes(ex)) {
+                true -> Run(Plan(steps.map { it.copy(confirmed = true) }, then), m.intentId)
+                false -> Say("Tudo bem, não fiz nada.", m.intentId)
+                null -> null
+            }
+        }
+    }
+
+    /** "sim"/"não" da fala (true/false), ou null se a fala não é isso. */
+    fun yes(ex: Extracted): Boolean? = YesNo.parse(ex.raw.ifBlank { bareText(ex) })
 
     fun ask(m: M, question: String, resume: (Extracted, Ctx) -> Outcome?): Outcome = Ask(question, m.intentId, resume)
 

@@ -14,6 +14,8 @@ class Ctx(
     val userName: String = "",
     val brainName: String? = null,
     val phoneControl: Boolean = true,
+    /** Qual agenda é a padrão do usuário: "google", "celular" ou vazio (a do sistema). */
+    val defaultAgenda: String = "",
 ) {
     val today: LocalDate get() = now.toLocalDate()
     fun has(tool: String): Boolean = tool in tools
@@ -22,7 +24,17 @@ class Ctx(
 }
 
 /** Um passo: chamar uma ferramenta do Euno com estes argumentos. */
-data class Step(val tool: String, val args: Map<String, Any?> = emptyMap(), val label: String = "")
+data class Step(
+    val tool: String,
+    val args: Map<String, Any?> = emptyMap(),
+    val label: String = "",
+    /** Espera antes de rodar (o app anterior precisa terminar de abrir). */
+    val settleMs: Long = 0L,
+    /** Tentativas extras se falhar (a tela ainda estava carregando). */
+    val retries: Int = 0,
+    /** O usuário já disse "sim" a este passo pelo Euno: a ferramenta não pergunta de novo. */
+    val confirmed: Boolean = false,
+)
 
 /** O que a ferramenta devolveu. [text] é a saída (ou o motivo da falha). */
 data class StepResult(val step: Step, val ok: Boolean, val text: String)

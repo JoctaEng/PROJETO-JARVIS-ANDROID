@@ -73,7 +73,7 @@ class IntentEngine(
 
     internal fun prepare(raw: String, ctx: Ctx): Extracted {
         val ex = Extract.of(raw, ctx.today)
-        return ex.copy(toks = stripFillers(ex.toks))
+        return ex.copy(toks = stripFillers(ex.toks), raw = raw)
     }
 
     private val leadPhrases = Regex(
