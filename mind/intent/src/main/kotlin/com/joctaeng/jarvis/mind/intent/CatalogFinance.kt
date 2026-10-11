@@ -68,7 +68,7 @@ internal object CatalogFinance {
         },
         IntentDef(
             "fin.spent", "Joca Finanças", "quanto gastou (no mês, ou com uma categoria)",
-            slots = listOf(SlotSpec("categoria", "categoria ou texto do gasto"), SlotSpec("date", "um dia do mês")),
+            slots = listOf(SlotSpec("cat", "categoria ou texto do gasto"), SlotSpec("date", "um dia do mês")),
             templates = listOf(
                 "quanto (eu )?(gastei|gasto|paguei|desembolsei|gastamos) (com|em|no|na|de|nos|nas|do|da)? {cat?} <D?> (mes passado|no mes passado|ultimo mes)?",
                 "(qual|quanto) (foi |e |sao )?(o )?(meu )?(gasto|gastos|total de gastos|total gasto) (com|em|no|na|de|do|da|nos|nas)? {cat?} <D?> (mes passado|no mes passado)?",
@@ -187,7 +187,7 @@ internal object CatalogFinance {
             // parcelado, financiamento, juros: a conta é outra; deixa para a IA.
             if (Regex("""\b(vezes|parcela|parcelas|parcelado|parcelei|parcelamento|x sem juros|financiamento|juros)\b""").containsMatchIn(said)) return@IntentDef NoMatch
             val first = m.ex.toks.firstOrNull()?.norm.orEmpty()
-            val income = first in setOf("recebi", "ganhei", "entrou", "entrada", "caiu", "recebemos") || Regex("""\b(receita|entrada|salario|recebi)\b""").containsMatchIn(said)
+            val income = m["tipo"]?.equals("RECEITA", true) == true || first in setOf("recebi", "ganhei", "entrou", "entrada", "caiu", "recebemos") || Regex("""\b(receita|entrada|salario|recebi)\b""").containsMatchIn(said)
             // cartão: "no cartão Nubank"
             val cardMention = Regex("""(?i)\bcart[aã]o\s+(?:d[eoa]s?\s+)?(\w+)""").find(Kit.bareText(m.ex))
             if (cardMention == null && Regex("""\bcartao\b|\bcredito\b""").containsMatchIn(said)) return@IntentDef NoMatch

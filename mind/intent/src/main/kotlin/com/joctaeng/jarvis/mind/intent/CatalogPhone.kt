@@ -121,7 +121,7 @@ internal object CatalogPhone {
         },
         IntentDef(
             "phone.alarm", "Relógio", "cria um alarme (hora, rótulo, dias da semana)",
-            slots = listOf(SlotSpec("time", "a hora HH:mm", true), SlotSpec("label", "nome do alarme")),
+            slots = listOf(SlotSpec("time", "a hora HH:mm", true), SlotSpec("rotulo", "nome do alarme")),
             templates = listOf(
                 "(me )?(acorda|acorde|acordar|desperta|desperte|despertar|chama|chame) (as|pras|pelas|umas)? <T> <R?> {rotulo?}",
                 "(cria|crie|criar|coloca|coloque|poe|ponha|programa|programe|define|defina|configura|configure|marca|marque|seta|ativa|ative|faz|faca|bota|agenda|agende)? (um|o|outro)? alarme (para|pra|pras|as|de|pelas|umas)? <T> <R?> {rotulo?}",
@@ -152,7 +152,7 @@ internal object CatalogPhone {
         },
         IntentDef(
             "phone.timer", "Relógio", "inicia um timer (contagem regressiva)",
-            slots = listOf(SlotSpec("duration_min", "minutos", true), SlotSpec("label", "nome do timer")),
+            slots = listOf(SlotSpec("duration_min", "minutos", true), SlotSpec("rotulo", "nome do timer")),
             templates = listOf(
                 "(cria|crie|criar|coloca|coloque|poe|ponha|inicia|inicie|iniciar|programa|programe|liga|ligue|faz|faca|marca|marque|bota|comeca|comece)? (um|o|uma)? (timer|temporizador|cronometro|contagem regressiva) (de|para|pra|com|por)? <DUR> {rotulo?}",
                 "(timer|temporizador|cronometro) (de|para|pra|com|por)? <DUR>",

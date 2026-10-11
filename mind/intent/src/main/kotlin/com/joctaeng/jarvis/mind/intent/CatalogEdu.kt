@@ -70,9 +70,9 @@ internal object CatalogEdu {
         ) { m ->
             if (!m.has(NOTE)) return@IntentDef Kit.noTool(m, "o EduMath")
             val text = m.ex.raw
-            val value = Regex("""(?<![\w])(\d{1,2}(?:[.,]\d{1,2})?)(?![\w:/])""").findAll(text).lastOrNull()?.groupValues?.get(1) ?: return@IntentDef NoMatch
-            val field = fieldWords.find(text)?.value?.replace(" ", "")?.uppercase()?.let { if (it.length <= 3) it else Kit.cap(it.lowercase()) } ?: return@IntentDef NoMatch
-            val student = text.replace(value, " ").replace(fieldWords, " ").split(Regex("\\s+")).filter { it.isNotBlank() && PtText.fold(it) !in skip }.joinToString(" ").trim()
+            val value = m["valor"] ?: Regex("""(?<![\w])(\d{1,2}(?:[.,]\d{1,2})?)(?![\w:/])""").findAll(text).lastOrNull()?.groupValues?.get(1) ?: return@IntentDef NoMatch
+            val field = (m["campo"] ?: fieldWords.find(text)?.value)?.replace(" ", "")?.uppercase()?.let { if (it.length <= 3) it else Kit.cap(it.lowercase()) } ?: return@IntentDef NoMatch
+            val student = (m["aluno"] ?: text.replace(value, " ").replace(fieldWords, " ").split(Regex("\\s+")).filter { it.isNotBlank() && PtText.fold(it) !in skip }.joinToString(" ")).trim()
             if (student.length < 2) return@IntentDef NoMatch
             val num = value.replace(',', '.').toDoubleOrNull()?.takeIf { it in 0.0..100.0 } ?: return@IntentDef NoMatch
             val name = Kit.cap(student)

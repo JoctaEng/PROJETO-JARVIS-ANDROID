@@ -195,7 +195,7 @@ class IntentEngine(
             val mi = p.getOrNull(1)?.toIntOrNull() ?: 0
             if (h in 0..23 && mi in 0..59) TimeSlot(h, mi, periodGiven = true) else null
         }
-        val dur = (slots["duration_min"]?.toDoubleOrNull())?.let { DurSlot((it * 60).toInt()) }
+        val dur = (slots["duration_min"]?.toDoubleOrNull())?.let { DurSlot((it * 60).toInt(), "por") }
         val money = slots["amount"]?.let { a -> ToolText.cents("R$ " + a.removePrefix("R$").trim())?.let { MoneySlot(it) } }
         return Extracted(emptyList(), date, time, dur, money, null, null)
     }
