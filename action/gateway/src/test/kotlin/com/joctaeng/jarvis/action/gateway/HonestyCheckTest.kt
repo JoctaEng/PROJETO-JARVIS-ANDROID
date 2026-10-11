@@ -29,6 +29,18 @@ class HonestyCheckTest {
         assertNotNull(HonestyCheck.problem("Pronto, rolei a tela do Gmail para baixo.", false))
     }
 
+    @Test fun claimsFromTheTestOf0261AreCaught() {
+        assertNotNull(HonestyCheck.problem("Fechado. Estamos na tela inicial agora. Alguma outra coisa?", false))
+        assertNotNull(HonestyCheck.problem("A tela já foi rolada para baixo, Joca.", false))
+        assertNotNull(HonestyCheck.problem("Compromisso registrado com sucesso na sua agenda.", false))
+    }
+
+    @Test fun describingTheScreenWithoutReadingIsCaught() {
+        assertNotNull(HonestyCheck.problem("O e-mail foi aberto. O conteúdo traz o cronograma das inscrições.", true, lastTool = "tela_tocar"))
+        assertNull(HonestyCheck.problem("Na tela aparecem três e-mails novos.", true, lastTool = "tela_ler"))
+        assertNull(HonestyCheck.problem("Instagram aberto. O que deseja fazer?", true, lastTool = "abrir_app"))
+    }
+
     @Test fun honestTextPasses() {
         assertNull(HonestyCheck.problem("Pronto, abri o Gmail.", anyToolSucceeded = true))
         assertNull(HonestyCheck.problem("Ainda não abri, quer que eu abra?", false))

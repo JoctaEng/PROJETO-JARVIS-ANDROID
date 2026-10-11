@@ -50,6 +50,7 @@ class AgentRunner(
         val messages = history.toMutableList()
         var counter = 0
         var anySuccess = false
+        var lastSuccess: String? = null
         var corrected = false
         for (round in 1..maxRounds) {
             val filter = ToolCallFilter { "call-${++counter}" }
@@ -78,7 +79,7 @@ class AgentRunner(
             }
             calls += tail.calls
             if (verifyClaims && holdToolRoundText && !corrected && failed == null && calls.isEmpty() && round < maxRounds) {
-                val fix = HonestyCheck.problem(held.toString(), anySuccess)
+                val fix = HonestyCheck.problem(held.toString(), anySuccess, lastSuccess)
                 if (fix != null) {
                     corrected = true
                     emit(AgentEvent.Aside("corrigido antes de responder: ${held.toString().trim().take(200)}"))
@@ -106,7 +107,10 @@ class AgentRunner(
             val responses = calls.map { call ->
                 emit(AgentEvent.ToolStarted(call))
                 val result = gateway.execute(call, context, confirm = confirm)
-                if (result is ToolResult.Success) anySuccess = true
+                if (result is ToolResult.Success) {
+                    anySuccess = true
+                    lastSuccess = call.toolName
+                }
                 emit(AgentEvent.ToolFinished(call, result))
                 ToolProtocol.responseMessage(call, result)
             }

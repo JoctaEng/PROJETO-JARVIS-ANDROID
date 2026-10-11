@@ -441,11 +441,22 @@ class SettingsActivity : ComponentActivity() {
         }
         val authClient = remember { com.google.android.gms.auth.api.identity.Identity.getAuthorizationClient(this) }
         val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
-            val ok = runCatching { authClient.getAuthorizationResultFromIntent(res.data).accessToken != null }.getOrDefault(false)
+            val result = runCatching { authClient.getAuthorizationResultFromIntent(res.data) }
+            val ok = result.getOrNull()?.accessToken != null
             gmail = ok
             settings.gmailConnected = ok
-            gmailStatus = if (ok) "Gmail conectado (só leitura)." else "Não conectou. Veja o passo a passo abaixo."
-            app.events.info("gmail", "conexão pela tela de consentimento: ${if (ok) "ok" else "não"}")
+            // Motivo exato quando não conecta (teste da 0.26.1 só dizia "não"): cancelado, ou o erro do Google (ex.: código 10 = app não registrado).
+            val why = when {
+                ok -> ""
+                res.resultCode == android.app.Activity.RESULT_CANCELED && result.isSuccess -> "a tela do Google foi fechada ou cancelada"
+                else -> result.exceptionOrNull()?.let { e ->
+                    val code = (e as? com.google.android.gms.common.api.ApiException)?.statusCode
+                    "erro do Google" + (code?.let { " (código $it${if (it == 10) ": o Euno ainda não está registrado no Google Cloud com este pacote e SHA-1" else ""})" } ?: "") + ": ${e.message}"
+                } ?: "o Google não devolveu permissão (resultado ${res.resultCode})"
+            }
+            gmailStatus = if (ok) "Gmail conectado (só leitura)." else "Não conectou: $why. Veja o passo a passo abaixo."
+            if (!ok) showSetup = true
+            app.events.info("gmail", "conexão pela tela de consentimento: ${if (ok) "ok" else "não — $why"}")
         }
         Section("Notificações e Gmail") {
             Hint("Com isso ${settings.displayName} faz em segundo plano, sem abrir nada na tela: lê as notificações que chegaram quando você pergunta (\"o que chegou?\") e procura/lê seus e-mails. Ele nunca responde nem envia nada sozinho.")

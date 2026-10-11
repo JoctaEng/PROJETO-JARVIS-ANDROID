@@ -36,4 +36,46 @@ object AppNameMatch {
         }
         return -1
     }
+
+    /** Fabricante dito no pedido ("Google Agenda", "agenda da Xiaomi") → pedaço do nome do pacote. */
+    private val vendors = linkedMapOf(
+        "google" to listOf("com.google."),
+        "xiaomi" to listOf("xiaomi", "miui"),
+        "miui" to listOf("xiaomi", "miui"),
+        "samsung" to listOf("samsung", "sec.android"),
+        "motorola" to listOf("motorola"),
+    )
+
+    private fun vendorOf(pkg: String): String? = when {
+        pkg.startsWith("com.google.") -> "Google"
+        "xiaomi" in pkg || "miui" in pkg -> "Xiaomi"
+        "samsung" in pkg || "sec.android" in pkg -> "Samsung"
+        "motorola" in pkg -> "Motorola"
+        pkg.startsWith("com.android.") -> "sistema"
+        else -> null
+    }
+
+    /**
+     * Como [best], mas com o pacote de cada app: quando há dois apps com o MESMO nome (no Xiaomi, "Agenda" do Google e
+     * "Agenda" da Xiaomi — teste da 0.26.1), escolhe pelo fabricante dito no pedido. Sem fabricante, fica com o 1º.
+     * [apps] = (nome, pacote). Aceita também o nome que [displayNames] mostra ("Agenda (Google)").
+     */
+    fun bestApp(wantedRaw: String, apps: List<Pair<String, String>>): Int {
+        val wanted = ScreenText.normalize(wantedRaw)
+        val idx = best(wantedRaw, apps.map { it.first })
+        if (idx < 0) return -1
+        val same = apps.indices.filter { ScreenText.normalize(apps[it].first) == ScreenText.normalize(apps[idx].first) }
+        if (same.size < 2) return idx
+        val words = wanted.split(' ').toSet()
+        val marks = vendors.entries.firstOrNull { it.key in words }?.value ?: return idx
+        return same.firstOrNull { i -> marks.any { it in apps[i].second } } ?: idx
+    }
+
+    /** Nomes para mostrar ao cérebro: apps com nome repetido ganham o fabricante ("Agenda (Google)", "Agenda (Xiaomi)"). */
+    fun displayNames(apps: List<Pair<String, String>>): List<String> {
+        val counts = apps.groupingBy { ScreenText.normalize(it.first) }.eachCount()
+        return apps.map { (label, pkg) ->
+            if ((counts[ScreenText.normalize(label)] ?: 0) > 1) "$label (${vendorOf(pkg) ?: pkg})" else label
+        }
+    }
 }

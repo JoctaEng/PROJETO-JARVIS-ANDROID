@@ -102,6 +102,13 @@ private val knownPackages = mapOf(
     "gmail" to "com.google.android.gm",
     "chrome" to "com.android.chrome",
     "maps" to "com.google.android.apps.maps",
+    "google agenda" to "com.google.android.calendar",
+    "agenda do google" to "com.google.android.calendar",
+    "agenda google" to "com.google.android.calendar",
+    "google calendar" to "com.google.android.calendar",
+    "calendario do google" to "com.google.android.calendar",
+    "agenda da xiaomi" to "com.xiaomi.calendar",
+    "agenda xiaomi" to "com.xiaomi.calendar",
 )
 
 private fun launchables(context: Context): List<Launchable> {
@@ -114,14 +121,18 @@ private fun launchables(context: Context): List<Launchable> {
 }
 
 private class OpenApp(context: Context) : AndroidTool(
-    context, "abrir_app", "Abre um app instalado pelo nome (ex.: EduMath, WhatsApp, Câmera).", RiskLevel.READ,
+    context, "abrir_app", "Abre um app instalado pelo nome (ex.: EduMath, WhatsApp, Câmera). Se houver dois com o mesmo nome, use o nome com o fabricante que listar_apps mostra (ex.: \"Agenda (Google)\").", RiskLevel.READ,
     """"nome":{"type":"string","description":"nome do app como aparece no celular"}""", listOf("nome"),
 ) {
     override fun run(args: JSONObject): ToolResult {
         val wanted = normalize(args.optString("nome"))
         if (wanted.isBlank()) return ToolResult.Failure("informe o nome do app")
         val apps = launchables(context)
-        val match = AppNameMatch.best(args.optString("nome"), apps.map { it.label }).takeIf { it >= 0 }?.let { apps[it] }
+        // Nome conhecido com fabricante ("google agenda") vai direto ao pacote; o resto, pelo nome (com desempate por fabricante).
+        val match = knownPackages[wanted]?.takeIf { " " in wanted }?.let { pkg ->
+            context.packageManager.getLaunchIntentForPackage(pkg)?.let { Launchable(apps.firstOrNull { it.packageName == pkg }?.label ?: args.optString("nome"), pkg) }
+        }
+            ?: AppNameMatch.bestApp(args.optString("nome"), apps.map { it.label to it.packageName }).takeIf { it >= 0 }?.let { apps[it] }
             ?: knownPackages[wanted]?.let { pkg ->
                 // Apps conhecidos pelo pacote (ex.: WhatsApp Business), caso o nome na lista seja diferente.
                 context.packageManager.getLaunchIntentForPackage(pkg)?.let { Launchable(args.optString("nome"), pkg) }
@@ -177,7 +188,9 @@ private class ListApps(context: Context) : AndroidTool(
 ) {
     override fun run(args: JSONObject): ToolResult {
         val filter = normalize(args.optString("filtro"))
-        val names = launchables(context).map { it.label }.filter { filter.isBlank() || filter in normalize(it) }
+        // Apps com o mesmo nome aparecem com o fabricante ("Agenda (Google)", "Agenda (Xiaomi)"); abrir_app aceita esse nome.
+        val names = launchables(context).let { all -> AppNameMatch.displayNames(all.map { it.label to it.packageName }) }
+            .filter { filter.isBlank() || filter in normalize(it) }
         return ok("apps" to JSONArray(names.take(60)), "total" to names.size)
     }
 }

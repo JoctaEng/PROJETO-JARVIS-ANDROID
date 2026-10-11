@@ -20,6 +20,10 @@ object QuickCommands {
         "oi", "ola", "ei", "ok", "por", "favor", "pode", "agora", "ai", "ja", "euno", "joca", "entao", "bom", "me", "pra", "por favor",
     ) + (CharacterCatalog.all + AvatarPersonas.all).filter { it.id != "avatar" }.flatMap { normalize(it.defaultName) }
     private val openVerbs = setOf("abra", "abre", "abrir", "abri", "abrindo")
+    private val vague = setOf(
+        "deles", "delas", "dele", "dela", "ele", "ela", "eles", "elas", "outro", "outra", "outros", "outras", "esse", "essa", "este", "esta",
+        "isso", "isto", "aquele", "aquela", "aquilo", "mesmo", "mesma", "primeiro", "primeira", "segundo", "segunda", "ultimo", "ultima",
+    )
     private val articles = setOf("o", "a", "os", "as", "um", "uma", "app", "aplicativo", "do", "da", "meu", "minha")
     /** Palavras que indicam pedido composto ou condição: aí o cérebro decide. */
     private val compound = setOf("e", "depois", "para", "pra", "que", "se", "quando", "procura", "procure", "pesquisa", "pesquise", "veja", "manda", "mande", "com", "no", "na", "em")
@@ -57,6 +61,8 @@ object QuickCommands {
         if (words.first() in openVerbs) {
             val name = words.drop(1).dropWhile { it in articles }
             if (name.isEmpty() || name.size > 3 || name.any { it in compound }) return null
+            // "abra um deles", "abre a outra", "abre essa": depende da conversa, então vai para o cérebro (teste da 0.26.1).
+            if (name.any { it in vague }) return null
             if (name.first() in setOf("agenda", "calendario") && name.size == 1) return QuickCommand.OpenApp("Agenda")
             return QuickCommand.OpenApp(originalName(utterance, name) ?: name.joinToString(" "))
         }

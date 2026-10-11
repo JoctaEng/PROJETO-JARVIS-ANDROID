@@ -104,7 +104,8 @@ private class AgendaSave(context: Context) : BackgroundTool(
         "Data/hora absolutas a partir de 'Agora' do prompt. Para criar vendo na tela, use agenda_criar.",
     RiskLevel.WRITE_REVERSIBLE,
     """"titulo":{"type":"string"},"inicio":{"type":"string","description":"AAAA-MM-DD HH:mm (hora local)"},""" +
-        """"duracao_min":{"type":"integer","minimum":5,"maximum":1440},"dia_inteiro":{"type":"boolean"},"local":{"type":"string"},"descricao":{"type":"string"}""",
+        """"duracao_min":{"type":"integer","minimum":5,"maximum":1440},"dia_inteiro":{"type":"boolean"},"local":{"type":"string"},"descricao":{"type":"string"},""" +
+        """"forcar":{"type":"boolean","description":"true só se o usuário quer mesmo um segundo compromisso igual"}""",
     listOf("titulo", "inicio"),
 ) {
     override suspend fun run(args: JSONObject): ToolResult = withContext(Dispatchers.IO) {
@@ -118,6 +119,15 @@ private class AgendaSave(context: Context) : BackgroundTool(
             ?: return@withContext ToolResult.Failure("data/hora inválida; use AAAA-MM-DD HH:mm")
         val allDay = args.optBoolean("dia_inteiro", false)
         val minutes = args.optInt("duracao_min", 60).coerceIn(5, 1440)
+        // Já existe um igual (mesmo título, mesmo horário)? Não cria outro (teste da 0.26.1: o mesmo pedido gerou os eventos 292 e 293).
+        if (!args.optBoolean("forcar", false)) {
+            sameEvent(title, start, allDay, zone)?.let { existing ->
+                return@withContext ok(
+                    "salvo" to true, "id" to existing, "titulo" to title, "ja_existia" to true,
+                    "obs" to "esse compromisso JÁ estava na agenda (id $existing); não criei outro. Se houver um formulário de agenda aberto na tela, descarte-o.",
+                )
+            }
+        }
         val calendarId = writableCalendarId(context) ?: return@withContext ToolResult.Failure("nenhuma agenda com permissão de escrita no celular")
         val values = ContentValues().apply {
             put(CalendarContract.Events.CALENDAR_ID, calendarId)
@@ -142,8 +152,34 @@ private class AgendaSave(context: Context) : BackgroundTool(
             ?: return@withContext ToolResult.Failure("a agenda não aceitou o compromisso")
         val id = ContentUris.parseId(uri)
         JarvisApp.from(context).events.info("ferramentas", "agenda_salvar: evento $id criado em segundo plano")
-        ok("salvo" to true, "id" to id, "titulo" to title, "obs" to "compromisso salvo na agenda (sem abrir o app)")
+        ok("salvo" to true, "id" to id, "titulo" to title, "obs" to "compromisso salvo na agenda (sem abrir o app). Não salve de novo; se um formulário de agenda estiver aberto na tela, descarte-o.")
     }
+
+    /** Id de um compromisso com o mesmo título no mesmo horário (±1 min; dia inteiro: no mesmo dia), ou null. */
+    private fun sameEvent(title: String, start: Long, allDay: Boolean, zone: ZoneId): Long? {
+        val day = Instant.ofEpochMilli(start).atZone(zone).toLocalDate()
+        val from = if (allDay) day.atStartOfDay(zone).toInstant().toEpochMilli() else start - 60_000L
+        val to = if (allDay) from + 86_400_000L else start + 60_000L
+        val wanted = normalizeTitle(title)
+        return runCatching {
+            CalendarContract.Instances.query(
+                context.contentResolver,
+                arrayOf(CalendarContract.Instances.EVENT_ID, CalendarContract.Instances.TITLE, CalendarContract.Instances.BEGIN),
+                from, to,
+            )?.use { c ->
+                var found: Long? = null
+                while (found == null && c.moveToNext()) {
+                    val begin = c.getLong(2)
+                    val timeOk = allDay || kotlin.math.abs(begin - start) <= 60_000L
+                    if (timeOk && normalizeTitle(c.getString(1).orEmpty()) == wanted) found = c.getLong(0)
+                }
+                found
+            }
+        }.getOrNull()
+    }
+
+    private fun normalizeTitle(t: String): String =
+        java.text.Normalizer.normalize(t.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").replace(Regex("[^a-z0-9]+"), " ").trim()
 }
 
 private class AgendaEdit(context: Context) : BackgroundTool(
@@ -188,7 +224,9 @@ private class AgendaOpenDay(context: Context) : BackgroundTool(
     context, "agenda_abrir",
     "Abre o app da agenda NA TELA já no dia pedido (sem deslizar). Use para 'abre a agenda no dia 15', 'mostra o dia 20 na agenda'.",
     RiskLevel.READ,
-    """"data":{"type":"string","description":"DD/MM ou AAAA-MM-DD (ex.: 15/10)"}""", listOf("data"),
+    """"data":{"type":"string","description":"DD/MM ou AAAA-MM-DD (ex.: 15/10)"},""" +
+        """"app":{"type":"string","description":"qual agenda: 'google' (Google Agenda) ou 'celular' (a agenda do aparelho, ex.: Xiaomi). Vazio = a padrão"}""",
+    listOf("data"),
 ) {
     override suspend fun run(args: JSONObject): ToolResult {
         val zone = ZoneId.systemDefault()
@@ -196,10 +234,27 @@ private class AgendaOpenDay(context: Context) : BackgroundTool(
             ?: return ToolResult.Failure("data não entendida; use DD/MM (ex.: 15/10)")
         val millis = day.atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
         val uri = CalendarContract.CONTENT_URI.buildUpon().appendPath("time").let { ContentUris.appendId(it, millis) }.build()
-        val ok = runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+        val intent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Dois apps chamados "Agenda" (Google e Xiaomi, teste da 0.26.1): o pedido escolhe qual abre.
+        val wanted = text(args, "app", "agenda").lowercase()
+        val pm = context.packageManager
+        val handlers = pm.queryIntentActivities(intent, 0).map { it.activityInfo.packageName }.distinct()
+        val pick = when {
+            "google" in wanted -> handlers.firstOrNull { it.startsWith("com.google.") }
+            wanted.isNotBlank() -> handlers.firstOrNull { !it.startsWith("com.google.") }
+            else -> null
+        }
+        if (pick != null) intent.setPackage(pick)
+        val ok = runCatching { context.startActivity(intent) }.isSuccess
         if (!ok) return ToolResult.Failure("nenhum app de agenda abriu essa data")
         EunoScreen.settle(2_500)
-        return ok("aberto" to "agenda no dia ${day.dayOfMonth}/${day.monthValue}", "obs" to "use tela_ler para ver os compromissos na tela")
+        val opened = pick ?: pm.resolveActivity(intent, 0)?.activityInfo?.packageName.orEmpty()
+        val which = when {
+            opened.startsWith("com.google.") -> "Google Agenda"
+            opened.isBlank() || opened == "android" -> "a agenda padrão"
+            else -> "agenda do celular ($opened)"
+        }
+        return ok("aberto" to "$which no dia ${day.dayOfMonth}/${day.monthValue}", "pacote" to opened, "obs" to "use tela_ler para ver os compromissos na tela")
     }
 }
 

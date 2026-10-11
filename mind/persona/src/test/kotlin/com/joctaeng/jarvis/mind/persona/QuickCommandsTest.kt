@@ -36,4 +36,10 @@ class QuickCommandsTest {
         assertNull(QuickCommands.parse("para"))
         assertNull(QuickCommands.parse("vai chover amanhã?"))
     }
+
+    @Test fun vagueTargetGoesToTheBrain() {
+        assertNull(QuickCommands.parse("abra um deles"))
+        assertNull(QuickCommands.parse("abre a outra"))
+        assertNull(QuickCommands.parse("abre essa"))
+    }
 }

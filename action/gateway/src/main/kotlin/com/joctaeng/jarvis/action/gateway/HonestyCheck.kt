@@ -18,14 +18,37 @@ object HonestyCheck {
     private val claimPhrases = listOf(
         "ja estamos na tela inicial", "voltando para a tela inicial", "ja esta aberto", "ja esta aberta", "esta aberta na sua tela",
         "esta aberto na sua tela", "ja esta na tela", "rolagem feita",
+        // teste da 0.26.1: "Fechado. Estamos na tela inicial agora", "A tela já foi rolada", "está devidamente marcado"
+        "estamos na tela inicial", "ja estou na tela inicial", "ja estou na sua tela inicial", "voltamos para a tela inicial",
+        "foi rolada", "foi rolado", "foi aberto", "foi aberta", "foi fechado", "foi fechada", "foi salvo", "foi salva",
+        "foi enviado", "foi enviada", "foi apagado", "foi apagada", "registrado com sucesso", "salvo com sucesso",
+        "devidamente marcado", "devidamente salvo", "esta marcado na sua agenda", "ja esta salvo", "ja esta marcado",
     )
 
-    fun problem(text: String, anyToolSucceeded: Boolean): String? {
+    /** Ferramentas que MUDAM a tela: depois delas, o conteúdo novo só é conhecido lendo (tela_ler/tela_ver). */
+    private val screenChangers = setOf(
+        "tela_tocar", "tela_tocar_ponto", "tela_rolar", "tela_deslizar", "tela_navegar", "tela_pesquisar", "abrir_app", "agenda_abrir", "abrir_link",
+    )
+    private val describing = listOf(
+        "aparece", "aparecem", "vejo", "estou vendo", "traz ", "mostra ", "o conteudo", "esta escrito", "diz que", "na tela tem", "na lista",
+    )
+
+    /**
+     * [lastTool] = a última ferramenta que deu certo nesta resposta. Se ela mudou a tela e o texto descreve o que há na tela,
+     * o cérebro está inventando (teste da 0.26.1: abriu o e-mail e "resumiu" sem ler).
+     */
+    fun problem(text: String, anyToolSucceeded: Boolean, lastTool: String? = null): String? {
         val t = normalize(text)
         if (t.isBlank()) return null
         if (fakeTool.containsMatchIn(t)) {
             return "ATENÇÃO: você escreveu que usou uma ferramenta, mas não chamou nenhuma (texto como \"[usando …]\" não executa nada). " +
                 "Chame a ferramenta de verdade agora, no formato <tool_call>{\"name\": …, \"arguments\": {…}}</tool_call>, e só responda depois do resultado."
+        }
+        if (lastTool != null && lastTool in screenChangers) {
+            describing.firstOrNull { it in t }?.let {
+                return "ATENÇÃO: a última ação ($lastTool) mudou a tela e você ainda não leu a tela nova, mas descreveu o que há nela " +
+                    "(\"${it.trim()}\"). Chame tela_ler (ou tela_ver) agora e só descreva depois do resultado."
+            }
         }
         if (anyToolSucceeded) return null
         val claimed = claimVerbs.firstOrNull { verb -> Regex("""\b${Regex.escape(verb)}\b""").findAll(t).any { !negated(t, it.range.first) } }

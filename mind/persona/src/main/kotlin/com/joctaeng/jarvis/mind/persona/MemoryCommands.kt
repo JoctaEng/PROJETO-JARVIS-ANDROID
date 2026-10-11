@@ -29,6 +29,8 @@ object MemoryCommands {
             ?.let { return MemoryCommand.Forget(null) }
         rememberPrefixes.firstOrNull { lower.startsWith("$it ") }?.let { prefix ->
             val fact = text.substring(prefix.length).trim()
+            // "Anote aí no dia 15 às 17 h ir para casa" é compromisso, não fato (teste da 0.26.1): vai para o cérebro, que usa a agenda.
+            if (!prefix.startsWith("lembr") && !prefix.startsWith("memoriz") && looksLikeAppointment(fact.lowercase(ptBr))) return null
             return if (fact.isEmpty()) null else MemoryCommand.Remember(fact.replaceFirstChar { it.uppercase(ptBr) })
         }
         forgetPrefixes.firstOrNull { lower.startsWith("$it ") }?.let { prefix ->
@@ -37,4 +39,13 @@ object MemoryCommands {
         }
         return null
     }
+
+    private val appointment = Regex(
+        """\b(dia \d{1,2}|\d{1,2}/\d{1,2}|\d{1,2} de (janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)""" +
+            """|(às|as) \d{1,2}|\d{1,2} ?(h|horas)\b|amanhã|amanha|depois de amanhã|segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo""" +
+            """|na (minha )?agenda|no (meu )?calendário|no (meu )?calendario)""",
+    )
+
+    /** Data, hora ou "na agenda" no texto: é um compromisso para a agenda, não um fato para a memória. */
+    fun looksLikeAppointment(text: String): Boolean = appointment.containsMatchIn(text.lowercase(ptBr))
 }
