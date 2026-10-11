@@ -44,7 +44,7 @@ object BackgroundTools {
             AgendaSave(app), AgendaEdit(app), AgendaDelete(app), AgendaOpenDay(app),
             WebResearch(app), ReadPage(app), FileSave(app), FileList(app), FileRead(app),
             CopyText(app), ContactCreate(app), NotificationsRead(app),
-        ) + GmailTools.all(app)
+        ) + GmailTools.all(app) + SkillTools.all(app)
     }
 }
 
@@ -344,7 +344,8 @@ private class FileSave(context: Context) : BackgroundTool(
     context, "arquivo_salvar",
     "Salva um texto como arquivo no celular, em Documentos/Euno (notas, listas, plano de aula, resumo, tabela CSV), em segundo plano.",
     RiskLevel.WRITE_REVERSIBLE,
-    """"nome":{"type":"string","description":"nome do arquivo sem extensão"},"conteudo":{"type":"string"},"formato":{"type":"string","enum":["txt","md","csv"]}""",
+    """"nome":{"type":"string","description":"nome do arquivo sem extensão"},"conteudo":{"type":"string"},"formato":{"type":"string","enum":["txt","md","csv"]},""" +
+        """"modo":{"type":"string","enum":["novo","acrescentar","substituir"],"description":"acrescentar = junta no fim de um arquivo que já existe (lista de compras, notas); substituir = reescreve; padrão novo"}""",
     listOf("nome", "conteudo"),
 ) {
     override suspend fun run(args: JSONObject): ToolResult = withContext(Dispatchers.IO) {
@@ -352,6 +353,17 @@ private class FileSave(context: Context) : BackgroundTool(
         if (content.isBlank()) return@withContext ToolResult.Failure("conteúdo vazio")
         val ext = args.optString("formato").lowercase().takeIf { it in setOf("txt", "md", "csv") } ?: "txt"
         val base = text(args, "nome").replace(Regex("[\\\\/:*?\"<>|]"), " ").trim().ifBlank { "nota" }.take(80)
+        val mode = args.optString("modo").lowercase()
+        // Lista de compras e notas rápidas (skills da 0.27) crescem no MESMO arquivo, em vez de criar "Lista (1)", "Lista (2)"…
+        if (mode == "acrescentar" || mode == "substituir") {
+            eunoFiles(context).firstOrNull { it.first.equals("$base.$ext", ignoreCase = true) }?.let { (name, existing) ->
+                val append = mode == "acrescentar"
+                context.contentResolver.openOutputStream(existing, if (append) "wa" else "wt")?.use {
+                    it.write((if (append) "\n" + content else content).toByteArray())
+                } ?: return@withContext ToolResult.Failure("não consegui escrever em $name")
+                return@withContext ok("salvo" to "$EUNO_DIR$name", "modo" to mode, "tamanho" to content.length)
+            }
+        }
         val mime = when (ext) { "csv" -> "text/csv"; "md" -> "text/markdown"; else -> "text/plain" }
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, "$base.$ext")

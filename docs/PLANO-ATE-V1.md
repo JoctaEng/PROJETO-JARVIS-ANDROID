@@ -26,7 +26,7 @@
 - Notificações: "o que chegou?", com resumo. Ele nunca responde sozinho.
 - "Bom dia" e "Fechar o dia" automáticos em horário escolhido.
 
-## v0.27 — Biblioteca de skills (pedido 65c)
+## v0.27 — Biblioteca de skills (pedido 65c) — 1ª leva entregue na 0.27.0 (27 skills + ensinar + Minhas skills)
 - Dezenas de habilidades prontas, acionadas por comando curto, cada uma com passos, ferramentas e confirmações. Exemplos de partida:
   - **Professor**: preparar aula, plano de aula, lista de exercícios, gabarito, corrigir questão por foto, chamada/lembrete de turma, prova da semana, resumo de conteúdo.
   - **EduMath**: abrir o EduMath em uma tela/tópico, gerar exercício, conferir resolução (ponte MCP).

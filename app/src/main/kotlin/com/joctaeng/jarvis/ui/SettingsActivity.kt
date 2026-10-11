@@ -111,6 +111,7 @@ class SettingsActivity : ComponentActivity() {
                         SummariesSection()
                         PhoneControlSection()
                         ConnectionsSection()
+                        SkillsSection()
                         CharacterSection()
                         ProfileSection()
                         BrainSection()
@@ -423,6 +424,57 @@ class SettingsActivity : ComponentActivity() {
                 Button(onClick = { com.joctaeng.jarvis.control.AccessibilityLink.open(this) }) { Text("Ligar em Acessibilidade") }
                 Hint("Na tela que abrir, procure \"Euno - controle do celular\" (pode estar em Apps instalados/Serviços) e ative. O Android mostra um aviso: é normal.")
             }
+        }
+    }
+
+    /** v0.27: Minhas skills — as prontas (liga/desliga) e as ensinadas (apagar), e ensinar uma nova. */
+    @Composable
+    private fun SkillsSection() {
+        var version by remember { mutableIntStateOf(0) }
+        val skills = remember(version) { app.skills.all() }
+        var open by remember { mutableStateOf(false) }
+        var expanded by remember { mutableStateOf<String?>(null) }
+        var trigger by remember { mutableStateOf("") }
+        var steps by remember { mutableStateOf("") }
+        var status by remember { mutableStateOf("") }
+        Section("Minhas skills") {
+            Hint(
+                "Pedidos curtos que viram uma sequência de passos: diga, por exemplo, \"modo aula\", \"preparar aula\", \"lista de compras\", " +
+                    "\"o que chegou\" ou \"fechar o dia\". Para ensinar uma nova, fale \"quando eu disser X, faça Y\" ou use o formulário abaixo.",
+            )
+            Text("${skills.count { it.enabled }} de ${skills.size} ligadas · ${skills.count { !it.builtIn }} ensinadas por você", style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = { open = !open }) { Text(if (open) "Esconder a lista" else "Ver e ligar/desligar as skills") }
+            if (open) {
+                skills.groupBy { it.category }.forEach { (category, list) ->
+                    Text(category, style = MaterialTheme.typography.titleSmall)
+                    list.forEach { skill ->
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.weight(1f).clickable { expanded = if (expanded == skill.id) null else skill.id }) {
+                                    Text(skill.name, style = MaterialTheme.typography.bodyMedium)
+                                    Hint("diga: \"${skill.triggers.first()}\"")
+                                }
+                                Switch(checked = skill.enabled, onCheckedChange = { app.skills.setEnabled(skill.id, it); version++ })
+                            }
+                            if (expanded == skill.id) {
+                                Hint("Também: ${skill.triggers.drop(1).joinToString(", ").ifEmpty { "—" }}\nPassos: ${skill.steps}")
+                                if (!skill.builtIn) TextButton(onClick = { app.skills.remove(skill.id); version++ }) { Text("Apagar esta skill") }
+                            }
+                        }
+                    }
+                }
+            }
+            Text("Ensinar uma skill", style = MaterialTheme.typography.titleSmall)
+            OutlinedTextField(trigger, { trigger = it }, label = { Text("Quando eu disser… (ex.: bom dia professor)") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(steps, { steps = it }, label = { Text("…faça isto (ex.: diga minha agenda de hoje e o clima)") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+            Button(enabled = trigger.isNotBlank() && steps.isNotBlank(), onClick = {
+                status = runCatching { app.skills.teach(trigger, steps) }.fold(
+                    { "Aprendida: \"${it.triggers.first()}\"." },
+                    { "Não deu: ${it.message}" },
+                )
+                trigger = ""; steps = ""; version++
+            }) { Text("Ensinar") }
+            if (status.isNotEmpty()) Hint(status)
         }
     }
 

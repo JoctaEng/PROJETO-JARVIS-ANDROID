@@ -39,9 +39,9 @@
 - Foco agora: **melhorias e novas fases**.
 
 ## 4. Próximo passo
-- **v0.26.0 feita** (duas mãos, Gmail, notificações, atalhos, caminhos; `docs/FASE-2.md`). Aguarda teste. O Gmail precisa do passo a passo do Google Cloud (Meu Euno → Notificações e Gmail).
+- **v0.27.0 feita** (11/10): correções do teste da 0.26.1 (pedido 76) + biblioteca de skills (`mind/memory/SkillBook.kt`, `SkillCatalog.kt`; ferramentas `tools/SkillTools.kt`; Meu Euno → Minhas skills). Aguarda CI e teste. Gmail: o usuário ainda precisa do cliente OAuth no Google Cloud (agora o app registra o motivo exato). **Regra (pedido 77): todo APK = correções do último teste + o próximo passo do plano.**
 - **Joca Finanças** (app do usuário, será vendido; repo privado `JoctaEng/joca-financas`, ramo `claude/correcoes-e-euno`): 1.1.0 com CI verde (build 5, 10/10 19:08 de Brasília) — críticos de dinheiro corrigidos, TransactionMatcher (dedupe) e porta MCP `joca_financas` para o Euno. Aguardando teste do usuário (instalar por cima, sem desinstalar). Pendentes: dinheiro em centavos no banco, fatura pelo dia de fechamento, dividir telas gigantes, itens de loja/LGPD (política, ID definitivo, IA por servidor, R8, tirar USE_EXACT_ALARM/RECORD_AUDIO).
-- Depois: v0.27 skills → v0.28 tarefas programadas (`docs/PLANO-ATE-V1.md`).
+- Próximo APK: correções do teste da 0.27 + **v0.28 tarefas programadas** (`docs/PLANO-ATE-V1.md`); a lista de skills é ajustada com o usuário.
 
 ## 5. Lembretes técnicos
 - App Android só compila no CI; aqui só módulos JVM. Google Maven bloqueado aqui; npm, PyPI e raw.githubusercontent funcionam; Hugging Face não.

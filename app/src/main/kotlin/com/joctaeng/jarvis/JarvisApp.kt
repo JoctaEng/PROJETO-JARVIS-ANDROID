@@ -46,6 +46,8 @@ class JarvisApp : Application() {
 
     /** Caminhos que deram certo em cada app (memória de caminhos, v0.26). */
     val recipes: com.joctaeng.jarvis.mind.memory.RecipeBook by lazy { com.joctaeng.jarvis.mind.memory.RecipeBook(File(filesDir, "memory/caminhos.json")) }
+    /** Skills (v0.27): as prontas + as que o usuário ensina. */
+    val skills: com.joctaeng.jarvis.mind.memory.SkillBook by lazy { com.joctaeng.jarvis.mind.memory.SkillBook(File(filesDir, "memory/skills.json")) }
 
     override fun onCreate() {
         super.onCreate()

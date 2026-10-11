@@ -51,7 +51,7 @@ Histórico completo e atualizado em `docs/FASE-2.md`. Resumo:
 - **Voz**: Gemini TTS (natural) → Kokoro offline (3–8× mais lento que o tempo real neste aparelho, desligado no Automático) → voz do Android. Conta Google no **Tier 1: 100 pedidos/dia no modelo de voz** (conferir limite real em ai.dev/rate-limit; decisão de subir de camada é do usuário).
 - **Sem janela de chat**: modo legenda (balão) em vez de abrir o chat inteiro.
 - **Acessibilidade**: o plano dizia "só quando realmente necessário"; foi implementada para controlar a tela (ler, tocar, digitar, rolar, navegar), com senhas nunca lidas e confirmação em ações de risco.
-- **Habilidades**: "fechar o dia" virou a ferramenta `resumo_do_dia`; **ainda falta o usuário ensinar rotinas próprias** (item 28 do plano).
+- **Habilidades**: na 0.27.0 entrou a biblioteca de skills (27 prontas) e o usuário **ensina rotinas próprias** falando ("quando eu disser X, faça Y") ou em Minhas skills.
 - **Relatório de erros**: virou o detector completo (resumo de todos os erros, escuta passo a passo, logcat).
 - **Mic/escuta**: um reconhecedor por vez (conversa > comandos enquanto fala > "Oi Joca"); continuação reaproveita o reconhecedor.
 - **Bip do microfone**: só silenciável com acesso a "Não perturbe" (o usuário concordou em dar).

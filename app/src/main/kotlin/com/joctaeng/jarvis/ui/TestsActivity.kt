@@ -156,6 +156,10 @@ class TestsActivity : ComponentActivity() {
                 val ok = getSystemService(android.app.NotificationManager::class.java).isNotificationPolicyAccessGranted
                 Outcome(ok, if (ok) "liberado" else "NÃO liberado (Ajustes do Android → Acesso aos modos)")
             },
+            Case("skills", "Skills", "acha a skill de \"modo aula\" e \"lista de compras\"") {
+                val a = app.skills.match("modo aula")?.name; val b = app.skills.match("coloca leite na lista de compras")?.name
+                Outcome(a != null && b != null, "modo aula → ${a ?: "nenhuma"}; lista de compras → ${b ?: "nenhuma"}; ${app.skills.all().count { it.enabled }} ligadas")
+            },
             Case("cerebro", "Cérebro (IA)", "pede um \"ok\" e mede o tempo") {
                 val provider = app.conversation.configuredProviders().firstOrNull() ?: return@Case Outcome(false, "nenhum cérebro configurado")
                 val t0 = System.currentTimeMillis(); val sb = StringBuilder(); var err: String? = null

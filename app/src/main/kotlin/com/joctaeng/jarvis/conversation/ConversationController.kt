@@ -179,6 +179,15 @@ class ConversationController(private val app: JarvisApp) {
                     if (speak) voice.awaitIdle()
                     return@launch
                 }
+                // "Quando eu disser X, faça Y": ensina uma skill nova (v0.27).
+                val lesson = com.joctaeng.jarvis.mind.memory.SkillTeaching.parse(clean)
+                if (lesson != null && !settings.privateMode) {
+                    val skill = withContext(Dispatchers.IO) { app.skills.teach(lesson.trigger, lesson.steps) }
+                    app.events.info("skills", "aprendida: \"${skill.triggers.first()}\"")
+                    say("Aprendi! Quando você disser \"${skill.triggers.first()}\", eu faço: ${skill.steps}", Emotion.HAPPY, speak)
+                    if (speak) voice.awaitIdle()
+                    return@launch
+                }
                 val command = MemoryCommands.parse(clean)
                 if (command != null) handleMemory(command, speak) else respond(speak)
                 if (speak) voice.awaitIdle()
@@ -311,6 +320,9 @@ class ConversationController(private val app: JarvisApp) {
         val onlyLocal = providers.all { it.location == ProviderLocation.ON_DEVICE } || settings.brainPreference == BrainPreference.LOCAL_ONLY
         val memories = app.memory.all().map { if (it.category == "geral") it.text else "(${it.category}) ${it.text}" }
         val lastUser = _entries.value.lastOrNull { it.role == Role.USER }?.text.orEmpty()
+        // Skill pedida ("modo aula", "preparar aula", ou uma ensinada): os passos dela entram no prompt deste turno.
+        val activeSkill = if (settings.autonomy == AutonomyLevel.OBSERVER) null else app.skills.match(lastUser)
+        activeSkill?.let { app.events.info("skills", "skill ativa: ${it.name}") }
         val tools = if (settings.autonomy == AutonomyLevel.OBSERVER) emptyList() else app.toolbox.enabledTools()
         val version = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull() ?: "?"
         val summaries = if (useSummaries) app.summaries.activeContext(if (onlyLocal) LOCAL_SUMMARY_CHARS else PersonaEngine.MAX_SUMMARY_CHARS) else ""
@@ -331,7 +343,9 @@ class ConversationController(private val app: JarvisApp) {
             compact = compact,
             // No cérebro local, o prompt precisa caber numa leitura rápida: ferramentas só quando o pedido sugere ação.
             toolsSection = if (tools.isEmpty() || !toolsNeeded(compact)) "" else ToolProtocol.systemSection(tools) +
-                (if (compact) "" else app.recipes.find(lastUser)?.let { "\n" + app.recipes.describe(it) }.orEmpty()),
+                (activeSkill?.let { "\n" + app.skills.describe(it) }.orEmpty()) +
+                (if (compact) "" else "\nSKILLS (pedidos curtos que viram passos combinados; o usuário ensina novas com \"quando eu disser X, faça Y\" ou skill_ensinar): " + app.skills.catalogLine()) +
+                (if (compact || activeSkill != null) "" else app.recipes.find(lastUser)?.let { "\n" + app.recipes.describe(it) }.orEmpty()),
             userBio = if (compact) settings.userBio.take(LOCAL_BIO_CHARS) else settings.userBio,
             summaries = if (compact) summaries.take(LOCAL_SUMMARY_CHARS) else summaries,
             selfSection = SelfKnowledge.section(
@@ -544,6 +558,7 @@ class ConversationController(private val app: JarvisApp) {
             else "acesso às notificações desligado (o usuário liga em Meu Euno → Notificações e Gmail)")
         add(if (settings.gmailConnected) "Gmail CONECTADO (só leitura): gmail_buscar e gmail_ler" else "Gmail ainda não conectado (Meu Euno → Notificações e Gmail → Conectar Gmail)")
         add("o botão Nova guarda um resumo da conversa e começa outra")
+        add("skills (habilidades): ${app.skills.all().count { it.enabled }} ligadas — ex.: modo aula, preparar aula, lista de exercícios, lista de compras, o que chegou, fechar o dia; o usuário ensina novas com \"quando eu disser X, faça Y\" ou em Meu Euno → Minhas skills")
         add("guardar fatos na memória só com as ferramentas memoria_guardar/memoria_esquecer ou quando ele diz \"lembre que…\"")
     }
 
@@ -615,7 +630,7 @@ class ConversationController(private val app: JarvisApp) {
     private fun toolsNeeded(compact: Boolean): Boolean {
         if (!compact || OverlayBus.acting.value) return true
         val last = _entries.value.lastOrNull { it.role == Role.USER && !it.note }?.text ?: return false
-        return ToolIntent.likely(last)
+        return ToolIntent.likely(last) || app.skills.match(last) != null
     }
 
     private fun add(entry: ChatEntry) {
