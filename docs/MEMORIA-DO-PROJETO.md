@@ -29,6 +29,7 @@ Origem: conversa do usuário com outro assistente (ChatGPT) que gerou a especifi
 - Quando o usuário disser que uma ferramenta/ambiente não alcança algo (YouTube, ChatGPT, vídeo grande), dizer o limite e pedir o formato que eu leio (texto colado, prints, documento no Drive).
 - Modelo de IA: ele escolhe qual modelo usar na sessão; não colocar identificador de modelo em commits, docs ou código.
 
+- **Estratégia aprovada (pedido 81): o Euno age sozinho; a IA só conversa e traduz o que ele não entende.** Não deixar o Euno "burro" (conversa fluida), nem destruir o que já funciona. Versão 1 para mostrar/vender tem de ser impecável.
 - **Cada APK novo = correções do último teste + o próximo passo do plano** (`docs/PLANO-ATE-V1.md`). Nunca entregar versão só de correções; as integrações combinadas seguem em toda versão (pedido 77).
 - **Horário: sempre o de Brasília** (UTC−3) ao falar com o usuário; converter o que as ferramentas mostram em UTC (pedido 68).
 

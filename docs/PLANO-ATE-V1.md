@@ -44,13 +44,21 @@
 - Agendador do Android (WorkManager/AlarmManager). Ao terminar, avisa por notificação ou fala, conforme a escolha.
 - Ações de risco (enviar, pagar, apagar) **nunca rodam sozinhas**: pedem confirmação. Há histórico de execuções e botão "parar todas".
 
-## v0.29 — Fase 3 "Ele cresce comigo"
+## v0.29 — "Euno primeiro, IA depois" (pedido 81) — APROVADA; começa depois que o usuário mandar o TXT da conversa offline
+- **Motor próprio de pedidos** na frente do cérebro: reconhece o pedido (frases + sinônimos, data/hora/nome/app), extrai os dados e chama a ferramenta direto; responde com frases prontas. Sem IA, sem gasto, igual online e offline.
+- **IA só como tradutora**: se o motor não entende, um prompt curto (sem a lista de ferramentas) pede à IA um comando normalizado (intenção + dados); o Euno executa. Se ainda assim não der, diz o que entendeu e o que faltou (nada de "todos os cérebros falharam").
+- **Catálogo por app**, nesta ordem de prioridade: Google Agenda, agenda local (Xiaomi), Gmail, Joca Finanças, EduMath, WhatsApp, Instagram; depois os demais mais usados. Modelos de frase × verbos × dados geram centenas/milhares de variações, **cada uma coberta por teste**.
+- **Conversa continua com a IA**: papo, dúvidas e raciocínio seguem fluidos (o motor só assume o que é comando claro). O caminho atual com o Gemini fica intacto como reserva.
+- **Medir**: o relatório mostra quantos pedidos foram resolvidos pelo motor, quantos pela IA-tradutora e quantos pelo caminho antigo, e o tempo de cada um.
+- Meta de qualidade: pedidos de ferramenta atendidos rápido, com certeza; vale para a v1 comercial.
+
+## v0.30 — Fase 3 "Ele cresce comigo" (era v0.29)
 - Memória por sentido (embeddings).
 - Backup e restauração no Drive.
 - EduMath e outros conectores (MCP) testados no aparelho e adicionados sem recompilar.
 - Pacotes de skills para importar e exportar.
 
-## v0.30 — Fase 4 "Organize meu dia"
+## v0.31 — Fase 4 "Organize meu dia" (era v0.30)
 - Planejar o dia ponta a ponta: agenda, tarefas, mensagens e lembretes, com revisão do usuário antes de executar.
 - Rotinas que se ajustam ao uso.
 
