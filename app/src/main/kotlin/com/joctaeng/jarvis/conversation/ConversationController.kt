@@ -518,8 +518,8 @@ class ConversationController(private val app: JarvisApp) {
             return
         }
         val onlyLocal = providers.all { it.location == ProviderLocation.ON_DEVICE } || settings.brainPreference == BrainPreference.LOCAL_ONLY
-        val memories = app.memory.all().map { if (it.category == "geral") it.text else "(${it.category}) ${it.text}" }
         val lastUser = _entries.value.lastOrNull { it.role == Role.USER }?.text.orEmpty()
+        val memories = app.memoryRecall.relevantLines(lastUser, k = 8)
         // Skill pedida ("modo aula", "preparar aula", ou uma ensinada): os passos dela entram no prompt deste turno.
         val activeSkill = if (settings.autonomy == AutonomyLevel.OBSERVER) null else app.skills.match(lastUser)
         activeSkill?.let { app.events.info("skills", "skill ativa: ${it.name}") }

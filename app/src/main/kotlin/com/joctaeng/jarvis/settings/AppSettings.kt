@@ -163,6 +163,8 @@ class AppSettings(context: Context) {
     /** Silencia por instantes o "bip" do reconhecimento de voz (volumes de sistema/notificação; não toca na música). */
     var muteMicBeep by boolean("muteMicBeep", true)
     var privateMode by boolean("privateMode", false)
+    /** v0.30: Busca semântica na memória com vetores do LiteRT-LM (EmbeddingGemma 2). Desligado por padrão. */
+    var semanticMemory by boolean("semanticMemory", false)
     /** Marcado sozinho quando o Kokoro sintetiza bem mais devagar que o tempo real neste aparelho (modo Automático o evita). */
     var kokoroTooSlow by boolean("kokoroTooSlow", false)
 

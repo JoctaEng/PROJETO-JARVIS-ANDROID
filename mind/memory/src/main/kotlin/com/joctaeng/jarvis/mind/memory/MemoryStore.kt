@@ -42,12 +42,27 @@ object MemoryCategory {
 }
 
 /**
+ * Quem quiser saber quando a memória muda (ex.: o índice de significado, para apagar o vetor junto). Os avisos saem de dentro do
+ * MemoryStore, depois de gravar; quem implementa deve ser rápido e não lançar exceção (o MemoryStore ignora as que lançar).
+ */
+interface MemoryListener {
+    fun onAdded(item: MemoryItem) {}
+    fun onUpdated(item: MemoryItem) {}
+    fun onRemoved(id: String) {}
+    fun onCleared() {}
+}
+
+/**
  * Memória persistente simples do MVP 1: um arquivo JSON privado do app.
  * Ver docs/ADR/0006-memoria-do-mvp1.md (criptografia e busca vetorial vêm depois).
  */
 class MemoryStore(private val file: File, private val clock: () -> Long = System::currentTimeMillis) {
     private val json = Json { prettyPrint = true }
     private val items = mutableListOf<MemoryItem>()
+
+    /** Opcional: avisado de toda criação, edição e remoção (v0.30, índice de significado). */
+    @Volatile
+    var listener: MemoryListener? = null
 
     init {
         load()
@@ -61,7 +76,12 @@ class MemoryStore(private val file: File, private val clock: () -> Long = System
         val item = MemoryItem(UUID.randomUUID().toString(), text.trim(), source, reason, clock(), MemoryCategory.normalize(category))
         items += item
         save()
+        notifyListener { it.onAdded(item) }
         return item
+    }
+
+    private inline fun notifyListener(block: (MemoryListener) -> Unit) {
+        listener?.let { runCatching { block(it) } }
     }
 
     /** Troca o texto e/ou a categoria de uma memória (editar em "Minha Memória"). */
@@ -71,6 +91,8 @@ class MemoryStore(private val file: File, private val clock: () -> Long = System
         if (i < 0 || text.isBlank()) return false
         items[i] = items[i].copy(text = text.trim(), category = MemoryCategory.normalize(category))
         save()
+        val updated = items[i]
+        notifyListener { it.onUpdated(updated) }
         return true
     }
 
@@ -88,7 +110,10 @@ class MemoryStore(private val file: File, private val clock: () -> Long = System
     @Synchronized
     fun remove(id: String): Boolean {
         val removed = items.removeAll { it.id == id }
-        if (removed) save()
+        if (removed) {
+            save()
+            notifyListener { it.onRemoved(id) }
+        }
         return removed
     }
 
@@ -96,6 +121,7 @@ class MemoryStore(private val file: File, private val clock: () -> Long = System
     fun clear() {
         items.clear()
         save()
+        notifyListener { it.onCleared() }
     }
 
     /**
@@ -115,6 +141,7 @@ class MemoryStore(private val file: File, private val clock: () -> Long = System
         } ?: return null
         items.remove(target)
         save()
+        listener?.onRemoved(target.id)
         return target
     }
 

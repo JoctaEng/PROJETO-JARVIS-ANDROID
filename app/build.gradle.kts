@@ -68,6 +68,7 @@ dependencies {
     implementation(project(":mind:provider-cloud"))
     implementation(project(":mind:persona"))
     implementation(project(":mind:memory"))
+    implementation(project(":mind:embed"))
     implementation(project(":mind:intent"))
     implementation(project(":action:gateway"))
     implementation(project(":action:mcp"))

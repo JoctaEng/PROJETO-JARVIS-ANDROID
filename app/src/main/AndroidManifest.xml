@@ -185,6 +185,10 @@
             android:name=".poc.ModelDownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".embed.EmbeddingDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <!-- v0.28: tarefas programadas. -->
         <receiver android:name=".tasks.TaskAlarmReceiver" android:exported="false" />
         <receiver android:name=".tasks.TaskBootReceiver" android:exported="true">

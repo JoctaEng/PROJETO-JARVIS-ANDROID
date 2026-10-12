@@ -53,8 +53,9 @@ class ReportCollector(private val app: JarvisApp) {
             "Voz offline Piper" to "escolhida=${s.piperVoice}; baixadas=${com.joctaeng.jarvis.voice.PiperVoice.VOICES.filter { runCatching { app.voice.piper.installed(it) }.getOrDefault(false) }.joinToString(",") { it.id }.ifBlank { "nenhuma" }}",
             "Pedidos por caminho (desde a instalação)" to runCatching { app.engineStats.summary() }.getOrDefault("?"),
             "Bateria" to "${runCatching { DeviceState.batteryPercent(app) }.getOrDefault(-1)}%",
+            "Memória por sentido" to "ligada=${s.semanticMemory}; modeloPresente=${app.embeddingRuntime.isAvailable}; memóriasIndexadas=${app.embeddingIndex.count()}; cargaMs=${app.embeddingRuntime.lastLoadTimeMs}; consultaMédiaMs=${app.embeddingRuntime.avgQueryTimeMs}",
             "Configuração" to "cérebro=${s.brainPreference.name}; voz=${s.voiceEngine.name}; " +
-                "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; kokoroLento=${s.kokoroTooSlow}; paciência=${s.listenPatienceMs} ms; ouvirEnquantoFala=${s.bargeIn}",
+                "personagem=${s.character.id}; autonomia=${s.autonomy.name}; privado=${s.privateMode}; memóriaPorSentido=${s.semanticMemory}; kokoroLento=${s.kokoroTooSlow}; paciência=${s.listenPatienceMs} ms; ouvirEnquantoFala=${s.bargeIn}",
         )
         if (headerOnly) return header.joinToString("\n") { "${it.first}: ${it.second}" }
         val sections = buildList {

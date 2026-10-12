@@ -1434,6 +1434,140 @@ class SettingsActivity : ComponentActivity() {
                     }
                 }) { Text(if (confirmClear) "Toque de novo para apagar tudo" else "Apagar todas") }
             }
+
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+
+            // v0.30: Memória por sentido (EmbeddingGemma 2)
+            Text("Memória por sentido (EmbeddingGemma 2)", style = MaterialTheme.typography.titleSmall)
+            Hint("Acha memórias pelo significado em vez de apenas palavras exatas (ex.: \"aniversário da mãe\" encontra \"o aniversário dela é em 3 de maio\"). Usa o modelo local EmbeddingGemma 2 (~157 MB).")
+
+            var semanticEnabled by remember { mutableStateOf(settings.semanticMemory) }
+            val downloadState = remember { mutableStateOf(app.embeddingDownload.current()) }
+            var verifyStatus by remember { mutableStateOf("") }
+            var isVerifying by remember { mutableStateOf(false) }
+            var backfillStatus by remember { mutableStateOf("") }
+            var isBackfilling by remember { mutableStateOf(false) }
+            var indexedCount by remember { mutableIntStateOf(app.embeddingIndex.count()) }
+
+            LaunchedEffect(Unit) {
+                while (true) {
+                    downloadState.value = app.embeddingDownload.current()
+                    indexedCount = app.embeddingIndex.count()
+                    delay(1_000)
+                }
+            }
+
+            val modelExists = app.embeddingDownload.target.isFile && app.embeddingDownload.target.length() > 0
+
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("Ligar memória por sentido", style = MaterialTheme.typography.bodyMedium)
+                    if (!modelExists) Hint("Baixe o modelo abaixo para ativar.")
+                }
+                Switch(
+                    checked = semanticEnabled && modelExists,
+                    enabled = modelExists && !isBackfilling,
+                    onCheckedChange = { on ->
+                        settings.semanticMemory = on
+                        semanticEnabled = on
+                        if (on) {
+                            isBackfilling = true
+                            backfillStatus = "Atualizando índice de memórias…"
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                val done = app.memoryIndexer.backfill(app.memory.all()) { current, total ->
+                                    backfillStatus = "Indexando memórias: $current de $total…"
+                                }
+                                indexedCount = app.embeddingIndex.count()
+                                isBackfilling = false
+                                backfillStatus = "Índice pronto: $done memórias indexadas."
+                            }
+                        }
+                    }
+                )
+            }
+
+            Text("$indexedCount de ${items.size} memórias com índice", style = MaterialTheme.typography.bodySmall)
+
+            when (val s = downloadState.value) {
+                is com.joctaeng.jarvis.embed.EmbeddingDownload.State.Running -> {
+                    val pct = if (s.totalBytes > 0) (s.downloadedBytes * 100 / s.totalBytes).toInt() else 0
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        LinearProgressIndicator(progress = { pct / 100f }, modifier = Modifier.fillMaxWidth())
+                        Text(
+                            "${s.downloadedBytes shr 20} de ${if (s.totalBytes > 0) s.totalBytes shr 20 else 157} MB ($pct%)" +
+                                (s.waitingReason?.let { " — $it" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        OutlinedButton(onClick = { app.embeddingDownload.cancel() }) { Text("Cancelar download") }
+                    }
+                }
+                is com.joctaeng.jarvis.embed.EmbeddingDownload.State.Failed -> {
+                    Text("Falha no download: ${s.reason}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { app.embeddingDownload.start() }) { Text("Tentar novamente") }
+                        OutlinedButton(onClick = { app.embeddingDownload.cancel() }) { Text("Limpar") }
+                    }
+                }
+                else -> {
+                    if (!modelExists) {
+                        Button(onClick = { app.embeddingDownload.start() }) {
+                            Text("Baixar EmbeddingGemma 2 (~157 MB)")
+                        }
+                        Hint("Aviso: o download é feito de preferência pelo Wi-Fi para não gastar sua franquia móvel.")
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                enabled = !isVerifying,
+                                onClick = {
+                                    isVerifying = true
+                                    verifyStatus = "Calculando SHA-256 do arquivo…"
+                                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                        val hash = com.joctaeng.jarvis.poc.ModelIntegrity.sha256(app.embeddingDownload.target)
+                                        val ok = hash.equals(com.joctaeng.jarvis.embed.EmbeddingDownload.EXPECTED_SHA256, ignoreCase = true)
+                                        isVerifying = false
+                                        verifyStatus = if (ok) "Arquivo íntegro e original (SHA-256 confere)."
+                                        else "ARQUIVO DANIFICADO: SHA-256 não confere. Apague e baixe novamente."
+                                    }
+                                }
+                            ) {
+                                Text(if (isVerifying) "Conferindo…" else "Conferir arquivo")
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    settings.semanticMemory = false
+                                    semanticEnabled = false
+                                    app.embeddingDownload.cancel()
+                                    app.embeddingDownload.target.delete()
+                                    app.embeddingIndex.clear()
+                                    indexedCount = 0
+                                    verifyStatus = ""
+                                    backfillStatus = ""
+                                }
+                            ) {
+                                Text("Apagar modelo")
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (verifyStatus.isNotBlank()) Hint(verifyStatus)
+            if (backfillStatus.isNotBlank()) Hint(backfillStatus)
+
+            var hfToken by remember { mutableStateOf(app.secrets.get("hf_token")) }
+            OutlinedTextField(
+                value = hfToken,
+                onValueChange = {
+                    hfToken = it
+                    app.secrets.put("hf_token", it.trim())
+                },
+                label = { Text("Token do Hugging Face (opcional, só se pedir login)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
         val target = editing
         if (adding || target != null) {

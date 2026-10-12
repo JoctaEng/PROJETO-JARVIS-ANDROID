@@ -35,6 +35,7 @@ include(
     ":mind:orchestrator",
     ":mind:persona",
     ":mind:memory",
+    ":mind:embed",
     ":mind:intent",
     ":mind:provider-cloud",
     ":action:gateway",

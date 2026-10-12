@@ -30,11 +30,28 @@ class JarvisApp : Application() {
     lateinit var modelStore: ModelStore
     lateinit var modelDownload: ModelDownload
         private set
+    lateinit var embeddingDownload: com.joctaeng.jarvis.embed.EmbeddingDownload
+        private set
+    lateinit var embeddingRuntime: com.joctaeng.jarvis.embed.EmbeddingRuntime
+        private set
+    lateinit var embeddingIndex: com.joctaeng.jarvis.mind.embed.EmbeddingIndexStore
+        private set
+    lateinit var memoryIndexer: com.joctaeng.jarvis.mind.embed.MemoryIndexer
+        private set
+    lateinit var memoryRecall: com.joctaeng.jarvis.mind.embed.MemoryRecall
+        private set
     lateinit var settings: AppSettings
         private set
     lateinit var secrets: SecretStore
         private set
-    val memory: MemoryStore by lazy { MemoryStore(File(filesDir, "memory/memory.json")) }
+    val memory: MemoryStore by lazy {
+        MemoryStore(File(filesDir, "memory/memory.json")).also { store ->
+            store.listener = com.joctaeng.jarvis.mind.embed.IndexingMemoryListener(
+                indexer = memoryIndexer,
+                isPrivate = { settings.privateMode },
+            )
+        }
+    }
     val summaries: com.joctaeng.jarvis.mind.memory.SummaryStore by lazy { com.joctaeng.jarvis.mind.memory.SummaryStore(File(filesDir, "memory/resumos.json")) }
     val voice: VoiceOutput by lazy { VoiceOutput(this, settings, events) { brains.geminiKey() }.also { it.azureKey = { secrets.get(SecretStore.AZURE_SPEECH_KEY) }; it.start() } }
     /** Cérebros online cadastrados (vários, com ordem); na 1ª vez traz as chaves das versões anteriores. */
@@ -64,6 +81,23 @@ class JarvisApp : Application() {
         modelDownload = ModelDownload(this, modelStore)
         settings = AppSettings(this)
         secrets = SecretStore(this)
+
+        val embedScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        embeddingDownload = com.joctaeng.jarvis.embed.EmbeddingDownload(this, modelStore.directory)
+        embeddingRuntime = com.joctaeng.jarvis.embed.EmbeddingRuntime(embeddingDownload.target, embedScope, dims = 256)
+        embeddingIndex = com.joctaeng.jarvis.mind.embed.EmbeddingIndexStore(File(filesDir, "memory/embeddings.json"))
+        memoryIndexer = com.joctaeng.jarvis.mind.embed.MemoryIndexer(
+            embedder = embeddingRuntime,
+            store = embeddingIndex,
+            scope = embedScope,
+        )
+        memoryRecall = com.joctaeng.jarvis.mind.embed.MemoryRecall(
+            memory = memory,
+            index = embeddingIndex,
+            embedder = embeddingRuntime,
+            isEnabled = { settings.semanticMemory },
+        )
+
         // Alarmes das tarefas programadas (o Android os apaga quando o app é atualizado).
         runCatching { com.joctaeng.jarvis.tasks.TaskScheduler.rescheduleAll(this) }
     }
@@ -111,8 +145,11 @@ class JarvisApp : Application() {
         // Só descarrega com memória realmente crítica. Antes, qualquer nível >= RUNNING_LOW (inclusive UI_HIDDEN, ao fechar a
         // conversa) tirava o modelo da memória e a próxima resposta levava ~1 minuto para recarregar 2,4 GB.
         if (level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL || level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
-            events.warn("sistema", "memória crítica (nível $level): liberando o modelo local")
+            events.warn("sistema", "memória crítica (nível $level): liberando o modelo local e de embeddings")
             conversation.releaseLocalModel()
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                runCatching { embeddingRuntime.close() }
+            }
         } else if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
             events.info("sistema", "aviso de memória (nível $level); modelo local mantido")
         }
