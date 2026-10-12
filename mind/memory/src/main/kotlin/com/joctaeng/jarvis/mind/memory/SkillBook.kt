@@ -148,7 +148,10 @@ class SkillBook(private val file: File?, private val clock: () -> Long = System:
             f.parentFile?.mkdirs()
             val tmp = File(f.parentFile, f.name + ".tmp")
             tmp.writeText(json.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), root))
-            tmp.renameTo(f)
+            if (!tmp.renameTo(f)) {
+                f.writeText(tmp.readText())
+                tmp.delete()
+            }
         }
     }
 
