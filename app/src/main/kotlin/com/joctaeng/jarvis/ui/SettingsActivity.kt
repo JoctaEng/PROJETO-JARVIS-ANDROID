@@ -17,10 +17,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
@@ -1449,12 +1452,12 @@ class SettingsActivity : ComponentActivity() {
             var isVerifying by remember { mutableStateOf(false) }
             var backfillStatus by remember { mutableStateOf("") }
             var isBackfilling by remember { mutableStateOf(false) }
-            var indexedCount by remember { mutableIntStateOf(app.embeddingIndex.count()) }
+            var indexedCount by remember { mutableIntStateOf(app.embeddingIndex.size()) }
 
             LaunchedEffect(Unit) {
                 while (true) {
                     downloadState.value = app.embeddingDownload.current()
-                    indexedCount = app.embeddingIndex.count()
+                    indexedCount = app.embeddingIndex.size()
                     delay(1_000)
                 }
             }
@@ -1479,7 +1482,7 @@ class SettingsActivity : ComponentActivity() {
                                 val done = app.memoryIndexer.backfill(app.memory.all()) { current, total ->
                                     backfillStatus = "Indexando memórias: $current de $total…"
                                 }
-                                indexedCount = app.embeddingIndex.count()
+                                indexedCount = app.embeddingIndex.size()
                                 isBackfilling = false
                                 backfillStatus = "Índice pronto: $done memórias indexadas."
                             }
@@ -1557,7 +1560,7 @@ class SettingsActivity : ComponentActivity() {
             if (verifyStatus.isNotBlank()) Hint(verifyStatus)
             if (backfillStatus.isNotBlank()) Hint(backfillStatus)
 
-            var hfToken by remember { mutableStateOf(app.secrets.get("hf_token")) }
+            var hfToken by remember { mutableStateOf(app.secrets.get("hf_token").orEmpty()) }
             OutlinedTextField(
                 value = hfToken,
                 onValueChange = {

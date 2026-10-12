@@ -75,7 +75,7 @@ class EmbeddingDownload(private val context: Context, private val directory: Fil
 
     suspend fun run(progress: (State) -> Unit) {
         state = State.Running(partial.length(), 0, null).also(progress)
-        val token = JarvisApp.from(appContext).secrets.get("hf_token").trim()
+        val token = JarvisApp.from(appContext).secrets.get("hf_token")?.trim().orEmpty()
         var attempt = 0
         while (coroutineContext.isActive) {
             attempt++
@@ -100,7 +100,7 @@ class EmbeddingDownload(private val context: Context, private val directory: Fil
         }
     }
 
-    private fun downloadOnce(token: String, progress: (State) -> Unit): State {
+    private suspend fun downloadOnce(token: String, progress: (State) -> Unit): State {
         val have = if (partial.isFile) partial.length() else 0L
         val conn = (URL(MODEL_URL).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000

@@ -70,6 +70,7 @@ dependencies {
     implementation(project(":mind:memory"))
     implementation(project(":mind:embed"))
     implementation(project(":mind:intent"))
+    implementation(libs.litertlm.android)
     implementation(project(":action:gateway"))
     implementation(project(":action:mcp"))
     // Voz offline (Kokoro): AAR oficial do sherpa-onnx v1.13.8, baixado pelo CI dos releases do GitHub (não está no Maven).

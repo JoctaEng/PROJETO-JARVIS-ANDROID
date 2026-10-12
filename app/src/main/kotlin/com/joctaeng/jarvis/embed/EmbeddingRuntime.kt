@@ -4,6 +4,8 @@ import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.EmbeddingEngine
 import com.google.ai.edge.litertlm.EmbeddingEngineConfig
 import com.google.ai.edge.litertlm.EmbeddingOptions
+import com.google.ai.edge.litertlm.EmbeddingResponse
+import com.google.ai.edge.litertlm.InputData
 import com.joctaeng.jarvis.mind.embed.EmbedPrompts
 import com.joctaeng.jarvis.mind.embed.EmbedRole
 import com.joctaeng.jarvis.mind.embed.TextEmbedder
@@ -64,17 +66,17 @@ class EmbeddingRuntime(
         if (texts.isEmpty()) return emptyList()
         val preparedTexts = texts.map { EmbedPrompts.format(it, role) }
 
-        return withTimeoutOrNull(3_000L) {
+        return kotlinx.coroutines.withTimeout(3_000L) {
             val start = System.currentTimeMillis()
-            val vectors = lock.withLock {
+            val vectors: List<FloatArray> = lock.withLock {
                 idleJob?.cancel()
                 val eng = ensureEngine()
                 withContext(Dispatchers.IO) {
                     val opts = EmbeddingOptions(outputSize = dims)
-                    val response = eng.computeEmbeddingBatch(preparedTexts, opts)
-                    response.embeddings.map { raw ->
-                        val floatArray = raw.floatArray
-                        VectorMath.truncate(floatArray, dims)
+                    val inputBatch: List<List<InputData>> = preparedTexts.map { listOf(InputData.Text(it)) }
+                    val responses: List<EmbeddingResponse> = eng.computeEmbeddingBatch(inputBatch, opts)
+                    responses.map { response ->
+                        VectorMath.truncate(response.embedding, dims)
                     }
                 }
             }
@@ -83,7 +85,7 @@ class EmbeddingRuntime(
             totalQueryTimeMs += elapsed
             scheduleUnload()
             vectors
-        } ?: throw kotlinx.coroutines.TimeoutCancellationException("Tempo esgotado (3s) gerando embeddings")
+        }
     }
 
     private suspend fun ensureEngine(): EmbeddingEngine = withContext(Dispatchers.IO) {

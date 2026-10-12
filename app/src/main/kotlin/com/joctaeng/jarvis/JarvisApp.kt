@@ -48,7 +48,8 @@ class JarvisApp : Application() {
         MemoryStore(File(filesDir, "memory/memory.json")).also { store ->
             store.listener = com.joctaeng.jarvis.mind.embed.IndexingMemoryListener(
                 indexer = memoryIndexer,
-                isPrivate = { settings.privateMode },
+                scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
+                active = { settings.semanticMemory && embeddingRuntime.isAvailable },
             )
         }
     }
@@ -85,17 +86,21 @@ class JarvisApp : Application() {
         val embedScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
         embeddingDownload = com.joctaeng.jarvis.embed.EmbeddingDownload(this, modelStore.directory)
         embeddingRuntime = com.joctaeng.jarvis.embed.EmbeddingRuntime(embeddingDownload.target, embedScope, dims = 256)
-        embeddingIndex = com.joctaeng.jarvis.mind.embed.EmbeddingIndexStore(File(filesDir, "memory/embeddings.json"))
-        memoryIndexer = com.joctaeng.jarvis.mind.embed.MemoryIndexer(
-            embedder = embeddingRuntime,
-            store = embeddingIndex,
-            scope = embedScope,
+        embeddingIndex = com.joctaeng.jarvis.mind.embed.EmbeddingIndexStore(
+            file = File(filesDir, "memory/embeddings.json"),
+            modelId = embeddingRuntime.modelId,
+            dims = 256,
         )
-        memoryRecall = com.joctaeng.jarvis.mind.embed.MemoryRecall(
-            memory = memory,
+        memoryIndexer = com.joctaeng.jarvis.mind.embed.MemoryIndexer(
             index = embeddingIndex,
             embedder = embeddingRuntime,
-            isEnabled = { settings.semanticMemory },
+            privateMode = { settings.privateMode },
+        )
+        memoryRecall = com.joctaeng.jarvis.mind.embed.MemoryRecall(
+            memories = { memory.all() },
+            index = embeddingIndex,
+            enabled = { settings.semanticMemory },
+            embedder = { if (embeddingRuntime.isAvailable) embeddingRuntime else null },
         )
 
         // Alarmes das tarefas programadas (o Android os apaga quando o app é atualizado).
@@ -147,9 +152,11 @@ class JarvisApp : Application() {
         if (level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL || level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
             events.warn("sistema", "memória crítica (nível $level): liberando o modelo local e de embeddings")
             conversation.releaseLocalModel()
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                runCatching { embeddingRuntime.close() }
-            }
+            Thread {
+                kotlinx.coroutines.runBlocking {
+                    runCatching { embeddingRuntime.close() }
+                }
+            }.start()
         } else if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
             events.info("sistema", "aviso de memória (nível $level); modelo local mantido")
         }
