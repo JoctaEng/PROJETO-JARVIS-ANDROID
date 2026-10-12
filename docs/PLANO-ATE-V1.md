@@ -53,7 +53,7 @@
 - Meta de qualidade: pedidos de ferramenta atendidos rápido, com certeza; vale para a v1 comercial.
 
 ## v0.30 — Fase 3 "Ele cresce comigo" (era v0.29)
-- Memória por sentido (embeddings).
+- Memória por sentido (embeddings) — **modelo escolhido pelo usuário (pedido 82): EmbeddingGemma 2** (Google, lançado em 06/10/2026, base Gemma 4, Apache 2.0, multimodal; só o módulo de texto precisa de ~191 MB de RAM e o completo ~567 MB, segundo reportagens; vetores reduzíveis a 512/256/128 dimensões; documentação no LiteRT-LM, "Embedding Models"). **Entra como OPÇÃO no próximo APK** (a memória continua funcionando sem ele). A conferir na hora de fazer, na fonte oficial (daqui não abre developers.google.com): arquivo/tamanho exato, se roda no LiteRT-LM 0.17.1 que usamos ou exige versão nova, prefixo de tarefa (consulta × documento), download pelo próprio app como o do Gemma.
 - Backup e restauração no Drive.
 - EduMath e outros conectores (MCP) testados no aparelho e adicionados sem recompilar.
 - Pacotes de skills para importar e exportar.
