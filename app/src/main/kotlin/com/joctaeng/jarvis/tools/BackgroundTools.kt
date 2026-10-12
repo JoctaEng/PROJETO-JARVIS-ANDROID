@@ -161,7 +161,7 @@ private class AgendaSave(context: Context) : BackgroundTool(
         val from = if (allDay) day.atStartOfDay(zone).toInstant().toEpochMilli() else start - 60_000L
         val to = if (allDay) from + 86_400_000L else start + 60_000L
         val wanted = normalizeTitle(title)
-        return runCatching {
+        val inInstances = runCatching {
             CalendarContract.Instances.query(
                 context.contentResolver,
                 arrayOf(CalendarContract.Instances.EVENT_ID, CalendarContract.Instances.TITLE, CalendarContract.Instances.BEGIN),
@@ -172,6 +172,28 @@ private class AgendaSave(context: Context) : BackgroundTool(
                     val begin = c.getLong(2)
                     val timeOk = allDay || kotlin.math.abs(begin - start) <= 60_000L
                     if (timeOk && normalizeTitle(c.getString(1).orEmpty()) == wanted) found = c.getLong(0)
+                }
+                found
+            }
+        }.getOrNull()
+        if (inInstances != null) return inInstances
+        // Teste da 0.29.0: o mesmo "futebol" foi criado duas vezes, porque a agenda do aparelho nem sempre preenche as
+        // instâncias. Procura também nos eventos guardados. Dia inteiro: meia-noite UTC, como ao salvar.
+        val (eventFrom, eventTo) = if (allDay) {
+            val utc = day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+            utc to utc + 86_400_000L
+        } else start - 60_000L to start + 60_000L
+        return runCatching {
+            context.contentResolver.query(
+                CalendarContract.Events.CONTENT_URI,
+                arrayOf(CalendarContract.Events._ID, CalendarContract.Events.TITLE),
+                "${CalendarContract.Events.DTSTART} >= ? AND ${CalendarContract.Events.DTSTART} < ? AND ${CalendarContract.Events.DELETED} = 0",
+                arrayOf(eventFrom.toString(), eventTo.toString()),
+                null,
+            )?.use { c ->
+                var found: Long? = null
+                while (found == null && c.moveToNext()) {
+                    if (normalizeTitle(c.getString(1).orEmpty()) == wanted) found = c.getLong(0)
                 }
                 found
             }

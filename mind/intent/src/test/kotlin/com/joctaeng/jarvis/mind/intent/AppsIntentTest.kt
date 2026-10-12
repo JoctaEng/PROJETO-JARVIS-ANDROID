@@ -263,6 +263,12 @@ class RealPhrasesTest {
             "O que é possível fazer" to "self.help",
             "Que dia é hoje" to "time.date",
             "e o feriado Nossa Senhora Aparecida é hoje ou é amanhã" to "time.holiday",
+            // do relatório da 0.29.0: estavam indo para a IA com ferramentas (caminho antigo)
+            "Como está o meu e-mail" to "gmail.unread",
+            "agora você vai me fazer um resumo do Joca finanças" to "fin.balance",
+            "confira minhas finanças" to "fin.balance",
+            "quais dívidas eu tenho fixas para esse mês" to "fin.pending",
+            "verifique se eu tenho algum cartão para pagar" to "fin.invoice",
         )) assertEquals(want, id(s), s)
     }
 

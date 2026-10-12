@@ -109,7 +109,9 @@ class TaskBook(private val file: File?, private val clock: () -> Long = System::
     @Synchronized
     fun add(task: ScheduledTask): ScheduledTask {
         val t = if (task.id.isBlank()) task.copy(id = "tarefa-${clock()}") else task
-        tasks.removeAll { it.id == t.id }
+        // Mesmo nome = a mesma tarefa, trocada (teste da 0.29.0: "Resumo de e-mails" foi criada três vezes).
+        val key = SkillBook.normalize(t.name)
+        tasks.removeAll { it.id == t.id || SkillBook.normalize(it.name) == key }
         tasks += t
         save()
         return t

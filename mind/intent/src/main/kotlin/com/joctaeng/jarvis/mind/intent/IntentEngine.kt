@@ -51,11 +51,87 @@ class IntentEngine(
 
     /** A IA traduziu o pedido em intenção + dados; o Euno executa pelo mesmo caminho dos pedidos normais. */
     @Synchronized
-    fun fromTranslation(intentId: String, slots: Map<String, String>, ctx: Ctx): Outcome {
+    fun fromTranslation(intentId: String, slots: Map<String, String>, ctx: Ctx, utterance: String): Outcome {
         val def = defs.firstOrNull { it.id == intentId } ?: return NoMatch
+        // Teste da 0.29.0: a IA inventou ações a partir de falas que não eram comando ("procure melhor" virou pesquisa
+        // "melhores formas…"; "ou Guardião" virou saldo; "acabei de ligar" acendeu a lanterna). Sem o pedido sustentar a
+        // intenção e os textos, não vale.
+        if (!sustained(def, slots, utterance)) return NoMatch
         val ex = syntheticExtract(slots, ctx)
-        val out = def.build(M(ex, slots, ctx, def.id))
-        return if (out is NoMatch) NoMatch else remember(out, def to M(ex, slots, ctx, def.id))
+        val m = M(ex, slots, ctx, def.id)
+        val out = def.build(m)
+        if (out is NoMatch) return NoMatch
+        return remember(confirmTranslated(out, summaryOf(def, slots)), def to m)
+    }
+
+    /** Palavras que a IA pode escolher como texto (título, contato, busca...): têm de sair do que o usuário disse. */
+    private val groundedSlots = setOf("titulo", "contato", "quem", "app", "assunto", "cat", "cartao", "aluno", "secao", "qual", "rotulo", "consulta", "pergunta")
+    private val pronouns = setOf("ela", "ele", "elas", "eles", "voce", "vc", "eu", "alguem", "ninguem")
+    private val stopWords = setOf(
+        "para", "pra", "com", "que", "uma", "uns", "umas", "dos", "das", "pelo", "pela", "isso", "esse", "essa", "este", "esta", "aqui", "ali",
+        "voce", "vou", "vai", "favor", "por", "sobre", "ainda", "muito", "mais", "tambem", "ele", "ela", "eles", "elas", "eu", "nos", "nas",
+        "ate", "quero", "preciso", "gostaria", "pode", "podia", "poderia", "faz", "fazer",
+    )
+    private val genericWords = setOf(
+        "como", "esta", "para", "pelo", "pela", "meu", "minha", "fazer", "favor", "dizer", "falar", "pode", "qual", "quais", "quando", "onde",
+        "isso", "dia", "hoje", "agora", "mais", "tambem", "fica", "ver", "veja", "vai", "vou",
+    )
+    /** Palavras de ação (liga, abre, marca...): não bastam para provar o assunto ("acabei de ligar" não é lanterna). */
+    private val verbWords = setOf(
+        "liga", "ligar", "ligue", "acende", "acenda", "abre", "abra", "abrir", "fecha", "feche", "fechar", "coloca", "coloque", "colocar",
+        "bota", "poe", "ponha", "usa", "use", "usar", "faz", "faca", "marca", "marque", "marcar", "manda", "mande", "mandar", "envia", "envie",
+        "enviar", "mostra", "mostre", "mostrar", "pesquisa", "pesquise", "pesquisar", "procura", "procure", "procurar", "busca", "busque",
+        "buscar", "fala", "fale", "falar", "diz", "diga", "dizer", "vai", "vou", "ir", "tenho", "tem", "quero", "preciso", "cria", "crie",
+        "criar", "programa", "programe", "lanca", "lance", "lancar", "anota", "anote", "anotar", "registra", "registre", "acabei", "acabou",
+        "pode", "consegue", "consegui", "olha", "olhe", "veja", "ver", "confere", "confira", "verifica", "verifique", "desliga", "desligue",
+        "apaga", "apague", "apagar", "tira", "tire", "muda", "mude", "remarca", "remarque",
+    )
+    /** Ações que mudam algo no celular ou em outro app: a IA só executa depois de um "sim". */
+    private val writeTools = setOf(
+        "agenda_salvar", "agenda_editar", "agenda_apagar", "whatsapp_mensagem", "lanterna", "nao_perturbe", "criar_alarme", "criar_timer",
+        "tarefa_criar", "tarefa_pausar", "tarefa_apagar", "joca_financas_lancar", "edumath_lancar_nota", "edumath_sincronizar_agora",
+        "tela_tocar", "tela_digitar",
+    )
+
+    private fun contentWords(text: String): List<String> =
+        PtText.fold(text).split(Regex("[^a-z0-9]+")).filter { it.length >= 3 && it !in stopWords }
+
+    private fun sustained(def: IntentDef, slots: Map<String, String>, utterance: String): Boolean {
+        val said = contentWords(utterance)
+        if (said.size < 2) return false
+        fun heard(w: String) = said.any { u -> u == w || (w.length >= 4 && u.length >= 4 && (u.startsWith(w.take(5)) || w.startsWith(u.take(5)))) }
+        val anchors = def.keywords.filter { it.length >= 4 && it !in genericWords }
+        val objects = anchors.filter { it !in verbWords }
+        val pool = objects.ifEmpty { anchors }
+        // Palavra-objeto ("agenda", "mensagem", "lanterna") ou, com contato/assunto/data dito, um verbo de ação ("manda pra Maria").
+        val named = slots.any { (k, v) -> (k in groundedSlots && v.isNotBlank()) || k in setOf("date", "time", "days", "duration_min") }
+        if (pool.isNotEmpty() && pool.none(::heard) && !(named && anchors.any(::heard))) return false
+        for ((name, value) in slots) {
+            if (name !in groundedSlots || value.isBlank()) continue
+            if (name == "contato" || name == "quem") {
+                if (PtText.fold(value).trim() in pronouns) return false
+            }
+            if (contentWords(value).any { !heard(it) }) return false
+        }
+        return true
+    }
+
+    private fun summaryOf(def: IntentDef, slots: Map<String, String>): String {
+        val what = def.describe.substringBefore(" (").trim()
+        val values = slots.values.filter { it.isNotBlank() }.joinToString(", ")
+        return if (values.isEmpty()) what else "$what ($values)"
+    }
+
+    private fun confirmTranslated(out: Outcome, summary: String): Outcome {
+        if (out !is Run || out.confirm != null) return out
+        if (out.plan.steps.none { it.tool in writeTools && !it.confirmed }) return out
+        return Ask("Entendi que você quer: $summary. Faço?", out.intentId) { ex, _ ->
+            when (Kit.yes(ex)) {
+                true -> Run(Plan(out.plan.steps.map { it.copy(confirmed = true) }, out.plan.then), out.intentId)
+                false -> Say("Tudo bem, não fiz nada.", out.intentId)
+                null -> null
+            }
+        }
     }
 
     fun definition(id: String): IntentDef? = defs.firstOrNull { it.id == id }

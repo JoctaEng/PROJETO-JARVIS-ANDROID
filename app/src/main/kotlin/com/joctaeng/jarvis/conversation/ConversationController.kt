@@ -386,20 +386,24 @@ class ConversationController(private val app: JarvisApp) {
     }
 
     private suspend fun engineCtx(): Ctx {
-        val now = System.currentTimeMillis()
-        val apps = appsCache?.takeIf { now - it.first < 300_000 }?.second
-            ?: runCatching { com.joctaeng.jarvis.tools.installedApps(app) }.getOrDefault(emptyList()).also { appsCache = now to it }
-        return Ctx(
-            now = java.time.ZonedDateTime.now(),
-            online = DeviceState.snapshot(app, privateMode = false).online,
-            tools = engineTools().map { it.name }.toSet(),
-            gmailConnected = settings.gmailConnected,
-            apps = apps,
-            userName = settings.userName,
-            brainName = configuredProviders().firstOrNull()?.displayName,
-            phoneControl = settings.phoneControl,
-            selfName = settings.displayName,
-        )
+        val brain = configuredProviders().firstOrNull()?.displayName
+        // Leituras pesadas (lista de apps, ferramentas do MCP) fora da thread principal: a 0.29.0 travou (ANR) num dia de teste.
+        return withContext(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            val apps = appsCache?.takeIf { now - it.first < 300_000 }?.second
+                ?: runCatching { com.joctaeng.jarvis.tools.installedApps(app) }.getOrDefault(emptyList()).also { appsCache = now to it }
+            Ctx(
+                now = java.time.ZonedDateTime.now(),
+                online = DeviceState.snapshot(app, privateMode = false).online,
+                tools = engineTools().map { it.name }.toSet(),
+                gmailConnected = settings.gmailConnected,
+                apps = apps,
+                userName = settings.userName,
+                brainName = brain,
+                phoneControl = settings.phoneControl,
+                selfName = settings.displayName,
+            )
+        }
     }
 
     /**
@@ -498,7 +502,7 @@ class ConversationController(private val app: JarvisApp) {
         val parsed = Translator.parse(text.toString(), engine.all)
         app.events.info("motor", "tradutor (${ms} ms${if (finished == null) ", tempo esgotado" else ""}): " + (parsed?.let { "${it.intentId} ${it.slots}" } ?: "sem tradução (${text.toString().take(80).replace('\n', ' ')})"))
         if (parsed == null) return null
-        return engine.fromTranslation(parsed.intentId, parsed.slots, ctx).takeIf { it !is NoMatch }
+        return engine.fromTranslation(parsed.intentId, parsed.slots, ctx, clean).takeIf { it !is NoMatch }
     }
 
     private suspend fun respond(speak: Boolean, retried: Boolean = false) {
@@ -526,7 +530,7 @@ class ConversationController(private val app: JarvisApp) {
         // Dois prompts: o completo (nuvem) e o enxuto (celular). Cada cérebro recebe só o que cabe nele.
         // Terceiro prompt (pedido 78): "enxuto" para cérebros com pouca cota por minuto (Groq grátis ~8 mil tokens/min):
         // só as ferramentas básicas e as do assunto, sem o catálogo de skills.
-        fun buildPrompt(compact: Boolean, lean: Boolean = false): String = PersonaEngine.systemPrompt(
+        fun buildPrompt(compact: Boolean, lean: Boolean = false, maxTools: Int = 8, noTools: Boolean = false): String = PersonaEngine.systemPrompt(
             userName = settings.userName,
             character = settings.persona,
             characterName = settings.characterName,
@@ -540,9 +544,12 @@ class ConversationController(private val app: JarvisApp) {
             ),
             compact = compact,
             // No cérebro local, o prompt precisa caber numa leitura rápida: ferramentas só quando o pedido sugere ação.
-            toolsSection = if (tools.isEmpty() || !toolsNeeded(compact)) "" else ToolProtocol.systemSection(
-                if (!lean) tools else com.joctaeng.jarvis.mind.orchestrator.ToolSelector.select(tools.map { it.name }, lastUser, activeSkill?.steps.orEmpty())
-                    .let { names -> tools.filter { it.name in names } },
+            toolsSection = if (noTools || tools.isEmpty() || !toolsNeeded(compact)) "" else ToolProtocol.systemSection(
+                (when {
+                    compact -> com.joctaeng.jarvis.mind.orchestrator.ToolSelector.forLocal(tools.map { it.name }, lastUser, activeSkill?.steps.orEmpty(), maxTools)
+                    lean -> com.joctaeng.jarvis.mind.orchestrator.ToolSelector.select(tools.map { it.name }, lastUser, activeSkill?.steps.orEmpty())
+                    else -> tools.map { it.name }
+                }).let { names -> tools.filter { it.name in names } },
             ) +
                 (activeSkill?.let { "\n" + app.skills.describe(it) }.orEmpty()) +
                 (if (compact || lean) "" else "\nSKILLS (pedidos curtos que viram passos combinados; o usuário ensina novas com \"quando eu disser X, faça Y\" ou skill_ensinar): " + app.skills.catalogLine()) +
@@ -567,13 +574,16 @@ class ConversationController(private val app: JarvisApp) {
             ),
         )
 
-        val prompt = buildPrompt(onlyLocal)
+        // Cérebro do celular: o maior prompt que cabe na janela de 4.096 tokens dele (a 0.29.0 mandava 38 mil caracteres).
+        val localPrompt = listOf(8, 4).asSequence().map { buildPrompt(true, maxTools = it) }.firstOrNull { it.length <= LOCAL_PROMPT_MAX_CHARS }
+            ?: buildPrompt(true, noTools = true)
+        val prompt = if (onlyLocal) localPrompt else buildPrompt(false)
         // Pedido com ferramentas: cérebros que já voltaram vazios com ferramentas nesta sessão vão para o fim da fila.
         val ordered = if (prompt.contains("<tools>")) providers.sortedBy { it.id in toolWeak } else providers
         val effective = if (onlyLocal) ordered else ordered.map { p ->
             // Cérebro do celular no meio da lista (fallback): recebe prompt/histórico enxutos, não os da nuvem.
             when {
-                p.location == ProviderLocation.ON_DEVICE -> CompactProvider(p, buildPrompt(true), LOCAL_HISTORY)
+                p.location == ProviderLocation.ON_DEVICE -> CompactProvider(p, localPrompt, LOCAL_HISTORY)
                 p.id in leanIds() -> LeanProvider(p, buildPrompt(false, lean = true), LEAN_HISTORY)
                 else -> p
             }
@@ -883,6 +893,8 @@ class ConversationController(private val app: JarvisApp) {
         const val HISTORY = 20
         /** Cérebro local: menos histórico e dossiê menor, para o prefill caber num celular comum. */
         const val LOCAL_HISTORY = 8
+        /** Teto do prompt do cérebro do celular (≈3,5 caracteres por token; sobra espaço para o histórico e a resposta). */
+        const val LOCAL_PROMPT_MAX_CHARS = 9_000
         const val LEAN_HISTORY = 10
         const val LOCAL_BIO_CHARS = 800
         const val LOCAL_SUMMARY_CHARS = 800

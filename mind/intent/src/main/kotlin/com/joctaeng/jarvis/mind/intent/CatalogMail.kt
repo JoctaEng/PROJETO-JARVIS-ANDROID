@@ -52,6 +52,7 @@ internal object CatalogMail {
                 "(le|leia|ler|mostra|mostre|ver|veja|confere|confira|verifica|verifique|checa|cheque|olha|olhe) (os |meus |o |meu )?(meus )?(emails|e mails|email|e mail|gmail|caixa de entrada)( novos| nao lidos)?",
                 "(o que|oq) (chegou|tem|tenho) (no|de) (gmail|email|e mail|correio)",
                 "(meus )?(emails|e mails|email) (novos|nao lidos)",
+                "(como esta|como ta|como anda|como) (o |a )?(meu |minha )?(email|e mail|emails|e mails|gmail|correio|caixa de entrada)",
             ),
             priority = 4,
         ) { m ->

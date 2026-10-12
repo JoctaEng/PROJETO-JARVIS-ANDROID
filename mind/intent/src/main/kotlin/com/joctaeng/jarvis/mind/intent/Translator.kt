@@ -24,6 +24,7 @@ object Translator {
         val system = "Você traduz pedidos em português para um comando. Responda SÓ com uma linha JSON: " +
             "{\"intent\":\"<id>\",\"slots\":{\"nome\":\"valor\"}} ou {\"intent\":\"none\"} se nenhuma opção serve. " +
             "Não explique. Datas AAAA-MM-DD, horas HH:mm, duração em minutos (duration_min), valores como 152,30 (amount). " +
+            "Título, contato, busca e texto saem SÓ das palavras do pedido; nunca invente. Conversa, desabafo, elogio ou pedido vago: {\"intent\":\"none\"}. " +
             "Hoje é ${Speak.weekday(ctx.today)}, ${ctx.today}, agora ${ctx.now.toLocalTime().withSecond(0).withNano(0)}. Opções:\n$list"
         return system to utterance
     }

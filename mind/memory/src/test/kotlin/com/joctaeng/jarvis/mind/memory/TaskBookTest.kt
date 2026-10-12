@@ -47,4 +47,14 @@ class TaskBookTest {
         again.disableAll()
         assertFalse(TaskBook(f).all().any { it.enabled })
     }
+
+    @Test fun sameNameReplacesInsteadOfDuplicating() {
+        val f = Files.createTempFile("tarefas", ".json").toFile().apply { delete() }
+        val b = TaskBook(f, clock = { 1000L })
+        b.add(task(Repeat.DAILY, 8, 0).copy(id = "a", name = "Resumo de e-mails"))
+        b.add(task(Repeat.DAILY, 8, 0).copy(id = "b", name = "resumo de e-mails!", instruction = "gmail_buscar"))
+        b.add(task(Repeat.DAILY, 8, 0).copy(id = "c", name = "Outra"))
+        assertEquals(2, b.all().size)
+        assertEquals("gmail_buscar", b.all().first { it.name.startsWith("resumo") || it.name.startsWith("Resumo") }.instruction)
+    }
 }

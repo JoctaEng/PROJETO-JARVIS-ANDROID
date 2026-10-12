@@ -35,4 +35,11 @@ class ToolSelectorTest {
     @Test fun skillStepsAddTools() = assertTrue("nao_perturbe" in ToolSelector.select(all, "bom dia", extraText = "1) nao_perturbe ligar=true"))
 
     @Test fun capped() = assertTrue(ToolSelector.select(all, "agenda whats email tela aula saldo lanterna", max = 12).size <= 12)
+
+    @Test fun localGetsTheTopicFirstAndStaysSmall() {
+        val s = ToolSelector.forLocal(all, "liga a lanterna por favor")
+        assertTrue(s.first() == "lanterna", s.joinToString())
+        assertTrue(s.size <= 8)
+        assertTrue(ToolSelector.core.take(3).all { it in s } || s.size == 8)
+    }
 }

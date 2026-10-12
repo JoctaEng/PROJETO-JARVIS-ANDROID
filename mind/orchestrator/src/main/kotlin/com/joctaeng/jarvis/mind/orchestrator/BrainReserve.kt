@@ -59,6 +59,15 @@ object ToolSelector {
         listOf("tarefa", "programa", "todo dia", "todos os dias", "agendar rotina") to listOf("tarefa_"),
     )
 
+    /**
+     * Para o cérebro do celular (janela de 4.096 tokens, teste da 0.29.0 estourou com 69 ferramentas): primeiro as do
+     * assunto do pedido, depois as básicas, no máximo [max]. Sem isso o prompt chegava a 38 mil caracteres.
+     */
+    fun forLocal(available: List<String>, request: String, extraText: String = "", max: Int = 8): List<String> {
+        val topics = select(available, request, extraText, max = available.size).filter { it !in core }
+        return (topics + core.filter { it in available }).distinct().take(max)
+    }
+
     /** Nomes escolhidos entre [available], na ordem: básicas, as do assunto, as citadas pela skill ativa ([extraText]). */
     fun select(available: List<String>, request: String, extraText: String = "", max: Int = 18): List<String> {
         val said = " " + java.text.Normalizer.normalize(request.lowercase(), java.text.Normalizer.Form.NFD)

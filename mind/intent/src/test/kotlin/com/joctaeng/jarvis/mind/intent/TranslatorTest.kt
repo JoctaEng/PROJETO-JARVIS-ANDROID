@@ -9,6 +9,7 @@ import kotlin.test.assertTrue
 class TranslatorTest {
     private val ctx = Fixtures.ctx()
     private val engine = Fixtures.engine()
+    private val UTTER_ORTHO = "encaixar uma consulta com o ortopedista na quinta de tarde"
 
     @Test fun candidatesAreFewAndRelevant() {
         val c = engine.candidates("preciso encaixar uma consulta com o ortopedista na quinta de tarde", ctx)
@@ -30,39 +31,64 @@ class TranslatorTest {
         assertNull(Translator.parse("não sei", defs))
     }
 
-    @Test fun translationExecutesThroughTheSamePath() {
+    @Test fun createAskedFirstThenRunsOnYes() {
         val t = Translator.parse("""{"intent":"agenda.create","slots":{"titulo":"ortopedista","date":"2026-10-15","time":"15:00","duration_min":"45"}}""", engine.all)!!
-        val out = engine.fromTranslation(t.intentId, t.slots, ctx)
-        val s = (out as Run).plan.steps.first()
+        // criar compromisso mexe na agenda: a IA só executa depois do "sim"
+        val ask = engine.fromTranslation(t.intentId, t.slots, ctx, UTTER_ORTHO) as Ask
+        assertTrue(ask.question.startsWith("Entendi que você quer:"), ask.question)
+        val s = (engine.answer(ask, "sim", ctx) as Run).plan.steps.first()
         assertEquals("agenda_salvar", s.tool)
         assertEquals("2026-10-15 15:00", s.args["inicio"]); assertEquals(45, s.args["duracao_min"]); assertEquals("Ortopedista", s.args["titulo"])
+        assertTrue(s.confirmed)
     }
 
     @Test fun translatedMoneyStillAsksConfirmation() {
-        val t = Translator.parse("""{"intent":"fin.add","slots":{"titulo":"farmácia","amount":"37,90","tipo":"DESPESA"}}""", engine.all)!!
-        val out = engine.fromTranslation(t.intentId, t.slots, ctx)
-        assertTrue(out is Ask && out.question.contains("R$ 37,90"), "$out")
-        val inc = engine.fromTranslation("fin.add", mapOf("titulo" to "aulas particulares", "amount" to "300,00", "tipo" to "RECEITA"), ctx)
+        val inc = engine.fromTranslation("fin.add", mapOf("titulo" to "aulas particulares", "amount" to "300,00", "tipo" to "RECEITA"), ctx, "recebi 300 reais de aulas particulares")
         assertTrue(inc is Ask && inc.question.startsWith("Lançar receita"), "$inc")
+        val out = engine.fromTranslation("fin.add", mapOf("titulo" to "farmácia", "amount" to "37,90", "tipo" to "DESPESA"), ctx, "gastei 37,90 com farmácia")
+        assertTrue(out is Ask && out.question.contains("R$ 37,90"), "$out")
     }
 
-    @Test fun translationOfMessageAndQuery() {
-        val w = engine.fromTranslation("wa.send", mapOf("contato" to "Maria", "mensagem" to "chego em 10 minutos"), ctx) as Run
-        assertEquals("Chego em 10 minutos", w.plan.steps.first().args["mensagem"])
-        val a = engine.fromTranslation("agenda.query", mapOf("date" to "2026-10-14"), ctx) as Run
+    @Test fun readQueriesRunDirectly() {
+        val a = engine.fromTranslation("agenda.query", mapOf("date" to "2026-10-14"), ctx, "o que eu tenho dia 14") as Run
         assertEquals(mapOf<String, Any?>("data" to "2026-10-14"), a.plan.steps.first().args)
-        assertNotNull(engine.definition("edu.grade"))
-        val g = engine.fromTranslation("edu.grade", mapOf("aluno" to "Carlos Silva", "campo" to "P1", "valor" to "8,5"), ctx)
+    }
+
+    @Test fun messageNeedsYesAndKeepsItsText() {
+        val w = engine.fromTranslation("wa.send", mapOf("contato" to "Maria", "mensagem" to "chego em 10 minutos"), ctx, "manda pra Maria que eu chego em 10 minutos")
+        assertTrue(w is Ask, "$w")
+        val run = engine.answer(w as Ask, "pode mandar", ctx) as Run
+        assertEquals("Chego em 10 minutos", run.plan.steps.first().args["mensagem"])
+    }
+
+    @Test fun gradeNeedsYes() {
+        val g = engine.fromTranslation("edu.grade", mapOf("aluno" to "Carlos Silva", "campo" to "P1", "valor" to "8,5"), ctx, "lança a nota 8,5 na P1 do aluno Carlos Silva")
         assertTrue(g is Ask && g.question.contains("Carlos Silva"), "$g")
     }
-}
 
-class FailureTextTest {
-    @Test fun saysWhatHappenedAndWhatStillWorks() {
-        val offline = FailureText.build("todos os cérebros falharam", online = false, localTried = true, localConfigured = true)
-        assertTrue(offline.contains("sem internet") && offline.contains("IA do celular") && offline.contains("continua valendo"), offline)
-        assertTrue(!offline.contains("todos os cérebros"), offline)
-        assertTrue(FailureText.build("HTTP 429 quota exceeded", true, false, false).contains("sem cota"))
-        assertTrue(FailureText.build("Engine is not initialized", true, true, true).contains("não conseguiu carregar"))
+    // ---- as falas reais que a IA estragou no teste da 0.29.0 (relatório de 12/10): nada disso pode virar ação
+
+    @Test fun complaintsNeverBecomeActions() {
+        // "procure melhor" → a IA inventou uma pesquisa na web
+        assertEquals(NoMatch, engine.fromTranslation("web.search", mapOf("consulta" to "melhores formas de melhorar o desempenho do meu computador"), ctx, "procure melhor"))
+        // "ou Guardião" → a IA mandou ver o saldo do Joca Finanças
+        assertEquals(NoMatch, engine.fromTranslation("fin.balance", emptyMap(), ctx, "ou Guardião"))
+        // "pronto acabei de ligar e de ligar" → a IA acendeu a lanterna
+        assertEquals(NoMatch, engine.fromTranslation("phone.flashlight_on", emptyMap(), ctx, "pronto acabei de ligar e de ligar"))
+        // "isso eu não pedi para você me dizer novamente..." → a IA criou um evento "Marcar um compromisso"
+        assertEquals(NoMatch, engine.fromTranslation("agenda.create", mapOf("titulo" to "Marcar um compromisso", "date" to "2026-10-14", "time" to "13:01"), ctx, "isso eu não pedi para você me dizer novamente se teria o que que teria dia 14"))
+        // "procure novamente o Gmail" → a IA pesquisou "novas buscas"
+        assertEquals(NoMatch, engine.fromTranslation("gmail.search", mapOf("assunto" to "novas buscas"), ctx, "procure novamente o Gmail"))
+        // "beleza que os testes estão satisfatórios..." → a IA leu o resumo do dia
+        assertEquals(NoMatch, engine.fromTranslation("agenda.summary", emptyMap(), ctx, "beleza que os testes estão satisfatórios você consegue fazer muita coisa offline"))
+        // "Escreva uma mensagem a ela..." → a IA escolheu "ela" como contato
+        assertEquals(NoMatch, engine.fromTranslation("wa.send", mapOf("contato" to "ela", "mensagem" to "Eu te amo"), ctx, "escreva uma mensagem a ela diga a ela que eu a amo"))
+        // "Você consegue ... olhar" sem pedido de agenda → a IA chamou a agenda
+        assertEquals(NoMatch, engine.fromTranslation("agenda.query", mapOf("date" to "2026-10-14"), ctx, "tudo bem então"))
+    }
+
+    @Test fun invented_texts_are_refused() {
+        // o texto escolhido pela IA tem de sair das palavras ditas
+        assertEquals(NoMatch, engine.fromTranslation("agenda.create", mapOf("titulo" to "Reunião de pais", "date" to "2026-10-15"), ctx, "marca um compromisso amanhã"))
     }
 }

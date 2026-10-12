@@ -45,6 +45,8 @@ internal object CatalogFinance {
                 "(como estao|como esta|como andam|como anda) (as |minhas )?(minhas )?(financas|contas|financas do mes)",
                 "(resumo|situacao|panorama|balanco) (financeiro|financeira|das financas|do dinheiro|das contas)",
                 "(me )?(mostra|mostre|diz|diga|fala|fale) (o |meu )?(resumo financeiro|saldo|resumo das financas)",
+                "... (faz|fazer|faca|me faz|me faca|me fazer|quero|manda|mande) (um |o )?(resumo|balanco) (do |da |de |das |dos )?(joca|financas|financeiro|financeira)( financas)?",
+                "(confira|confere|confirma|verifica|verifique|veja|ver|olha|olhe|mostra|mostre) (minhas |minha |meu |as |o )?(financas|financeiro|dinheiro|saldo)",
             ),
             priority = 1,
         ) { m ->
@@ -119,6 +121,8 @@ internal object CatalogFinance {
                 "(o que|quanto|quais|que contas|quais contas|quais despesas) (eu )?(tenho|falta|devo|ainda tenho|ainda falta|ainda devo|preciso) (a |de |para |pra )?pagar( ainda| esse mes| este mes| neste mes)? <D?>",
                 "(contas|despesas|boletos) (a pagar|pendentes|em aberto|que faltam|para pagar|pra pagar) <D?>",
                 "quanto falta pagar <D?>",
+                "(quais|quais sao|minhas|as) (dividas|contas|despesas)( (eu )?(tenho|devo|sao))?( fixas| fixa| a pagar| pendentes)?( (para|pra))? <D?>",
+                "... (dividas|contas|despesas) fixas ...",
             ),
             priority = 2,
         ) { m ->
@@ -140,8 +144,9 @@ internal object CatalogFinance {
                 "quanto (eu )?(devo|tenho|estou devendo|to devendo) (no |do |de |na |da )?(cartao|credito)( do| da| de)? {cartao?}",
                 "(fatura|faturas) (do |da |de )?(cartao|cartoes|credito)? {cartao?}",
                 "(qual|quanto) (e |esta )?(o )?(limite|limite livre|limite disponivel) (do |da |de )?(cartao )?(do |da |de )?{cartao?}",
+                "(verifique|veja|confere|confira|olha|olhe) (se )?(eu )?(tenho|tem) (algum |alguma )?(cartao|fatura)( para pagar| pra pagar)?",
             ),
-            priority = 2,
+            priority = 3,
         ) { m ->
             val card = m["cartao"]?.takeIf { PtText.fold(it) !in setOf("cartao", "cartoes", "credito", "atual", "mes") }
             if (card != null) {
