@@ -31,6 +31,10 @@
     <!-- 0.28.1: o próprio Euno baixa a IA do celular num serviço em primeiro plano (tipo "sincronização de dados"). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- 0.31: clima pela localização aproximada (sem GPS ligado) e SMS em segundo plano, sempre com confirmação. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
@@ -191,6 +195,13 @@
             android:foregroundServiceType="dataSync" />
         <!-- v0.28: tarefas programadas. -->
         <receiver android:name=".tasks.TaskAlarmReceiver" android:exported="false" />
+        <!-- 0.31: a tarefa roda num serviço curto em primeiro plano (antes segurava o alarme por minutos e dava ANR). -->
+        <service
+            android:name=".tasks.TaskRunService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <!-- 0.31: sincronização contínua (agenda, clima, e-mails) a cada ~30 min. -->
+        <receiver android:name=".sync.SyncReceiver" android:exported="false" />
         <receiver android:name=".tasks.TaskBootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

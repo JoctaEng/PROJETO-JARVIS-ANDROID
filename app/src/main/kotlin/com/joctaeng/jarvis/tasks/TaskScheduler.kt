@@ -15,6 +15,7 @@ import com.joctaeng.jarvis.mind.memory.TaskSchedule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
@@ -59,37 +60,82 @@ object TaskScheduler {
         pi.cancel()
     }
 
-    /** Roda a tarefa agora (pelo alarme ou pelo botão "Rodar agora"). */
+    /** Roda a tarefa agora (pelo botão "Rodar agora"); o alarme usa o [TaskRunService]. */
     fun runNow(context: Context, id: String, onDone: (() -> Unit)? = null) {
-        val app = JarvisApp.from(context)
         scope.launch {
-            val task = app.tasks.get(id) ?: return@launch
-            app.events.info("tarefas", "rodando \"${task.name}\"")
-            val answer = withTimeoutOrNull(5 * 60_000L) { app.conversation.runScheduled(task.name, task.instruction) }
-            val ok = !answer.isNullOrBlank()
-            val text = answer?.takeIf { it.isNotBlank() } ?: "não terminou a tempo (o cérebro não respondeu em 5 minutos)"
-            app.tasks.recordRun(task.id, ok, text)
-            app.events.info("tarefas", "\"${task.name}\": ${if (ok) "feita" else "falhou"}")
-            notify(context, task.name, text)
-            if (ok && task.speak) runCatching { app.voice.speak(text) }
-            app.tasks.get(task.id)?.let { schedule(context, it) }
-            onDone?.invoke()
+            try {
+                execute(context.applicationContext, id)
+            } finally {
+                onDone?.invoke()
+            }
         }
     }
 
-    private fun notify(context: Context, title: String, text: String) {
+    /** Tarefa que fala ao acordar ("me acorde", "me avise", "fale", "bom dia"): fala sempre e avisa com som de alarme. */
+    private val wakeWords = Regex("""(?i)\b(acord|despert|bom dia)""")
+    private val speakWords = Regex("""(?i)\b(acord|despert|fal[ae]|diga|me avis|leia|bom dia|me lembr)""")
+
+    /**
+     * Faz a tarefa de verdade (0.31, teste de 14/10: "me acordou mas não disse o resumo"; "Resumo de e-mails" virou outra
+     * tarefa em vez de buscar os e-mails). Pedido de resumo/agenda/e-mail/clima → o motor busca os dados pelas ferramentas e
+     * monta o texto; o resto → conversa com a IA, sem poder criar ou apagar tarefas no meio.
+     */
+    suspend fun execute(context: Context, id: String) {
+        val app = JarvisApp.from(context)
+        val task = app.tasks.get(id) ?: return
+        app.events.info("tarefas", "rodando \"${task.name}\"")
+        val parts = com.joctaeng.jarvis.mind.intent.Briefing.wants(task.instruction + " " + task.name)
+        val answer = runCatching {
+            withTimeoutOrNull(4 * 60_000L) {
+                if (parts != null) app.conversation.runBriefing(task.name, parts)
+                else app.conversation.runScheduled(task.name, task.instruction)
+            }
+        }.onFailure { app.events.warn("tarefas", "\"${task.name}\" quebrou", it) }.getOrNull()
+        val ok = !answer.isNullOrBlank()
+        val text = answer?.takeIf { it.isNotBlank() } ?: "Não consegui fazer a tarefa \"${task.name}\" desta vez (sem resposta a tempo)."
+        app.tasks.recordRun(task.id, ok, text)
+        app.events.info("tarefas", "\"${task.name}\": ${if (ok) "feita" else "falhou"}")
+        val said = task.instruction + " " + task.name
+        val wake = wakeWords.containsMatchIn(said)
+        notify(context, task.name, text, wake)
+        if (task.speak || speakWords.containsMatchIn(said)) {
+            runCatching {
+                app.voice.speak(text)
+                withTimeoutOrNull(3 * 60_000L) { app.voice.awaitIdle() }
+            }
+        }
+        app.tasks.get(task.id)?.let { schedule(context, it) }
+    }
+
+    private const val WAKE_CHANNEL = "euno_despertar"
+
+    private fun notify(context: Context, title: String, text: String, wake: Boolean) {
         val nm = context.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Tarefas programadas", NotificationManager.IMPORTANCE_DEFAULT))
+        val channel = if (wake) {
+            nm.createNotificationChannel(
+                NotificationChannel(WAKE_CHANNEL, "Despertar do Euno", NotificationManager.IMPORTANCE_HIGH).apply {
+                    setSound(
+                        android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM),
+                        android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_ALARM).build(),
+                    )
+                },
+            )
+            WAKE_CHANNEL
+        } else {
+            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Tarefas programadas", NotificationManager.IMPORTANCE_DEFAULT))
+            CHANNEL
+        }
         val open = context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
             PendingIntent.getActivity(context, 0, it, PendingIntent.FLAG_IMMUTABLE)
         }
-        val n = NotificationCompat.Builder(context, CHANNEL)
+        val n = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_jarvis)
-            .setContentTitle("Tarefa: $title")
+            .setContentTitle(title)
             .setContentText(text.take(120))
             .setStyle(NotificationCompat.BigTextStyle().bigText(text.take(1_500)))
             .setContentIntent(open)
             .setAutoCancel(true)
+            .setPriority(if (wake) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
             .build()
         runCatching { nm.notify(title.hashCode(), n) }
     }
@@ -97,12 +143,74 @@ object TaskScheduler {
     internal fun idFrom(intent: Intent): String? = intent.getStringExtra(EXTRA_ID)
 }
 
-/** O alarme da tarefa chegou: roda e marca a próxima. */
+/**
+ * O alarme da tarefa chegou. Antes o receptor segurava o alarme (goAsync) até a IA responder, minutos depois, e o Android
+ * registrava ANR (relatório da 0.30.0, três vezes). Agora entrega a tarefa a um serviço curto em primeiro plano e termina na hora.
+ */
 class TaskAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = TaskScheduler.idFrom(intent) ?: return
-        val pending = goAsync()
-        TaskScheduler.runNow(context.applicationContext, id) { runCatching { pending.finish() } }
+        val app = context.applicationContext
+        val started = runCatching { app.startForegroundService(TaskRunService.intent(app, id)) }
+        if (started.isFailure) {
+            // Alarme aproximado (sem "Alarmes e lembretes"): o Android pode recusar o serviço. Roda aqui, com teto de 50 s.
+            JarvisApp.from(app).events.warn("tarefas", "serviço recusado (${started.exceptionOrNull()?.javaClass?.simpleName}); rodando no receptor")
+            val pending = goAsync()
+            CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+                try {
+                    withTimeoutOrNull(50_000L) { TaskScheduler.execute(app, id) }
+                } finally {
+                    runCatching { pending.finish() }
+                }
+            }
+        }
+    }
+}
+
+/** Serviço curto em primeiro plano que roda uma tarefa (o processo fica vivo enquanto a IA responde e a voz fala). */
+class TaskRunService : android.app.Service() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var running = 0
+
+    override fun onBind(intent: Intent?): android.os.IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel(RUN_CHANNEL, "Euno trabalhando", NotificationManager.IMPORTANCE_LOW))
+        val n = NotificationCompat.Builder(this, RUN_CHANNEL)
+            .setSmallIcon(R.drawable.ic_jarvis)
+            .setContentTitle("Euno está fazendo uma tarefa programada")
+            .setOngoing(true)
+            .build()
+        runCatching {
+            androidx.core.app.ServiceCompat.startForeground(this, 4209, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        }.onFailure {
+            JarvisApp.from(this).events.warn("tarefas", "não consegui ficar em primeiro plano: ${it.message}")
+        }
+        val id = intent?.getStringExtra(EXTRA) ?: run { stopSelf(startId); return START_NOT_STICKY }
+        running++
+        scope.launch {
+            try {
+                TaskScheduler.execute(applicationContext, id)
+            } finally {
+                launch(Dispatchers.Main) {
+                    running--
+                    if (running <= 0) stopSelf()
+                }
+            }
+        }
+        return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
+    }
+
+    companion object {
+        private const val EXTRA = "task_id"
+        private const val RUN_CHANNEL = "euno_trabalhando"
+        fun intent(context: Context, id: String): Intent = Intent(context, TaskRunService::class.java).putExtra(EXTRA, id)
     }
 }
 

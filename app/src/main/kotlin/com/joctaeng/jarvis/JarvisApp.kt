@@ -71,6 +71,8 @@ class JarvisApp : Application() {
     val tasks: com.joctaeng.jarvis.mind.memory.TaskBook by lazy { com.joctaeng.jarvis.mind.memory.TaskBook(File(filesDir, "memory/tarefas.json")) }
     /** Skills (v0.27): as prontas + as que o usuário ensina. */
     val skills: com.joctaeng.jarvis.mind.memory.SkillBook by lazy { com.joctaeng.jarvis.mind.memory.SkillBook(File(filesDir, "memory/skills.json")) }
+    /** Sincronização contínua: agenda, clima e e-mails lidos sozinhos (0.31). */
+    val sync: com.joctaeng.jarvis.sync.EunoSync by lazy { com.joctaeng.jarvis.sync.EunoSync(this) }
     private val embedScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
 
     override fun onCreate() {
@@ -102,10 +104,15 @@ class JarvisApp : Application() {
             index = embeddingIndex,
             enabled = { settings.semanticMemory },
             embedder = { if (embeddingRuntime.isAvailable) embeddingRuntime else null },
+            // 0.30.0 mostrou medições zeradas sem dizer por quê: agora cada queda para a busca por palavras fica no relatório.
+            onNote = { events.info("memoria", it) },
         )
 
         // Alarmes das tarefas programadas (o Android os apaga quando o app é atualizado).
         runCatching { com.joctaeng.jarvis.tasks.TaskScheduler.rescheduleAll(this) }
+        // Sincronização contínua (0.31): agenda, clima e e-mails a cada ~30 min, até o usuário desligar.
+        runCatching { com.joctaeng.jarvis.sync.EunoSync.schedule(this) }
+        sync.refreshIfStale("app aberto", maxAgeMin = 10)
     }
 
     /** Registra quedas do app e, na próxima abertura, por que o sistema encerrou o processo (memória, travamento, falha nativa). */

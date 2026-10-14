@@ -44,7 +44,7 @@ object BackgroundTools {
             AgendaSave(app), AgendaEdit(app), AgendaDelete(app), AgendaOpenDay(app),
             WebResearch(app), ReadPage(app), FileSave(app), FileList(app), FileRead(app),
             CopyText(app), ContactCreate(app), NotificationsRead(app),
-        ) + GmailTools.all(app) + SkillTools.all(app) + TaskTools.all(app)
+        ) + GmailTools.all(app) + SkillTools.all(app) + TaskTools.all(app) + LifeTools.all(app)
     }
 }
 
@@ -151,9 +151,24 @@ private class AgendaSave(context: Context) : BackgroundTool(
         val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
             ?: return@withContext ToolResult.Failure("a agenda não aceitou o compromisso")
         val id = ContentUris.parseId(uri)
-        JarvisApp.from(context).events.info("ferramentas", "agenda_salvar: evento $id criado em segundo plano")
-        ok("salvo" to true, "id" to id, "titulo" to title, "obs" to "compromisso salvo na agenda (sem abrir o app). Não salve de novo; se um formulário de agenda estiver aberto na tela, descarte-o.")
+        val app = JarvisApp.from(context)
+        app.events.info("ferramentas", "agenda_salvar: evento $id criado em segundo plano")
+        // 0.31: a agenda do Google do celular é a mesma do Google Agenda na web; pede a sincronização já, para aparecer nos dois na hora.
+        app.sync.requestCalendarSync()
+        val where = calendarLabel(calendarId)
+        ok(
+            "salvo" to true, "id" to id, "titulo" to title, "agenda" to where,
+            "obs" to "compromisso salvo na agenda $where (sem abrir o app). Não salve de novo; se um formulário de agenda estiver aberto na tela, descarte-o.",
+        )
     }
+
+    /** "do Google" (conta Google: aparece no celular e no Google Agenda) ou "do celular" (só no aparelho). */
+    private fun calendarLabel(calendarId: Long): String = runCatching {
+        context.contentResolver.query(
+            ContentUris.withAppendedId(CalendarContract.Calendars.CONTENT_URI, calendarId),
+            arrayOf(CalendarContract.Calendars.ACCOUNT_TYPE), null, null, null,
+        )?.use { c -> if (c.moveToFirst() && c.getString(0) == "com.google") "do Google" else "do celular" }
+    }.getOrNull() ?: "do celular"
 
     /** Id de um compromisso com o mesmo título no mesmo horário (±1 min; dia inteiro: no mesmo dia), ou null. */
     private fun sameEvent(title: String, start: Long, allDay: Boolean, zone: ZoneId): Long? {
@@ -238,6 +253,7 @@ private class AgendaDelete(context: Context) : BackgroundTool(
         missingPermission(Manifest.permission.WRITE_CALENDAR, "escrever na agenda")?.let { return@withContext it }
         val id = args.optLong("id", 0L).takeIf { it > 0 } ?: return@withContext ToolResult.Failure("informe o id do compromisso")
         val n = context.contentResolver.delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id), null, null)
+        if (n > 0) JarvisApp.from(context).sync.requestCalendarSync()
         if (n == 0) ToolResult.Failure("não achei o compromisso $id") else ok("apagado" to true, "id" to id)
     }
 }

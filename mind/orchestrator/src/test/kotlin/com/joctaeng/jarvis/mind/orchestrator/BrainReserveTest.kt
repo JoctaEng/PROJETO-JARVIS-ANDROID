@@ -19,7 +19,7 @@ class BrainReserveTest {
 class ToolSelectorTest {
     private val all = listOf(
         "abrir_app", "tela_ler", "tela_tocar", "tela_navegar", "tela_rolar", "tela_digitar", "tela_ver", "agenda_consultar", "agenda_salvar",
-        "agenda_editar", "agenda_abrir", "pesquisar_e_resumir", "memoria_guardar", "whatsapp_mensagem", "contatos_buscar", "gmail_buscar",
+        "agenda_editar", "agenda_apagar", "clima", "agenda_abrir", "pesquisar_e_resumir", "memoria_guardar", "whatsapp_mensagem", "contatos_buscar", "gmail_buscar",
         "joca_financas_resumo", "joca_financas_lancar", "nao_perturbe", "criar_timer", "lanterna",
     )
 
@@ -29,6 +29,10 @@ class ToolSelectorTest {
         val s = ToolSelector.select(all, "manda uma mensagem no whats para a Maria")
         assertTrue("whatsapp_mensagem" in s && "contatos_buscar" in s && "lanterna" !in s)
     }
+
+    @Test fun deleteWordsBringAgendaDelete() = assertTrue("agenda_apagar" in ToolSelector.select(all, "entendi pode apagar futebol"))
+
+    @Test fun weatherTool() = assertTrue("clima" in ToolSelector.select(all, "vai chover hoje?"))
 
     @Test fun prefixToolsForFinance() = assertTrue("joca_financas_resumo" in ToolSelector.select(all, "quanto tenho de saldo?"))
 

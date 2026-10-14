@@ -161,20 +161,64 @@ class ConversationController(private val app: JarvisApp) {
     }
 
     /**
-     * Tarefa programada (v0.28): espera a conversa ficar livre, faz o pedido guardado como se o usuário tivesse falado
-     * (aparece no chat como "Tarefa programada …") e devolve a resposta final, para a notificação.
+     * Tarefa programada (v0.28): espera a conversa ficar livre e faz o pedido guardado. 0.31: primeiro o motor tenta o pedido
+     * como o usuário falaria (sem o prefixo, que confundia); se não for com ele, a IA faz SEM as ferramentas de tarefa (no teste
+     * de 14/10 ela "agendou de novo" a tarefa em vez de executá-la). Devolve a resposta final, para a notificação e a voz.
      */
     suspend fun runScheduled(name: String, instruction: String): String? = withContext(Dispatchers.Main) {
-        kotlinx.coroutines.withTimeoutOrNull(120_000L) { while (_busy.value) kotlinx.coroutines.delay(1_000) }
-        if (_busy.value) return@withContext null
+        if (!awaitFree()) return@withContext null
         val before = nextId
+        add(ChatEntry(nextId++, Role.SYSTEM, "Tarefa programada \"$name\"", note = true))
+        runCatching {
+            val ctx = engineCtx()
+            val out = engine.handle(instruction, ctx)
+            if (out is Run && out.confirm == null) {
+                _busy.value = true
+                try {
+                    val reply = executor.execute(out.plan, engineTools(), "Tarefa: $name")
+                    val text = humanize(reply, instruction)
+                    sayRich(text, reply.detail, emotionOf(reply.emotion), speak = false, brain = "motor do Euno")
+                    return@withContext text
+                } finally {
+                    _busy.value = false
+                }
+            }
+        }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
         val finished = kotlinx.coroutines.CompletableDeferred<Unit>()
         val watcher = scope.launch { turnFinished.collect { finished.complete(Unit) } }
-        start("[EXECUÇÃO AUTOMÁTICA DE TAREFA PROGRAMADA: $name] Execute diretamente as ferramentas para cumprir este pedido e entregue apenas o resultado final: $instruction", speak = false, addEntry = true)
+        scheduledRun = true
+        start("[TAREFA PROGRAMADA \"$name\" — FAÇA AGORA, não agende nada] $instruction", speak = false, addEntry = false)
         kotlinx.coroutines.withTimeoutOrNull(4 * 60_000L) { finished.await() }
         watcher.cancel()
+        scheduledRun = false
         _entries.value.lastOrNull { it.id >= before && it.role == Role.ASSISTANT && !it.note && it.text.isNotBlank() }?.text
     }
+
+    /** Resumo programado ("me acorde com o resumo do dia e dos e-mails"): o motor busca tudo pelas ferramentas, a IA só deixa natural. */
+    suspend fun runBriefing(name: String, parts: com.joctaeng.jarvis.mind.intent.Briefing.Parts): String? = withContext(Dispatchers.Main) {
+        if (!awaitFree()) return@withContext null
+        _busy.value = true
+        try {
+            withContext(Dispatchers.IO) { runCatching { kotlinx.coroutines.withTimeoutOrNull(20_000) { app.sync.run("tarefa $name") } } }
+            add(ChatEntry(nextId++, Role.SYSTEM, "Tarefa programada \"$name\"", note = true))
+            val ctx = engineCtx()
+            val out = com.joctaeng.jarvis.mind.intent.Briefing.plan("day.briefing", ctx, parts)
+            val reply = (out as? Run)?.let { executor.execute(it.plan, engineTools(), "Tarefa: $name") } ?: return@withContext null
+            val text = humanize(reply, "resumo do dia para o usuário ouvir ao acordar")
+            sayRich(text, reply.detail, Emotion.HAPPY, speak = false, brain = "motor do Euno")
+            text
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    private suspend fun awaitFree(): Boolean {
+        kotlinx.coroutines.withTimeoutOrNull(120_000L) { while (_busy.value) kotlinx.coroutines.delay(1_000) }
+        return !_busy.value
+    }
+
+    /** Durante a tarefa programada a IA não pode criar/apagar tarefas (ela fazia isso em vez de executar). */
+    @Volatile private var scheduledRun = false
 
     private fun start(clean: String, speak: Boolean, addEntry: Boolean) {
         voice.stop()
@@ -468,13 +512,57 @@ class ConversationController(private val app: JarvisApp) {
                     Reply("Não consegui terminar: ${e.message ?: e.javaClass.simpleName}", "concerned")
                 }
                 reply.ask?.let { pendingAsk = it to System.currentTimeMillis() }
-                say(reply.text, emotionOf(reply.emotion), speak, brain)
+                val text = humanize(reply, request)
+                sayRich(text, reply.detail, emotionOf(reply.emotion), speak, if (text != reply.text) "motor do Euno + IA" else brain)
             }
             NoMatch -> Unit
         }
         val ms = (System.nanoTime() - t0) / 1_000_000
         app.engineStats.note(path, ms)
         app.events.info("motor", "«${request.take(80)}» → $intent por ${path.label} em $ms ms")
+    }
+
+    /**
+     * 0.31 (teste de 14/10: "o motor fala igual um robô"): os fatos vêm do motor (certos, das ferramentas); a IA da nuvem, se
+     * houver e responder em até 8 s, só reescreve de um jeito natural e curto. Sem nuvem, sem internet ou se ela inventar
+     * (texto vazio, longo demais, ferramenta no meio), fica o texto do motor. O cérebro do celular não entra: é lento.
+     */
+    private suspend fun humanize(reply: Reply, request: String): String {
+        val facts = reply.facts ?: return reply.text
+        if (!settings.naturalReplies || settings.privateMode) return reply.text
+        val device = DeviceState.snapshot(app, privateMode = false)
+        if (!device.online) return reply.text
+        val providers = cloudProviders()
+        if (providers.isEmpty()) return reply.text
+        val name = settings.displayName.ifBlank { "Euno" }
+        val system = "Você é $name, assistente pessoal de ${settings.userName.ifBlank { "o usuário" }}, falando em voz alta, em português do Brasil. " +
+            "Reescreva a RESPOSTA PRONTA de um jeito natural, caloroso e curto (2 a 5 frases), como uma pessoa falaria. Regras: use SÓ os fatos " +
+            "dados (nunca invente compromisso, horário, remetente ou número); não leia códigos, números de processo, barras nem hífens; " +
+            "agrupe o que se repete; diga horários como \"às 15h\"; com muitos itens, destaque os mais importantes e diga que a lista completa " +
+            "está na tela; sem markdown, sem listas, sem emojis, sem etiqueta de emoção. Responda só com o texto final."
+        val user = "Pedido do usuário: ${request.take(200)}\n\nRESPOSTA PRONTA (correta): ${reply.text}\n\nDADOS:\n${facts.take(3_500)}"
+        val out = StringBuilder()
+        val t0 = System.nanoTime()
+        kotlinx.coroutines.withTimeoutOrNull(8_000L) {
+            runCatching {
+                Orchestrator(providers).respond(LlmRequest(system, listOf(ChatMessage(Role.USER, user)), 350), device, RoutingHints(preference = BrainPreference.ONLINE_FIRST)).collect { e ->
+                    if (e is OrchestratorEvent.Chunk) (e.chunk as? LlmChunk.Text)?.let { out.append(it.text) }
+                }
+            }
+        }
+        val text = TextCleanup.clean(StreamingEmotionParser().let { p -> p.feed(out.toString()) + p.finish() }).trim()
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        val bad = text.length < 15 || text.length > 1_400 || "<tool" in text || "tool_call" in text
+        app.events.info("motor", "resposta natural pela IA: ${if (bad) "descartada" else "usada"} (${text.length} car., $ms ms)")
+        return if (bad) reply.text else text
+    }
+
+    /** Fala só o resumo; a tela mostra o resumo e, embaixo, a lista completa (títulos inteiros, horários). */
+    private fun sayRich(text: String, detail: String?, emotion: Emotion, speak: Boolean, brain: String? = null) {
+        val shown = if (detail.isNullOrBlank()) text else "$text\n\n$detail"
+        add(ChatEntry(nextId++, Role.ASSISTANT, shown, brain = brain ?: settings.displayName))
+        OverlayBus.emotion.value = emotion
+        if (speak) voice.speak(text)
     }
 
     private fun emotionOf(name: String): Emotion = runCatching { Emotion.valueOf(name.uppercase()) }.getOrDefault(Emotion.NEUTRAL)
@@ -523,7 +611,11 @@ class ConversationController(private val app: JarvisApp) {
         // Skill pedida ("modo aula", "preparar aula", ou uma ensinada): os passos dela entram no prompt deste turno.
         val activeSkill = if (settings.autonomy == AutonomyLevel.OBSERVER) null else app.skills.match(lastUser)
         activeSkill?.let { app.events.info("skills", "skill ativa: ${it.name}") }
-        val tools = if (settings.autonomy == AutonomyLevel.OBSERVER) emptyList() else app.toolbox.enabledTools()
+        val tools = (if (settings.autonomy == AutonomyLevel.OBSERVER) emptyList() else app.toolbox.enabledTools())
+            .let { all -> if (scheduledRun) all.filterNot { it.name.startsWith("tarefa_") } else all }
+        // Retrato sincronizado (agenda, clima, e-mails): entra no prompt e, se velho, é renovado para a próxima.
+        app.sync.refreshIfStale("conversa")
+        val live = app.sync.liveSection(if (onlyLocal) LOCAL_LIVE_CHARS else LIVE_CHARS)
         val version = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull() ?: "?"
         val summaries = if (useSummaries) app.summaries.activeContext(if (onlyLocal) LOCAL_SUMMARY_CHARS else PersonaEngine.MAX_SUMMARY_CHARS) else ""
 
@@ -556,6 +648,7 @@ class ConversationController(private val app: JarvisApp) {
                 (if (compact || activeSkill != null) "" else app.recipes.find(lastUser)?.let { "\n" + app.recipes.describe(it) }.orEmpty()),
             userBio = if (compact) settings.userBio.take(LOCAL_BIO_CHARS) else settings.userBio,
             summaries = if (compact) summaries.take(LOCAL_SUMMARY_CHARS) else summaries,
+            liveSection = if (compact) live.take(LOCAL_LIVE_CHARS) else live,
             selfSection = SelfKnowledge.section(
                 SelfInfo(
                     versionName = version,
@@ -901,6 +994,9 @@ class ConversationController(private val app: JarvisApp) {
         const val LOCAL_BIO_CHARS = 800
         const val LOCAL_SUMMARY_CHARS = 800
         const val STEP_NOTE = "Agindo"
+        /** Retrato sincronizado no prompt: nuvem e celular (este cabe na janela de 4.096 tokens). */
+        const val LIVE_CHARS = 1_600
+        const val LOCAL_LIVE_CHARS = 500
         /** Descanso do cérebro que voltou vazio. */
         const val EMPTY_REST_MS = 90_000L
     }

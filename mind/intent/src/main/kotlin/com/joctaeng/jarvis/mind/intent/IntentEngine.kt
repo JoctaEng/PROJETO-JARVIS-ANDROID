@@ -60,7 +60,9 @@ class IntentEngine(
         val ex = syntheticExtract(slots, ctx)
         val m = M(ex, slots, ctx, def.id)
         val out = def.build(m)
-        if (out is NoMatch) return NoMatch
+        // Resposta pronta (lista de recursos, hora...) vinda de tradução é palpite da IA sobre uma conversa ("vc tá doido?
+        // consegue organizar arquivos?" virou a lista de recursos): a própria IA responde melhor. Só ação vale.
+        if (out is NoMatch || out is Say) return NoMatch
         return remember(confirmTranslated(out, summaryOf(def, slots)), def to m)
     }
 
@@ -188,7 +190,10 @@ class IntentEngine(
     private val leadPhrases = Regex(
         "^(?:oi|ola|opa|ei|e ai|ai|entao|olha|olhe|escuta|escute|por favor|pf|pode|poderia|podia|consegue|conseguiria|voce|tu|vc|" +
             "eu quero|quero|eu queria|queria|eu preciso|preciso|gostaria|eu gostaria|me ajuda a|ajuda a|vamos|bora|so|beleza|ok|euno|joca|" +
-            "que voce|que vc|que tu|de novo|mais uma vez|e|verifique|verifica|veja|olha|olhe|confere|confira|checa|cheque|consulte|consulta)(?= |$)",
+            "que voce|que vc|que tu|de novo|mais uma vez|e|verifique|verifica|veja|olha|olhe|confere|confira|checa|cheque|consulte|consulta|" +
+            // 0.31 (teste de 14/10): "entendi, pode apagar futebol" não casava e a IA respondia que não podia apagar.
+            "entendi|entendido|certo|perfeito|otimo|show|legal|agora|ta bom|tudo bem|blz|muito bem|isso|isso ai|combinado|" +
+            "voce vai fazer o seguinte|vai fazer o seguinte|faz o seguinte|faca o seguinte|o seguinte)(?= |$)",
     )
     private val trailPhrases = Regex("(?<![^ ])(?:por favor|pf|ai|ne|valeu|obrigado|obrigada|pra mim|para mim|rapido|rapidinho|ta bom|ok|beleza|da uma olhadinha|da uma olhada|da uma conferida|da uma checada|da uma espiada|da uma vista)$")
     private val midPhrases = Regex("(?<![^ ])(?:por favor|pf|ai|pra mim|para mim)(?= |$)")

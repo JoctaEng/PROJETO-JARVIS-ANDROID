@@ -185,6 +185,13 @@ class AppSettings(context: Context) {
     /** Voz Piper offline escolhida (faber, cadu, jeff). */
     var piperVoice by string("piperVoice", "faber")
 
+    /** 0.31: sincronização contínua (agenda, clima, e-mails) a cada ~30 min, até o usuário desligar. */
+    var continuousSync by boolean("continuousSync", true)
+    /** 0.31: cidade do clima quando a localização do celular não está liberada (a primeira cidade pedida). */
+    var weatherCity by string("weatherCity", "")
+    /** 0.31: a IA reescreve as respostas do motor (agenda, e-mails, clima) com naturalidade; os fatos continuam do motor. */
+    var naturalReplies by boolean("naturalReplies", true)
+
     /** Nível de autonomia (seção 10.2). Operador: consultas livres, ações pedem confirmação. */
     var autonomy by enum("autonomy", AutonomyLevel.OPERATOR)
     private var disabledToolsRaw by string("disabledTools", "")

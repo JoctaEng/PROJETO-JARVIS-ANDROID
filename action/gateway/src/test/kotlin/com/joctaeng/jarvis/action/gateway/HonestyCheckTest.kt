@@ -18,6 +18,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class HonestyCheckTest {
+    @Test fun workInProgressWithoutToolIsCaught() {
+        assertNotNull(HonestyCheck.problem("Certo. Estou analisando os dados do Joca Finanças agora.", anyToolSucceeded = false))
+        assertNotNull(HonestyCheck.problem("Já ajustei o tamanho da letra para você.", anyToolSucceeded = false))
+        assertNull(HonestyCheck.problem("Não consigo apagar arquivos por aqui.", anyToolSucceeded = false))
+    }
+
     @Test fun fakeToolTextIsCaught() {
         assertNotNull(HonestyCheck.problem("Consultando sua agenda agora... [usando agenda_consultar] Você não tem nada.", anyToolSucceeded = false))
         assertNotNull(HonestyCheck.problem("[usando tela_ler] pronto", anyToolSucceeded = true))

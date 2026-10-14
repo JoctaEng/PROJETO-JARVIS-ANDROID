@@ -149,7 +149,14 @@ internal object CatalogAgenda {
             val o = ToolText.obj(r[0].text)
             val whenSaid = spokenWhen ?: (Speak.date(day, m.today) + if (allDay) ", o dia todo" else " " + Speak.at(h, mi))
             if (ToolText.str(o, "ja_existia") == "true") Reply("Esse compromisso já estava na agenda: $title, $whenSaid. Não criei outro.")
-            else Reply("${Kit.ok(m)}, marquei $title para $whenSaid" + (dur?.let { ", com ${Speak.duration(it.seconds)} de duração" } ?: "") + ".")
+            else {
+                val agenda = when (ToolText.str(o, "agenda")) {
+                    "do Google" -> " na sua agenda do Google (aparece também no calendário do celular)"
+                    null, "" -> ""
+                    else -> " na agenda do celular"
+                }
+                Reply("${Kit.ok(m)}, marquei $title para $whenSaid" + (dur?.let { ", com ${Speak.duration(it.seconds)} de duração" } ?: "") + "$agenda.")
+            }
         }
     }
 
@@ -234,7 +241,8 @@ internal object CatalogAgenda {
                 Kit.firstFailure(r)?.let { return@run Kit.failure(it) }
                 val p = ToolText.agenda(r[0].text)
                 val filtered = if (m.part != null) AgendaParse(p.label, partFilter(p.items, m.part), 0) else p
-                Reply(Replies.agenda(filtered, whenText(d, m.today) + partText(m.part)), "happy")
+                val w = whenText(d, m.today) + partText(m.part)
+                Reply(Replies.agenda(filtered, w), "happy", detail = Replies.agendaDetail(filtered), facts = "Agenda ($w):\n" + ToolText.plain(r[0].text))
             }
         },
         IntentDef(
@@ -323,9 +331,10 @@ internal object CatalogAgenda {
             if (!m.has("agenda_consultar")) return@IntentDef Kit.noTool(m, "a agenda")
             Kit.run(m, Step("agenda_consultar", mapOf("periodo" to "hoje")), Step("agenda_consultar", mapOf("periodo" to "amanha"))) { r ->
                 Kit.firstFailure(r)?.let { return@run Kit.failure(it) }
-                val a = Replies.agenda(ToolText.agenda(r[0].text), "hoje")
-                val b = Replies.agenda(ToolText.agenda(r[1].text), "amanhã")
-                Reply("$a $b", "happy")
+                val pa = ToolText.agenda(r[0].text)
+                val pb = ToolText.agenda(r[1].text)
+                val detail = listOfNotNull(Replies.agendaDetail(pa)?.let { "**Hoje**\n$it" }, Replies.agendaDetail(pb)?.let { "**Amanhã**\n$it" }).joinToString("\n\n").ifBlank { null }
+                Reply("${Replies.agenda(pa, "hoje")} ${Replies.agenda(pb, "amanhã")}", "happy", detail = detail, facts = ToolText.plain(r[0].text) + "\n\n" + ToolText.plain(r[1].text))
             }
         },
         IntentDef(
@@ -336,10 +345,18 @@ internal object CatalogAgenda {
                 "($verbsCreate) (um|uma|o|a|na minha agenda|na agenda|no calendario)? <D> (para|pra|em|no|na|do|de|dia|as|ate)? <T?> (de|com|para|pra|do|da)? {titulo} <DUR?>",
                 "($verbsCreate) (um|uma|o|a|na minha agenda|na agenda|no calendario)? <T> (de|com|para|pra|do|da)? {titulo} (para|pra|em|no|na|do|de|dia|as)? <D?>",
                 "(me )?(lembra|lembre|avisa|avise) (de|do|da|que tenho|que eu tenho)? {titulo} (para|pra|em|no|na|do|de|dia|as)? <D?> (para|pra|em|no|na|do|de|dia|as)? <T?>",
+                "(me )?(lembra|lembre|avisa|avise) (que|de)? (no|na|em|dia|para|pra)? <D> (as|a|ao|para|pra)? <T?> (eu )?(tenho que|tenho de|preciso|devo|vou|que)? {titulo}",
+                "(me )?(lembra|lembre|avisa|avise) (que|de)? (as|a|ao)? <T> (eu )?(tenho que|tenho de|preciso|devo|vou|que)? {titulo}",
                 "(tenho|vou ter|vai ter|tem) (um|uma)? ($eventWords) (de|com|do|da)? {titulo?} <D> (as|a|para)? <T?> (anota|anote|coloca|coloque|marca|marque|poe|ponha) (na agenda|ai)",
             ),
         ) { m ->
-            val titulo = m["titulo"] ?: return@IntentDef NoMatch
+            var titulo = m["titulo"] ?: return@IntentDef NoMatch
+            // "lembre que no dia 15 às 17h tenho que ir para casa": com dia/hora é lembrete na agenda, não memória (teste de 13/10:
+            // virou "Pronto, vou lembrar" e nada avisou no dia). Sem dia nem hora, continua indo para a memória.
+            if (PtText.fold(titulo).startsWith("que ") && (m.date != null || m.time != null)) {
+                titulo = titulo.replace(Regex("""(?i)^que\s+(eu\s+)?((tenho|preciso|devo)\s+(que|de)\s+|tenho\s+)?"""), "").trim()
+                if (titulo.isBlank()) return@IntentDef NoMatch
+            }
             val t = PtText.fold(titulo)
             // "anota"/"coloca" sem data nem hora é anotação, não compromisso: deixa para a memória.
             val soft = m.ex.toks.take(2).any { it.norm in setOf("anota", "anote", "anotar", "coloca", "coloque", "poe", "ponha", "por", "bota", "lembra", "lembre", "salva", "salve", "registra", "registre") }

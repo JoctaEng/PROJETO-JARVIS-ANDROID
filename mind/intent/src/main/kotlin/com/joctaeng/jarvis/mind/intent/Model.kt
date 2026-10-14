@@ -42,7 +42,15 @@ data class Step(
 data class StepResult(val step: Step, val ok: Boolean, val text: String)
 
 /** A resposta do Euno ao usuário. [ask] deixa uma pergunta aberta (ex.: "Que horas?"). */
-data class Reply(val text: String, val emotion: String = "happy", val ask: Ask? = null)
+data class Reply(
+    val text: String,
+    val emotion: String = "happy",
+    val ask: Ask? = null,
+    /** Lista completa só para a tela (0.31): a voz fala o resumo em [text]; códigos e números longos ficam aqui. */
+    val detail: String? = null,
+    /** Dados crus que a IA pode reescrever com naturalidade (0.31); null = a resposta não precisa de reescrita. */
+    val facts: String? = null,
+)
 
 sealed interface Next
 data class Finish(val reply: Reply) : Next

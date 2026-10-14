@@ -23,6 +23,20 @@ object HonestyCheck {
         "foi rolada", "foi rolado", "foi aberto", "foi aberta", "foi fechado", "foi fechada", "foi salvo", "foi salva",
         "foi enviado", "foi enviada", "foi apagado", "foi apagada", "registrado com sucesso", "salvo com sucesso",
         "devidamente marcado", "devidamente salvo", "esta marcado na sua agenda", "ja esta salvo", "ja esta marcado",
+        // teste de 14/10: "já ajustei", "dei uma olhada", "tenho acesso total à agenda" sem ferramenta nenhuma
+        "ja ajustei", "ja configurei", "ja verifiquei", "ja conferi", "ja olhei", "dei uma olhada", "acabei de abrir", "acabei de verificar",
+        "acabei de procurar", "eu ja fiz a pesquisa", "consegui fazer o resumo",
+    )
+
+    /**
+     * Promessas de algo "acontecendo agora" sem ferramenta (teste de 14/10, Joca Finanças: "Estou preparando o resumo… em
+     * poucos minutos te entrego" — e nada vinha). Não existe "depois" para o Euno: ou chama a ferramenta já, ou diz que não fez.
+     */
+    private val workingPhrases = listOf(
+        "estou preparando", "estou analisando", "estou processando", "estou compilando", "estou finalizando", "estou verificando",
+        "estou buscando", "estou procurando", "estou lendo", "estou abrindo", "estou acessando", "estou olhando", "estou conferindo",
+        "estou consultando", "deixa eu verificar", "deixe eu verificar", "deixa eu ver", "me da um momento", "me de um momento",
+        "um instante", "em poucos minutos", "em breve eu te", "ja te trago", "ja volto com", "vou trazer o resumo", "aguarde",
     )
 
     /** Ferramentas que MUDAM a tela: depois delas, o conteúdo novo só é conhecido lendo (tela_ler/tela_ver). */
@@ -57,6 +71,11 @@ object HonestyCheck {
         if (anyToolSucceeded) return null
         val claimed = claimVerbs.firstOrNull { verb -> verbPatterns[verb]?.findAll(t)?.any { !negated(t, it.range.first) } == true }
             ?: claimPhrases.firstOrNull { it in t }
+        workingPhrases.firstOrNull { it in t }?.let {
+            return "ATENÇÃO: você disse \"$it\", mas nenhuma ferramenta está trabalhando: você não faz nada \"em segundo plano\" " +
+                "nem \"daqui a pouco\". Chame AGORA a ferramenta que traz os dados e responda com o resultado; se não houver ferramenta " +
+                "para isso, diga com franqueza que não consegue."
+        }
         return claimed?.let {
             "ATENÇÃO: você disse \"$it\", mas nenhuma ferramenta foi executada nesta resposta, então isso NÃO aconteceu. " +
                 "Se era para fazer agora, chame a ferramenta certa e só confirme depois do resultado. " +

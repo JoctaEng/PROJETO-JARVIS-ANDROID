@@ -26,6 +26,7 @@ class CatalogTest {
         "consulta" to listOf("receita de bolo", "funções do segundo grau", "notícias de hoje"),
         "pergunta" to listOf("quando é a reposição da turma de cálculo", "como estão as notas da turma B"),
         "qual" to listOf("google", "celular"),
+        "cidade" to listOf("Belém", "São Paulo"),
         "secao" to listOf("mensagens", "reels", "perfil", "explorar"),
         "conta" to listOf("12 vezes 15", "7 mais 3", "100 dividido por 4", "15 por cento de 80", "raiz quadrada de 144"),
         "evento" to listOf("natal", "pascoa", "carnaval"),

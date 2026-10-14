@@ -2,31 +2,84 @@ package com.joctaeng.jarvis.mind.intent
 
 /** Frases para falar o que as ferramentas devolveram, com as palavras do Euno. */
 internal object Replies {
-    /** "Hoje você tem 3 compromissos: às 8h, X; às 14h, Y e dia inteiro: Z." */
+    /**
+     * Agenda falada como gente (0.31, pedido do teste de 14/10: "fala igual um robô, lê barra, hífen e número de processo").
+     * Fala o total, junta os itens do dia todo com títulos curtos e diz os com horário em ordem; o resto fica na tela ([agendaDetail]).
+     */
     fun agenda(p: AgendaParse, whenText: String, limit: Int = 6): String {
-        val w = whenText.ifBlank { p.label }
-        if (p.empty) return "Você não tem nenhum compromisso ${w.ifBlank { "nesse período" }}."
-        val shown = p.items.take(limit)
+        val w = whenText.ifBlank { p.label }.ifBlank { "nesse período" }
+        if (p.empty) return "Você não tem nenhum compromisso $w."
         val total = p.items.size + p.more
-        val multi = shown.map { it.day }.distinct().size > 1
-        val head = "${Speak.capitalize(w.ifBlank { "No período" })} você tem ${Speak.plural(total, "compromisso", "compromissos")}"
-        if (multi) {
-            val byDay = shown.groupBy { it.day.orEmpty() }.entries.joinToString("; ") { (day, items) ->
-                (day.substringBefore(',').ifBlank { day }) + (day.substringAfter(',', "").trim().takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "") + ": " +
-                    Speak.list(items.map { itemText(it, withAt = false) })
+        val head = "${Speak.capitalize(w)} você tem ${Speak.plural(total, "compromisso", "compromissos")}"
+        val days = p.items.map { it.day.orEmpty() }.distinct()
+        if (days.size > 1) {
+            var budget = limit + 2
+            val parts = mutableListOf<String>()
+            for (day in days) {
+                val items = p.items.filter { it.day.orEmpty() == day }
+                if (budget <= 0) break
+                val said = dayItems(items, budget, sentences = false)
+                budget -= items.size
+                parts += "${spokenDay(day)}: $said"
             }
-            return "$head. $byDay" + if (total > shown.size) ". E mais ${total - shown.size}." else "."
+            val tail = if (parts.size < days.size) " Os outros dias estão na tela." else if (p.more > 0) " E mais ${p.more}." else ""
+            return "$head. " + parts.joinToString(". ") + "." + tail
         }
-        return "$head: " + Speak.list(shown.map { itemText(it) }) + if (total > shown.size) ". E mais ${total - shown.size}." else "."
+        return "$head. " + dayItems(p.items, limit, sentences = true) + "." + if (p.more > 0) " E mais ${p.more}." else ""
+    }
+
+    /** Um dia: primeiro o que é o dia todo (agrupado), depois os com horário, sem passar de [limit] itens falados. */
+    private fun dayItems(items: List<AgendaItem>, limit: Int, sentences: Boolean): String {
+        val allDay = items.filter { it.allDay }.groupBy { Speak.title(it.title) }.entries.map { (t, list) -> if (list.size > 1) "$t, ${list.size} vezes" else t }
+        val timed = items.filter { !it.allDay }
+        val out = mutableListOf<String>()
+        var room = limit
+        if (allDay.isNotEmpty()) {
+            val said = allDay.take(maxOf(2, room / 2))
+            room -= said.size
+            out += "o dia todo, " + Speak.list(said + if (allDay.size > said.size) listOf("mais ${allDay.size - said.size}") else emptyList())
+        }
+        if (timed.isNotEmpty()) {
+            val said = timed.take(maxOf(2, room))
+            val extra = timed.size - said.size
+            out += (if (allDay.isNotEmpty()) "com horário, " else "") + Speak.list(said.map { itemText(it) } + if (extra > 0) listOf("mais $extra") else emptyList())
+        }
+        return if (sentences) out.joinToString(". ") { Speak.capitalize(it) } else out.joinToString("; ")
+    }
+
+    /** "segunda-feira, 12/10" → "Segunda-feira, dia 12". */
+    fun spokenDay(label: String): String {
+        val m = Regex("""^(.*?),?\s*(\d{1,2})/(\d{1,2})""").find(label.trim()) ?: return Speak.capitalize(label)
+        val name = m.groupValues[1].trim().trimEnd(',')
+        return Speak.capitalize(if (name.isBlank()) "dia ${m.groupValues[2].toInt()}" else "$name, dia ${m.groupValues[2].toInt()}")
+    }
+
+    /** A lista completa, para a tela (títulos inteiros, horário de início e fim). */
+    fun agendaDetail(p: AgendaParse): String? {
+        if (p.empty || p.items.size < 2) return null
+        val multi = p.items.map { it.day }.distinct().size > 1
+        return buildString {
+            var lastDay: String? = null
+            for (i in p.items) {
+                if (multi && i.day != lastDay) { appendLine("**${spokenDay(i.day.orEmpty())}**"); lastDay = i.day }
+                append("• ")
+                append(if (i.allDay) "dia todo" else i.time.orEmpty())
+                append(" — ${i.title}")
+                i.place?.takeIf { it.isNotBlank() }?.let { append(" (${it})") }
+                appendLine()
+            }
+            if (p.more > 0) appendLine("…e mais ${p.more}.")
+        }.trimEnd()
     }
 
     fun itemText(i: AgendaItem, withAt: Boolean = true): String {
-        val place = i.place?.takeIf { it.isNotBlank() }?.let { ", em $it" }.orEmpty()
+        val place = i.place?.takeIf { it.isNotBlank() }?.let { ", em ${Speak.title(it)}" }.orEmpty()
         val start = i.start
+        val title = Speak.title(i.title)
         return when {
-            i.allDay -> "o dia inteiro: ${i.title}$place"
-            start != null -> (if (withAt) Speak.at(start.first, start.second) else Speak.hm(start.first, start.second)) + ", ${i.title}$place"
-            else -> i.title + place
+            i.allDay -> "o dia inteiro: $title$place"
+            start != null -> (if (withAt) Speak.at(start.first, start.second) else Speak.hm(start.first, start.second)) + ", $title$place"
+            else -> title + place
         }
     }
 

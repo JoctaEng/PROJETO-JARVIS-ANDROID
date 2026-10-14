@@ -39,9 +39,14 @@ object ToolSelector {
     )
 
     private val byTopic: List<Pair<List<String>, List<String>>> = listOf(
-        listOf("agenda", "compromisso", "reuniao", "marca", "marcar", "remarca", "dia ", "amanha", "hoje", "semana") to
+        // "pode apagar futebol" (teste de 14/10): sem "apagar" aqui, o Groq não recebia agenda_apagar e dizia que não podia.
+        listOf("agenda", "compromisso", "reuniao", "marca", "marcar", "remarca", "dia ", "amanha", "hoje", "semana", "apag", "cancel",
+            "desmarc", "exclu", "delet", "remov", "tira ", "evento", "lembrete") to
             listOf("agenda_consultar", "agenda_salvar", "agenda_editar", "agenda_apagar", "agenda_abrir", "resumo_do_dia"),
-        listOf("whats", "mensagem", "manda", "envia", "zap") to listOf("whatsapp_mensagem", "contatos_buscar"),
+        listOf("whats", "mensagem", "manda", "envia", "zap") to listOf("whatsapp_mensagem", "sms_enviar", "contatos_buscar"),
+        listOf("sms", "torpedo") to listOf("sms_enviar", "contatos_buscar"),
+        listOf("clima", "tempo", "temperatura", "chuva", "chover", "calor", "frio", "previsao", "sol ") to listOf("clima"),
+        listOf("resumo", "bom dia", "meu dia", "acord") to listOf("resumo_do_dia", "agenda_consultar", "gmail_buscar", "clima"),
         listOf("contato", "telefone", "numero") to listOf("contatos_buscar", "contato_criar"),
         listOf("email", "e mail", "gmail") to listOf("gmail_buscar", "gmail_ler"),
         listOf("notifica", "chegou", "novidade") to listOf("notificacoes_ler"),

@@ -9,7 +9,7 @@ object Fixtures {
     val now: ZonedDateTime = ZonedDateTime.of(2026, 10, 11, 9, 8, 0, 0, zone)
 
     val tools = setOf(
-        "abrir_app", "listar_apps", "agenda_consultar", "agenda_salvar", "agenda_editar", "agenda_apagar", "agenda_abrir", "agenda_criar",
+        "abrir_app", "clima", "sms_enviar", "listar_apps", "agenda_consultar", "agenda_salvar", "agenda_editar", "agenda_apagar", "agenda_abrir", "agenda_criar",
         "estado_do_celular", "criar_alarme", "criar_timer", "lanterna", "nao_perturbe", "notificacoes_ler", "gmail_buscar", "gmail_ler",
         "whatsapp_mensagem", "tela_ler", "tela_ver", "tela_tocar", "tela_tocar_ponto", "tela_digitar", "tela_rolar", "tela_deslizar",
         "tela_pesquisar", "tela_navegar", "pesquisar_e_resumir", "pesquisar_na_web", "memoria_guardar", "contatos_buscar", "resumo_do_dia",

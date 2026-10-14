@@ -30,6 +30,11 @@ class AgentRunner(
     private val gateway: ToolGateway,
     private val maxRounds: Int = 4,
 ) {
+    companion object {
+        const val MAX_CORRECTIONS = 2
+        const val UNDONE = "Desta vez eu não consegui fazer isso de verdade: nenhuma ação foi executada. Pode repetir o pedido de outro jeito, ou me dizer se quer que eu tente pelo app na tela."
+    }
+
     fun run(
         history: List<ChatMessage>,
         generate: (List<ChatMessage>) -> Flow<LlmChunk>,
@@ -51,7 +56,7 @@ class AgentRunner(
         var counter = 0
         var anySuccess = false
         var lastSuccess: String? = null
-        var corrected = false
+        var corrections = 0
         for (round in 1..maxRounds) {
             val filter = ToolCallFilter { "call-${++counter}" }
             val raw = StringBuilder()
@@ -78,10 +83,17 @@ class AgentRunner(
                 if (holdToolRoundText) held.append(tail.visible) else emit(AgentEvent.Text(tail.visible))
             }
             calls += tail.calls
-            if (verifyClaims && holdToolRoundText && !corrected && failed == null && calls.isEmpty() && round < maxRounds) {
+            if (verifyClaims && holdToolRoundText && failed == null && calls.isEmpty()) {
                 val fix = HonestyCheck.problem(held.toString(), anySuccess, lastSuccess)
+                if (fix != null && (corrections >= MAX_CORRECTIONS || round >= maxRounds)) {
+                    // Corrigido duas vezes e ainda afirma o que não fez (0.31): o usuário ouve o aviso honesto, não a promessa.
+                    emit(AgentEvent.Aside("ainda sem ferramenta depois das correções: ${held.toString().trim().take(200)}"))
+                    emit(AgentEvent.Text(UNDONE))
+                    emit(AgentEvent.Done)
+                    return@flow
+                }
                 if (fix != null) {
-                    corrected = true
+                    corrections++
                     emit(AgentEvent.Aside("corrigido antes de responder: ${held.toString().trim().take(200)}"))
                     messages += ChatMessage(Role.ASSISTANT, raw.toString())
                     messages += ChatMessage(Role.USER, fix)

@@ -1442,6 +1442,42 @@ class SettingsActivity : ComponentActivity() {
             HorizontalDivider()
             Spacer(Modifier.height(8.dp))
 
+            // 0.31: sincronização contínua e respostas naturais
+            Text("Sincronização contínua", style = MaterialTheme.typography.titleSmall)
+            Hint("A cada ~30 minutos o Euno lê sozinho a agenda (inclui a do Google), o clima e os e-mails novos, para responder \"como está meu dia\" sem abrir nada. Fica ligada até você desligar.")
+            var syncOn by remember { mutableStateOf(settings.continuousSync) }
+            var syncInfo by remember { mutableStateOf(app.sync.ageMinutes().let { if (it == Long.MAX_VALUE) "Ainda não sincronizou." else "Última leitura: há $it min." }) }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("Sincronizar agenda, clima e e-mails", style = MaterialTheme.typography.bodyMedium)
+                    Hint(syncInfo)
+                }
+                Switch(checked = syncOn, onCheckedChange = { on ->
+                    settings.continuousSync = on
+                    syncOn = on
+                    com.joctaeng.jarvis.sync.EunoSync.schedule(app)
+                })
+            }
+            OutlinedButton(enabled = syncOn, onClick = {
+                syncInfo = "Sincronizando…"
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    val snap = runCatching { app.sync.run("botão Sincronizar agora") }.getOrNull()
+                    syncInfo = if (snap == null) "Não consegui sincronizar agora." else "Sincronizado agora." + if (snap.notes.isEmpty()) "" else " (${snap.notes.joinToString("; ")})"
+                }
+            }) { Text("Sincronizar agora") }
+            var natural by remember { mutableStateOf(settings.naturalReplies) }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("Respostas naturais", style = MaterialTheme.typography.bodyMedium)
+                    Hint("Os dados vêm do Euno (certos); a IA online só reescreve agenda, e-mails e clima de um jeito natural. Sem internet, ele fala o texto próprio.")
+                }
+                Switch(checked = natural, onCheckedChange = { on -> settings.naturalReplies = on; natural = on })
+            }
+
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+
             // v0.30: Memória por sentido (EmbeddingGemma 2)
             Text("Memória por sentido (EmbeddingGemma 2)", style = MaterialTheme.typography.titleSmall)
             Hint("Acha memórias pelo significado em vez de apenas palavras exatas (ex.: \"aniversário da mãe\" encontra \"o aniversário dela é em 3 de maio\"). Usa o modelo local EmbeddingGemma 2 (~157 MB).")

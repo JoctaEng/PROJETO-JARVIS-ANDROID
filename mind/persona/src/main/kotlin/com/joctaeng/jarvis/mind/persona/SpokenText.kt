@@ -31,6 +31,7 @@ object SpokenText {
         s = s.replace(Regex("(\\*\\*|__|~~|`)"), "")
             .replace(Regex("(?<![\\w*])\\*(?!\\s)([^*\\n]+?)\\*(?!\\w)"), "$1")
             .replace(Regex("[*#_|>~]"), " ")
+        s = SpokenProse.normalize(s)
         return s.replace(Regex("[ \\t]+"), " ").replace(Regex(" *\\n+ *"), ". ").replace(Regex("\\.(\\s*\\.)+"), ".").trim()
     }
 }

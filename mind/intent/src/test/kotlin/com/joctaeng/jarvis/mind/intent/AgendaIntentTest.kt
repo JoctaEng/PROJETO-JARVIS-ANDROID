@@ -18,7 +18,7 @@ class AgendaIntentTest {
         assertEquals("agenda.query", out.intentId)
         assertEquals(mapOf<String, Any?>("periodo" to "hoje"), out.plan.steps.first().args)
         val r = Fixtures.play(out) { Fixtures.ok(it, today) }
-        assertTrue(r.text.startsWith("Hoje você tem 3 compromissos:"), r.text)
+        assertTrue(r.text.startsWith("Hoje você tem 3 compromissos. O dia todo, Prova P1. Com horário"), r.text)
         assertTrue(r.text.contains("às 8h, Aula de Cálculo, em Sala 3"), r.text)
     }
 

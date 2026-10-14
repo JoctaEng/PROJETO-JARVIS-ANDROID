@@ -14,8 +14,33 @@ internal object CatalogMail {
         Kit.run(m, Step("gmail_buscar", mapOf("consulta" to query, "quantos" to count))) { r ->
             Kit.firstFailure(r)?.let { return@run Kit.failure(it) }
             val list = ToolText.mails(r[0].text)
-            if (list.isEmpty()) Reply(none) else Reply(Replies.mails(list, intro), "happy")
+            if (list.isEmpty()) Reply(none)
+            else Reply(Mail.spoken(list, intro.trimEnd(':')), "happy", detail = Mail.detail(list), facts = "E-mails ($query):\n" + ToolText.plain(r[0].text))
         }
+
+    private fun day(d: java.time.LocalDate) = "%04d/%02d/%02d".format(d.year, d.monthValue, d.dayOfMonth)
+
+    /** "de hoje", "da semana passada", "dia 10": a busca do Gmail por período (after/before). */
+    private fun period(m: M, date: DateSlot): Outcome {
+        val q = "in:inbox after:${day(date.start)} before:${day(date.start.plusDays(date.days.toLong()))}"
+        val w = CatalogAgenda.whenText(date, m.today)
+        return search(m, q, "E-mails $w", "Não achei e-mails $w.", count = 10)
+    }
+
+    /** Pergunta aberta (pedido de 14/10): "quer os de hoje, um resumo dos não lidos ou os mais antigos?". */
+    private fun choose(m: M): Outcome = Kit.ask(m, "Quer os e-mails de hoje, um resumo dos não lidos, ou procuro mais antigos (por exemplo, da semana passada)?") { ex, c ->
+        val said = PtText.fold(ex.raw)
+        val mm = M(ex, emptyMap(), c, m.intentId)
+        when {
+            ex.date != null && ex.date.start != c.today -> period(mm, ex.date)
+            Regex("""\b(hoje|do dia|de hoje)\b""").containsMatchIn(said) -> period(mm, DateSlot(c.today))
+            Regex("""\b(resumo|nao lidos?|novos?|importantes?)\b""").containsMatchIn(said) || Kit.yes(ex) == true ->
+                search(mm, "is:unread in:inbox", "Seus e-mails não lidos mais recentes", "Você não tem e-mails novos.")
+            Regex("""\b(antigos?|anteriores?|passad[ao]s?|ontem|semana|mes)\b""").containsMatchIn(said) ->
+                period(mm, DateSlot(c.today.minusDays(7), 7, "lastweek"))
+            else -> null
+        }
+    }
 
     /** Remetente OU assunto/texto: "email do banco" acha o banco como remetente e como assunto. */
     private fun fromQuery(who: String) = "{from:\"$who\" \"$who\"}"
@@ -43,6 +68,32 @@ internal object CatalogMail {
         }
 
     val defs: List<IntentDef> = listOf(
+        IntentDef(
+            "gmail.info", "Gmail", "pergunta o que o usuário quer dos e-mails (de hoje, resumo dos não lidos ou mais antigos)",
+            templates = listOf(
+                "(me )?(da|de|passa|passe|traz|traga|mostra|mostre|fala|fale|diz|diga) (as |umas )?(informacoes|novidades|noticias|coisas) (do|dos|de|no) (meu |meus )?(email|e mail|emails|e mails|gmail|correio)",
+                "(o que|oq) (tem|ha) (de novo )?(no|nos) (meu |meus )?(email|e mail|emails|e mails|gmail)",
+                "(verifica|verifique|olha|olhe|ve|veja|confere|confira|checa|cheque) (o |os )?(meu |meus )?(email|e mail|emails|e mails|gmail) (pra mim|para mim)?",
+                "(e )?(os |o )?(meus |meu )?(emails|e mails|email|e mail)",
+            ),
+            priority = 5,
+        ) { m ->
+            gate(m) ?: if (m.date != null) period(m, m.date!!) else choose(m)
+        },
+        IntentDef(
+            "gmail.period", "Gmail", "e-mails de um dia ou período (hoje, ontem, semana passada, dia 10)",
+            slots = listOf(SlotSpec("date", "dia AAAA-MM-DD"), SlotSpec("days", "quantos dias")),
+            templates = listOf(
+                "(os |meus )?(emails|e mails|email|e mail) (que chegaram|que recebi|recebidos)? <D>",
+                "(quais|que) (emails|e mails) (chegaram|recebi|eu recebi|tenho) <D>",
+                "(me )?(mostra|mostre|le|leia|ve|veja|procura|procure|busca|busque|traz|traga) (os )?(meus )?(emails|e mails) <D>",
+                "(o que|oq) (chegou|tem) (no|de) (meu )?(email|e mail|gmail) <D>",
+            ),
+            priority = 6,
+        ) { m ->
+            val d = m.date ?: return@IntentDef NoMatch
+            gate(m) ?: period(m, d)
+        },
         IntentDef(
             "gmail.unread", "Gmail", "diz os e-mails novos (não lidos)",
             templates = listOf(

@@ -30,7 +30,8 @@ private class TaskCreate(context: Context) : BackgroundTool(
     context, "tarefa_criar",
     "Cria uma TAREFA PROGRAMADA: no horário, o Euno faz o 'pedido' sozinho e avisa o resultado por notificação. Use para " +
         "'todo dia às 7h me diga a agenda e o clima', 'dias úteis às 18h leia as notificações', 'sexta às 20h lembre de…'. " +
-        "O 'pedido' é escrito como o usuário falaria (pode citar skills). Enviar/pagar/apagar continua pedindo confirmação.",
+        "O 'pedido' é escrito como o usuário falaria (pode citar skills). Enviar/pagar/apagar continua pedindo confirmação. " +
+        "Pedidos de resumo (agenda, e-mails, clima) são executados de verdade no horário e falados em voz alta.",
     RiskLevel.WRITE_REVERSIBLE,
     """"nome":{"type":"string"},"pedido":{"type":"string","description":"o que fazer, como o usuário pediria"},""" +
         """"hora":{"type":"integer","minimum":0,"maximum":23},"minuto":{"type":"integer","minimum":0,"maximum":59},""" +
@@ -59,7 +60,9 @@ private class TaskCreate(context: Context) : BackgroundTool(
             ScheduledTask(
                 id = "", name = text(args, "nome").ifBlank { pedido.take(40) }, instruction = pedido,
                 hour = args.optInt("hora").coerceIn(0, 23), minute = args.optInt("minuto", 0).coerceIn(0, 59),
-                repeat = repeat, days = days, date = date, speak = args.optBoolean("falar", false),
+                // "me acorde", "me diga", "resumo": quem pede isso quer ouvir (teste de 14/10: a tarefa só avisava em silêncio).
+                repeat = repeat, days = days, date = date,
+                speak = args.optBoolean("falar", false) || Regex("""(?i)\b(acord|despert|fal[ae]|diga|leia|resum|bom dia)""").containsMatchIn(pedido + " " + text(args, "nome")),
             ),
         )
         TaskScheduler.schedule(context, task)

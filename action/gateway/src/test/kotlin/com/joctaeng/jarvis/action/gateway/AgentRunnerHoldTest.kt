@@ -46,3 +46,23 @@ private class HoldFakeTool(override val name: String) : Tool {
     override val inputSchemaJson = "{\"type\":\"object\"}"
     override suspend fun execute(argumentsJson: String, context: ToolContext) = ToolResult.Success("{\"ok\":true}")
 }
+
+class AgentRunnerHonestyTest {
+    @Test fun promisesWithoutToolsEndInAnHonestAnswer() = runTest {
+        val gateway = ToolGateway(
+            listOf(HoldFakeTool("joca_financas_resumo")), InMemoryAuditLog(),
+            autonomy = { AutonomyLevel.OPERATOR }, permissions = { PermissionState(true, true) },
+        )
+        var calls = 0
+        val events = AgentRunner(gateway, maxRounds = 6).run(
+            listOf(ChatMessage(Role.USER, "faça um resumo das finanças")),
+            { _ ->
+                calls++
+                flow { emit(LlmChunk.Text("Estou preparando o resumo das suas finanças agora. Um instante.")); emit(LlmChunk.Done()) }
+            },
+            ToolContext("s", "r"), { _, _ -> true }, holdToolRoundText = true, verifyClaims = true,
+        ).toList()
+        assertEquals(3, calls)
+        assertEquals(AgentRunner.UNDONE, events.filterIsInstance<AgentEvent.Text>().joinToString("") { it.text })
+    }
+}

@@ -61,6 +61,30 @@ object Speak {
         return if (parts.isEmpty()) "0 segundos" else parts.joinToString(" e ")
     }
 
+    private val tag = Regex("""^\s*\[([^\]]{1,12})]\s*""")
+    private val separators = Regex("""\s+[–—|-]\s+|\s*[–—|]\s*""")
+    /** "nº 213/2026", "SIMP 029809-500/2026", "025590, 025604-500/2026": números de processo/documento não se falam. */
+    private val codes = Regex("""(?i)\b(?:n[º°o.]?\s*|nr\.?\s*|simps?\s+|processo\s+|of[ií]cio\s+n?[º°o.]?\s*)?\d[\d.,/-]*[/-][\d.,/-]*\d\b(?:\s*,\s*\d[\d./-]+)*""")
+
+    private val dateLike = Regex("""\d{1,2}/\d{1,2}(/\d{2}|/\d{4})?""")
+
+    /**
+     * Título de compromisso bom de falar (0.31): sem etiqueta "[MP]", só o primeiro trecho antes de " – ", sem números de
+     * processo e no máximo [max] caracteres. A tela continua mostrando o título inteiro.
+     */
+    fun title(raw: String, max: Int = 48): String {
+        var t = raw.trim()
+        val tagWord = tag.find(t)?.groupValues?.get(1)
+        t = t.replace(tag, "")
+        val pieces = t.split(separators).map { it.trim() }.filter { it.isNotBlank() }
+        t = pieces.firstOrNull() ?: t
+        if (t.length < 6 && pieces.size > 1) t = "$t, ${pieces[1]}"
+        t = t.replace(codes) { if (dateLike.matches(it.value.trim())) it.value else " " }.replace(Regex("""\(\s*\)"""), " ").replace(Regex("""\s+"""), " ").trim().trim(',', '-', '–', ':', ';', '.').trim()
+        if (t.isBlank()) t = tagWord ?: raw.trim()
+        if (t.length > max) t = t.take(max).substringBeforeLast(' ').trimEnd(',', ';', ':')
+        return t
+    }
+
     fun plural(n: Int, one: String, many: String): String = if (n == 1) "1 $one" else "$n $many"
 
     fun capitalize(s: String): String = s.replaceFirstChar { it.uppercase(ptBr) }

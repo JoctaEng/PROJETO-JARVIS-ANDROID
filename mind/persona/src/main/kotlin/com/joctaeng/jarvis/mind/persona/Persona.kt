@@ -63,6 +63,8 @@ object PersonaEngine {
         selfSection: String = "",
         /** Resumos de conversas anteriores que o usuário marcou para valer como contexto. */
         summaries: String = "",
+        /** 0.31: o que o Euno sincronizou sozinho (agenda de hoje/amanhã, clima, e-mails novos), com a hora da leitura. */
+        liveSection: String = "",
     ): String = buildString {
         val name = characterName.ifBlank { character.defaultName }
         appendLine("Você é ${character.gender.article}$name, o personagem digital pessoal de $userName: um companheiro que vive no celular dele.")
@@ -105,6 +107,11 @@ object PersonaEngine {
             appendLine("O que você sabe sobre $userName (memórias que ele autorizou):")
             shown.forEach { appendLine("- $it") }
         }
+        if (liveSection.isNotBlank()) {
+            appendLine("Dados sincronizados automaticamente (use para responder sem abrir nada; para detalhes ou se estiverem velhos, chame a ferramenta):")
+            appendLine(liveSection.trim())
+        }
+        appendLine("Cumprimente pela hora de \"Agora\": bom dia até 12h, boa tarde até 18h, boa noite depois. Use sempre o seu nome e o gênero do seu personagem.")
         // Por último: muda a cada minuto e assim não invalida o começo já lido pela IA do celular (cache de prefixo).
         appendLine("Agora: ${context.nowDescription}.")
     }.trimEnd()
