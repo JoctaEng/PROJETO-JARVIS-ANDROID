@@ -8,23 +8,32 @@ data class Tok(val norm: String, val orig: String)
 
 /** Texto em português para o motor: sem acento, números por extenso viram dígitos ("dezessete horas" → "17 horas"). */
 object PtText {
+    private val ACCENTS_REGEX = Regex("\\p{Mn}+")
+    private val CURRENCY_REGEX = Regex("""(?i)r\$\s*(\d[\d.]*(?:,\d{1,2})?)""")
+    private val PERCENT_REGEX = Regex("""(\d)\s*%""")
+    private val WHITESPACE_REGEX = Regex("\\s+")
+    private val CLEAN_NORM_REGEX = Regex("[^a-z0-9:/.,%$+*=<>-]")
+    private val DIGIT_HYPHEN_DIGIT_REGEX = Regex("""\d-\d""")
+
     fun fold(s: String): String =
-        Normalizer.normalize(s.lowercase(Locale.ROOT), Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "")
-            .replace("º", "").replace("ª", "")
+        Normalizer.normalize(s.lowercase(Locale.ROOT), Normalizer.Form.NFD)
+            .replace(ACCENTS_REGEX, "")
+            .replace("º", "")
+            .replace("ª", "")
 
     private val edge = charArrayOf(',', '.', ';', ':', '!', '?', '(', ')', '"', '“', '”', '\'', '’', '¿', '¡', '…', '[', ']')
 
     /** Palavras do pedido, já em minúsculas sem acento; "R$ 50" vira "50 reais" e "15%" vira "15 por cento". */
     fun tokenize(raw: String): List<Tok> {
-        var s = raw.replace(Regex("""(?i)r\$\s*(\d[\d.]*(?:,\d{1,2})?)""")) { "${it.groupValues[1]} reais" }
-        s = s.replace(Regex("""(\d)\s*%"""), "$1 por cento")
+        var s = raw.replace(CURRENCY_REGEX) { "${it.groupValues[1]} reais" }
+        s = s.replace(PERCENT_REGEX, "$1 por cento")
         val out = mutableListOf<Tok>()
-        for (word in s.split(Regex("\\s+")).filter { it.isNotBlank() }) {
+        for (word in s.split(WHITESPACE_REGEX).filter { it.isNotBlank() }) {
             val orig = word.trim(*edge)
             if (orig.isEmpty()) continue
-            var n = fold(orig).replace(Regex("[^a-z0-9:/.,%$+*=<>-]"), "")
+            var n = fold(orig).replace(CLEAN_NORM_REGEX, "")
             // hífen entre dígitos é de data (2026-10-15, 15-10); nas palavras ("segunda-feira") separa
-            val parts = if (Regex("""\d-\d""").containsMatchIn(n)) listOf(n) else n.split('-')
+            val parts = if (DIGIT_HYPHEN_DIGIT_REGEX.containsMatchIn(n)) listOf(n) else n.split('-')
             for (p in parts) {
                 val t = p.trim('.', ',', ':')
                 if (t.isNotEmpty()) out += Tok(t, if (parts.size == 1) orig else p)

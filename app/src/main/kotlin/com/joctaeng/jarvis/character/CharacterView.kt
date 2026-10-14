@@ -449,7 +449,7 @@ private fun DrawScope.drawMouthPatch(
     val rect = androidx.compose.ui.geometry.Rect(cx - w / 2f, top, cx + w / 2f, top + h)
     val a = (alpha * (open / 0.3f).coerceIn(0f, 1f)).coerceIn(0f, 1f)
     drawIntoCanvas { canvas ->
-        canvas.saveLayer(rect, Paint())
+        canvas.saveLayer(rect, MouthLayerPaint)
         drawImage(
             talk, srcOffset = srcOffset, srcSize = srcSize,
             dstOffset = IntOffset(rect.left.toInt(), rect.top.toInt()), dstSize = IntSize(rect.width.toInt().coerceAtLeast(1), rect.height.toInt().coerceAtLeast(1)),
@@ -472,6 +472,7 @@ private fun DrawScope.drawMouthPatch(
 }
 
 private const val FADE_SECONDS = 0.12f
+private val MouthLayerPaint = Paint()
 
 private fun DrawScope.drawCharacter(r: ComposeCharacterRenderer, t: Float, transition: Float) {
     val side = size.minDimension

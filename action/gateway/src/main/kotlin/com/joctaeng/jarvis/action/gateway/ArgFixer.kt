@@ -93,6 +93,9 @@ object ArgFixer {
 
     private fun parseObject(text: String): JsonObject? = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
 
+    private val accentsRegex = Regex("""\p{Mn}+""")
+    private val nonAlnumRegex = Regex("[^a-z0-9]")
+
     private fun key(s: String): String =
-        Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").replace(Regex("[^a-z0-9]"), "")
+        Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD).replace(accentsRegex, "").replace(nonAlnumRegex, "")
 }

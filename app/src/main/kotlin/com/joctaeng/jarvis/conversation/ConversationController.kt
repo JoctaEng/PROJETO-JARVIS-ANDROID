@@ -170,7 +170,7 @@ class ConversationController(private val app: JarvisApp) {
         val before = nextId
         val finished = kotlinx.coroutines.CompletableDeferred<Unit>()
         val watcher = scope.launch { turnFinished.collect { finished.complete(Unit) } }
-        start("Tarefa programada \"$name\": $instruction", speak = false, addEntry = true)
+        start("[EXECUÇÃO AUTOMÁTICA DE TAREFA PROGRAMADA: $name] Execute diretamente as ferramentas para cumprir este pedido e entregue apenas o resultado final: $instruction", speak = false, addEntry = true)
         kotlinx.coroutines.withTimeoutOrNull(4 * 60_000L) { finished.await() }
         watcher.cancel()
         _entries.value.lastOrNull { it.id >= before && it.role == Role.ASSISTANT && !it.note && it.text.isNotBlank() }?.text
@@ -574,9 +574,11 @@ class ConversationController(private val app: JarvisApp) {
             ),
         )
 
-        // Cérebro do celular: o maior prompt que cabe na janela de 4.096 tokens dele (a 0.29.0 mandava 38 mil caracteres).
-        val localPrompt = listOf(8, 4).asSequence().map { buildPrompt(true, maxTools = it) }.firstOrNull { it.length <= LOCAL_PROMPT_MAX_CHARS }
-            ?: buildPrompt(true, noTools = true)
+        // Cérebro do celular: o maior prompt que cabe na janela de 4.096 tokens dele (calculado sob demanda).
+        val localPrompt by lazy {
+            listOf(8, 4).asSequence().map { buildPrompt(true, maxTools = it) }.firstOrNull { it.length <= LOCAL_PROMPT_MAX_CHARS }
+                ?: buildPrompt(true, noTools = true)
+        }
         val prompt = if (onlyLocal) localPrompt else buildPrompt(false)
         // Pedido com ferramentas: cérebros que já voltaram vazios com ferramentas nesta sessão vão para o fim da fila.
         val ordered = if (prompt.contains("<tools>")) providers.sortedBy { it.id in toolWeak } else providers
@@ -657,7 +659,7 @@ class ConversationController(private val app: JarvisApp) {
                             newRound = false
                         }
                         OverlayBus.anim.value = AnimState.IDLE
-                        edit(replyId) { it.copy(text = TextCleanup.clean(it.text + visible)) }
+                        edit(replyId) { it.copy(text = it.text + visible) }
                         if (speak || OverlayBus.acting.value) chunker.feed(visible).forEach(voice::speak)
                     }
                 }

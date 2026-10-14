@@ -17,6 +17,7 @@ import android.app.ApplicationExitInfo
 import android.os.Build
 import com.joctaeng.jarvis.system.resources.EventLog
 import com.joctaeng.jarvis.system.resources.LogLevel
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -70,6 +71,7 @@ class JarvisApp : Application() {
     val tasks: com.joctaeng.jarvis.mind.memory.TaskBook by lazy { com.joctaeng.jarvis.mind.memory.TaskBook(File(filesDir, "memory/tarefas.json")) }
     /** Skills (v0.27): as prontas + as que o usuário ensina. */
     val skills: com.joctaeng.jarvis.mind.memory.SkillBook by lazy { com.joctaeng.jarvis.mind.memory.SkillBook(File(filesDir, "memory/skills.json")) }
+    private val embedScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
@@ -83,7 +85,6 @@ class JarvisApp : Application() {
         settings = AppSettings(this)
         secrets = SecretStore(this)
 
-        val embedScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
         embeddingDownload = com.joctaeng.jarvis.embed.EmbeddingDownload(this, modelStore.directory)
         embeddingRuntime = com.joctaeng.jarvis.embed.EmbeddingRuntime(embeddingDownload.target, embedScope, dims = 256)
         embeddingIndex = com.joctaeng.jarvis.mind.embed.EmbeddingIndexStore(
@@ -152,11 +153,9 @@ class JarvisApp : Application() {
         if (level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL || level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
             events.warn("sistema", "memória crítica (nível $level): liberando o modelo local e de embeddings")
             conversation.releaseLocalModel()
-            Thread {
-                kotlinx.coroutines.runBlocking {
-                    runCatching { embeddingRuntime.close() }
-                }
-            }.start()
+            embedScope.launch {
+                runCatching { embeddingRuntime.close() }
+            }
         } else if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
             events.info("sistema", "aviso de memória (nível $level); modelo local mantido")
         }

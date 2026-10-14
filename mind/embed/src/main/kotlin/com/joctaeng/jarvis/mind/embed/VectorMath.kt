@@ -27,21 +27,29 @@ object VectorMath {
         return normalize(v.copyOf(dims))
     }
 
+    /** Produto escalar para vetores já normalizados (L2 = 1.0). Muito mais rápido que recalcular raízes quadradas. */
+    fun dot(a: FloatArray, b: FloatArray): Float {
+        require(a.size == b.size) { "tamanhos diferentes: ${a.size} e ${b.size}" }
+        var sum = 0.0
+        for (i in a.indices) sum += a[i].toDouble() * b[i].toDouble()
+        return sum.coerceIn(-1.0, 1.0).toFloat()
+    }
+
     /** Cosseno entre dois vetores. Se algum for zero, devolve 0 (não divide por zero). */
     fun cosine(a: FloatArray, b: FloatArray): Float {
         require(a.size == b.size) { "tamanhos diferentes: ${a.size} e ${b.size}" }
-        var dot = 0.0
+        var dotProduct = 0.0
         var na = 0.0
         var nb = 0.0
         for (i in a.indices) {
             val x = a[i].toDouble()
             val y = b[i].toDouble()
-            dot += x * y
+            dotProduct += x * y
             na += x * x
             nb += y * y
         }
         if (na == 0.0 || nb == 0.0) return 0f
-        return (dot / (sqrt(na) * sqrt(nb))).coerceIn(-1.0, 1.0).toFloat()
+        return (dotProduct / (sqrt(na) * sqrt(nb))).coerceIn(-1.0, 1.0).toFloat()
     }
 
     /**
@@ -49,10 +57,10 @@ object VectorMath {
      * Só entram os que têm nota >= [minScore]. Vetores de tamanho diferente do da pergunta são ignorados.
      */
     fun topK(query: FloatArray, index: Map<String, FloatArray>, k: Int, minScore: Float = -1f): List<Scored> {
-        if (k <= 0) return emptyList()
+        if (k <= 0 || index.isEmpty()) return emptyList()
         return index.asSequence()
             .filter { it.value.size == query.size }
-            .map { Scored(it.key, cosine(query, it.value)) }
+            .map { Scored(it.key, dot(query, it.value)) }
             .filter { it.score >= minScore }
             .sortedWith(compareByDescending<Scored> { it.score }.thenBy { it.id })
             .take(k)
@@ -65,11 +73,12 @@ object KeywordScore {
     // Mesmas palavras que o MemoryStore ignora, para as duas buscas concordarem.
     private val stopWords = setOf("que", "para", "com", "uma", "uns", "das", "dos", "nas", "nos", "por", "mais", "isso", "isto", "meu", "minha", "sobre")
     private val accents = Regex("\\p{M}")
+    private val splitRegex = Regex("[^a-z0-9]+")
 
     fun words(text: String): Set<String> =
         Normalizer.normalize(text.lowercase(Locale.ROOT), Normalizer.Form.NFD)
             .replace(accents, "")
-            .split(Regex("[^a-z0-9]+"))
+            .split(splitRegex)
             .filter { it.length > 2 && it !in stopWords }
             .toSet()
 

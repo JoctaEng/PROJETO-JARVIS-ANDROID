@@ -25,9 +25,10 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.sample
 import org.json.JSONObject
 
+private val FORMAT_REGEX = Regex("[$*`|#]|\\\\[(\\[]|^\\s*([-•]|\\d+[.)])\\s", RegexOption.MULTILINE)
+
 /** Resposta com Markdown ou fórmula? Texto simples continua num Text comum, mais leve. */
-fun needsFormatting(text: String): Boolean =
-    Regex("[$*`|#]|\\\\[(\\[]|^\\s*([-•]|\\d+[.)])\\s", RegexOption.MULTILINE).containsMatchIn(text)
+fun needsFormatting(text: String): Boolean = FORMAT_REGEX.containsMatchIn(text)
 
 /**
  * Desenha a resposta com Markdown e fórmulas (assets/chat: marked + KaTeX + DOMPurify, tudo offline).

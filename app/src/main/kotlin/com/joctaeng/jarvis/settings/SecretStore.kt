@@ -19,29 +19,43 @@ class SecretStore(context: Context) {
 
     fun put(name: String, value: String?) {
         if (value.isNullOrBlank()) {
+            cache.remove(name)
             prefs.edit().remove(name).apply()
             return
         }
+        val trimmed = value.trim()
         val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, key()) }
-        val encrypted = cipher.doFinal(value.trim().toByteArray())
+        val encrypted = cipher.doFinal(trimmed.toByteArray())
         prefs.edit().putString(name, encode(cipher.iv) + ":" + encode(encrypted)).apply()
+        cache[name] = trimmed
     }
 
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    @Volatile private var cachedKey: SecretKey? = null
+
     fun get(name: String): String? {
+        cache[name]?.let { return it }
         val stored = prefs.getString(name, null) ?: return null
         val (iv, data) = stored.split(":").takeIf { it.size == 2 } ?: return null
-        return runCatching {
+        val decrypted = runCatching {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, decode(iv)))
             String(cipher.doFinal(decode(data)))
         }.getOrNull()
+        if (decrypted != null) cache[name] = decrypted
+        return decrypted
     }
 
     fun has(name: String): Boolean = prefs.contains(name)
 
     private fun key(): SecretKey {
+        cachedKey?.let { return it }
         val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
-        (keyStore.getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+        val entry = (keyStore.getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
+        if (entry != null) {
+            cachedKey = entry
+            return entry
+        }
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE).apply {
             init(
                 KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)

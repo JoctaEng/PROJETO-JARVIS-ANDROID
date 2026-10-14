@@ -12,6 +12,9 @@ import com.joctaeng.jarvis.core.model.RiskLevel
 import com.joctaeng.jarvis.core.model.ToolResult
 import com.joctaeng.jarvis.system.resources.GmailMessage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -73,10 +76,16 @@ private class GmailSearch(context: Context) : BackgroundTool(
             .getOrElse { return ToolResult.Failure(it.message ?: "falha no Gmail") }
         val ids = JSONObject(list).optJSONArray("messages")?.let { arr -> (0 until arr.length()).map { arr.getJSONObject(it).getString("id") } }.orEmpty()
         if (ids.isEmpty()) return ToolResult.Success("Nenhum e-mail encontrado${if (q.isBlank()) "" else " para \"$q\""}.")
-        val lines = ids.mapNotNull { id ->
-            gmailGet(context, "messages/$id?format=full").getOrNull()?.let { runCatching { GmailMessage.parse(it, 400).shortLine() }.getOrNull() }
+        // Busca de metadados em paralelo ( From, Subject, Date ) para não baixar corpos full nem bloquear em série.
+        val lines = coroutineScope {
+            ids.map { id ->
+                async(Dispatchers.IO) {
+                    val path = "messages/$id?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date"
+                    gmailGet(context, path).getOrNull()?.let { runCatching { GmailMessage.parse(it, maxBody = 0).shortLine() }.getOrNull() }
+                }
+            }.awaitAll().filterNotNull()
         }
-        JarvisApp.from(context).events.info("ferramentas", "gmail_buscar: ${lines.size} e-mails")
+        JarvisApp.from(context).events.info("ferramentas", "gmail_buscar: ${lines.size} e-mails (paralelo)")
         return ToolResult.Success(lines.joinToString("\n"))
     }
 }

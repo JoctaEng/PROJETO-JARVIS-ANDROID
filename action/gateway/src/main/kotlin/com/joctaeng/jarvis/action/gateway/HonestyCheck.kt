@@ -37,6 +37,10 @@ object HonestyCheck {
      * [lastTool] = a última ferramenta que deu certo nesta resposta. Se ela mudou a tela e o texto descreve o que há na tela,
      * o cérebro está inventando (teste da 0.26.1: abriu o e-mail e "resumiu" sem ler).
      */
+    private val verbPatterns by lazy { claimVerbs.associateWith { Regex("""\b${Regex.escape(it)}\b""") } }
+    private val whitespaceRegex = Regex("""\s+""")
+    private val accentsRegex = Regex("""\p{Mn}+""")
+
     fun problem(text: String, anyToolSucceeded: Boolean, lastTool: String? = null): String? {
         val t = normalize(text)
         if (t.isBlank()) return null
@@ -51,7 +55,7 @@ object HonestyCheck {
             }
         }
         if (anyToolSucceeded) return null
-        val claimed = claimVerbs.firstOrNull { verb -> Regex("""\b${Regex.escape(verb)}\b""").findAll(t).any { !negated(t, it.range.first) } }
+        val claimed = claimVerbs.firstOrNull { verb -> verbPatterns[verb]?.findAll(t)?.any { !negated(t, it.range.first) } == true }
             ?: claimPhrases.firstOrNull { it in t }
         return claimed?.let {
             "ATENÇÃO: você disse \"$it\", mas nenhuma ferramenta foi executada nesta resposta, então isso NÃO aconteceu. " +
@@ -62,10 +66,10 @@ object HonestyCheck {
 
     /** "não abri", "ainda não rolei": a negação nas 2 palavras antes não é afirmação de ter feito. */
     private fun negated(t: String, at: Int): Boolean {
-        val before = t.substring(0, at).trimEnd().split(Regex("\\s+")).takeLast(2)
+        val before = t.substring(0, at).trimEnd().split(whitespaceRegex).takeLast(2)
         return before.any { it == "nao" || it == "nem" || it == "sem" }
     }
 
     private fun normalize(s: String): String =
-        Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "")
+        Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD).replace(accentsRegex, "")
 }
