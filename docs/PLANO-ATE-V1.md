@@ -72,3 +72,14 @@
   - Licenças dos avatares: os VRoid CC0 podem ser usados; o exemplo da pixiv tem licença própria e precisa ser conferido para uso comercial.
 - **Marca**: nome/registro "Euno", ícone, loja, site e preço.
 - **Personagem (bônus, por último)**: avatares próprios do usuário em 3D com boca e expressões (sessão local ou serviço como Avaturn/Rodin + rig).
+
+## Projeto — Vozes do personagem (pedido 85, registrado em 15/10/2026, não iniciado)
+- **Objetivo:** cada personagem com uma voz própria. O Guardião precisa de voz imponente, grave e encorpada, sem soar infantil.
+- **Escopo previsto:**
+  - Ajuste de **tom** (grave/agudo), **timbre** (equalização: graves, médios, brilho), **velocidade** e **dramaticidade** (reverberação leve e pausas), aplicado no próprio app sobre o áudio de qualquer voz (Piper, Kokoro, Azure, Gemini ou Android).
+  - Controles deslizantes em Meu Euno, por personagem, com botão **Ouvir amostra** para testar antes de salvar.
+  - Predefinições (ex.: "Guardião grave", "neutro") que o usuário pode editar.
+- **Pré-requisito:** o usuário escolhe a voz base após ouvir as amostras (Gemini TTS: Algieba, Charon, Fenrir, Orus; Azure: Antonio, Fabio, Donato; Piper: faber, cadu, jeff, a confirmar).
+- **Fontes conferidas:** vozes e gêneros apenas parcialmente confirmados (ver a conversa de 15/10). O timbre "grave" de cada voz não foi verificado por áudio.
+- **Pendente antes de começar:** decisão do usuário sobre a voz base; teste de qualidade no celular; checagem de cota se a voz base for online.
+
