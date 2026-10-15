@@ -50,3 +50,20 @@ várias vezes sem nenhuma ferramenta; 3 ANRs no `TaskAlarmReceiver` (receptor pr
 Enviar pela acessibilidade (não existe envio oficial sem abrir); parâmetros do Open-Meteo conferidos de memória, não na página
 (bloqueada aqui) [HIPÓTESE até o teste]; SMS e localização pedem permissão na primeira vez.
 
+## 0.32.0 — conversa limpa, prompt enxuto, relatórios da versão atual (pedido 86, 15/10/2026)
+
+**Por que o prompt estava grande** [DADO, relatório 14/10]: cada pedido mandava ~46 mil caracteres (70 ferramentas com
+esquemas, instruções, catálogo de skills, memórias, caminhos). O histórico da conversa é limitado (20 mensagens), então não é
+ele o problema. Em uma resposta com ferramentas, o mesmo prompt é reenviado a cada rodada (até 10). O Groq grátis aceita
+~8 mil tokens por minuto: 413 (75 vezes) e 429 (254). Quando o provedor recusa, cai para outro cérebro e a resposta demora.
+
+**O que mudou**
+- Prompt enxuto para todos os provedores, menos o Gemini: no máximo 12 ferramentas escolhidas pelo pedido.
+- Nova conversa: sessão nova, fila, pergunta pendente, cérebros fracos e tarefa programada zerados. Caminhos aprendidos
+  ficam fora do primeiro turno. Com "começar com resumo", entra só um resumo de até 600 caracteres.
+- Relatórios: ao abrir uma versão nova, `audit.jsonl`, `diagnostics/` e `conversas/` vão para `arquivo/<versão anterior>/`
+  (`system/resources/VersionArchive.kt`, com testes). O relatório deixou de mostrar "versões anteriores".
+
+**Pendências conhecidas**: Gemini sem cota (pesquisa na internet continua falhando até haver outra fonte de busca);
+controle da tela caindo ("NÃO conectado"); clima sem cidade; memória por sentido ainda sem medição.
+

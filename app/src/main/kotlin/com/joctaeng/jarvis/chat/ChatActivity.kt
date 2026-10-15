@@ -364,7 +364,7 @@ class ChatActivity : ComponentActivity() {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Checkbox(checked = loadSummaries, onCheckedChange = { loadSummaries = it })
                                 Text(
-                                    if (hasSummaries) "Começar já com os resumos marcados" else "Começar com resumos (nenhum marcado ainda)",
+                                    if (hasSummaries) "Começar com um resumo curto dos marcados" else "Começar com resumo (nenhum marcado ainda)",
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }

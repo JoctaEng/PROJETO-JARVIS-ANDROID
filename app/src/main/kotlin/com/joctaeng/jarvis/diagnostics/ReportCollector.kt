@@ -64,10 +64,8 @@ class ReportCollector(private val app: JarvisApp) {
             val marker = "iniciado: versão ${pkg?.versionName ?: "?"}"
             val cut = log.indexOf(marker).let { i -> if (i < 0) -1 else log.lastIndexOf('\n', i).coerceAtLeast(0) }
             val current = if (cut < 0) log else log.substring(cut)
-            val older = if (cut <= 0) "" else log.substring(0, cut)
             add("Resumo dos avisos, erros e quedas DESTA versão (${pkg?.versionName ?: "?"})" to ErrorReport.problemSummary(current))
             add("Eventos, erros e quedas DESTA versão (desde a 1ª abertura; mais recente no fim)" to current)
-            if (older.isNotBlank()) add("Registro de versões ANTERIORES (só para comparar; não é desta versão)" to older)
             Poc.all.forEach { poc ->
                 val lines = app.diagnostics.read(poc).takeLast(25).joinToString("\n") { rec -> rec.entries.joinToString(" ") { "${it.key}=${it.value}" } }
                 add("Medições $poc" to lines)

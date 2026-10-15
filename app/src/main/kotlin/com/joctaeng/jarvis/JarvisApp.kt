@@ -77,6 +77,11 @@ class JarvisApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Relatórios só da versão atual (pedido 86): o que a versão anterior gravou vai para o arquivo.
+        val versionNow = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?"
+        val versionPrefs = getSharedPreferences("euno_versao", MODE_PRIVATE)
+        com.joctaeng.jarvis.system.resources.VersionArchive.archiveIfNewVersion(filesDir, versionPrefs.getString("ultima", null), versionNow)
+        versionPrefs.edit().putString("ultima", versionNow).apply()
         diagnostics = Diagnostics(this)
         // O registro antigo (um arquivo só) vira o dia mais antigo, para não ficar fora de ordem no relatório.
         File(filesDir, "logs/euno-eventos.log").takeIf { it.isFile }?.renameTo(File(filesDir, "logs/euno-2000-01-01.log"))

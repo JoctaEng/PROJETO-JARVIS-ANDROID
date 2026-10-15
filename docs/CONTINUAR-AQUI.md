@@ -46,7 +46,8 @@
 - **v0.29.1 feita** (12/10, pedido 83): correções do teste da 0.29.0 (detalhes em `docs/FASE-2.md`). A IA tradutora só executa o que o pedido sustenta, e ação que muda algo pede "sim". Cérebro do celular com prompt limitado (o teste mostrou 38 mil caracteres estourando os 4.096 tokens). Aguarda CI e teste.
 - **v0.30.0 feita** (12/10, pedido 82): **Fase 3 iniciada**. Módulo `:mind:embed` puro JVM integrado via LiteRT-LM 0.17.1 (EmbeddingGemma 2, ~157 MB). Memória por sentido opcional (desligada por padrão), com download em primeiro plano (ID 4208, canal `euno_embedding`), conferência SHA-256 e injeção semântica dos top-8 itens no prompt (com teto de 900 caracteres). Ver `docs/FASE-3.md` e ADR 0014.
 - **v0.31.0 feita** (14/10, pedido 84): agente que faz — fala natural, sincronização contínua, clima, SMS, resumo do dia, despertar com resumo, tarefas sem ANR. Ver `docs/FASE-3.md` (0.31.0).
-- **PRÓXIMO**: aguardar teste do usuário com o APK 0.31.0 no celular (roteiro em `docs/FASE-3.md`). Verificar métricas no relatório de diagnósticos (carga, tempo médio de consulta, taxa de acerto por sentido). Em seguida, tarefas por condição e novas integrações da Fase 3.
+- **v0.32.0 feita** (15/10, pedido 86): prompt enxuto nos provedores online, nova conversa limpa, relatórios só da versão atual. Ver `docs/FASE-3.md` (0.32.0).
+- **PRÓXIMO**: aguardar teste do usuário com o APK 0.32.0 no celular. Antes, 0.31.0 no celular (roteiro em `docs/FASE-3.md`). Verificar métricas no relatório de diagnósticos (carga, tempo médio de consulta, taxa de acerto por sentido). Em seguida, tarefas por condição e novas integrações da Fase 3.
 
 ## 5. Lembretes técnicos
 - App Android só compila no CI; aqui só módulos JVM. Google Maven bloqueado aqui; npm, PyPI e raw.githubusercontent funcionam; Hugging Face não.

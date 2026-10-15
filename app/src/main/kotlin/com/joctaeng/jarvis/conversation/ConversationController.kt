@@ -103,7 +103,10 @@ class ConversationController(private val app: JarvisApp) {
     private var calmDown: Job? = null
     private var local: LocalLlmProvider? = null
     private var localKey: String? = null
-    private val sessionId = java.util.UUID.randomUUID().toString()
+    /** Identificador da conversa: nova conversa, novo identificador (nada da anterior vaza para as ferramentas). */
+    private var sessionId = java.util.UUID.randomUUID().toString()
+    /** Primeiro turno de uma conversa começada do zero: sem caminhos aprendidos e sem resumo, a não ser que o usuário peça. */
+    @Volatile private var freshSession = false
 
     private val _entries = MutableStateFlow<List<ChatEntry>>(emptyList())
     val entries: StateFlow<List<ChatEntry>> = _entries.asStateFlow()
@@ -269,6 +272,8 @@ class ConversationController(private val app: JarvisApp) {
             } finally {
                 _busy.value = false
                 OverlayBus.acting.value = false
+                // Depois do primeiro turno a conversa já é "em andamento": caminhos aprendidos voltam a entrar no prompt.
+                freshSession = false
                 relax()
                 if (queue.isEmpty()) _turnFinished.tryEmit(Unit) else drainQueue()
             }
@@ -309,8 +314,18 @@ class ConversationController(private val app: JarvisApp) {
     /** Começa do zero. [loadSummaries]: a nova conversa já leva em conta os resumos marcados em "Resumos de conversa". */
     fun newConversation(loadSummaries: Boolean) {
         clearConversation()
+        // Estado da conversa anterior não pode sobrar: sessão nova, fila vazia, cérebros em descanso/fracos zerados,
+        // tarefa programada cancelada, motor sem "pergunta em aberto".
+        queue.clear()
+        queuedSpeak = false
+        scheduledRun = false
+        pendingAsk = null
+        toolWeak.clear()
+        sessionId = java.util.UUID.randomUUID().toString()
+        executor = EngineExecutor(app, sessionId)
+        freshSession = true
         useSummaries = loadSummaries
-        app.events.info("conversa", "nova conversa (resumos=${if (loadSummaries) app.summaries.activeContext(PersonaEngine.MAX_SUMMARY_CHARS).length else 0} car.)")
+        app.events.info("conversa", "nova conversa (${if (loadSummaries) "com resumo curto" else "limpa"}; sessão nova)")
     }
 
     /**
@@ -381,9 +396,12 @@ class ConversationController(private val app: JarvisApp) {
         if (settings.brainPreference == BrainPreference.AUTO && app.brains.all().any { app.brains.ready(it) }) BrainPreference.ONLINE_FIRST
         else settings.brainPreference
 
-    /** Cérebros com pouca cota por minuto (Groq grátis): recebem o prompt enxuto. */
+    /**
+     * Cérebros que recebem o prompt enxuto: todos, menos o Gemini. Groq, Cerebras, Mistral e OpenRouter têm limite de
+     * tokens por minuto (o Groq grátis aceita ~8 mil) e a versão 0.31.0 mandava ~46 mil caracteres por pedido: 413 e 429.
+     */
     private fun leanIds(): Set<String> = app.brains.all()
-        .filter { it.preset == com.joctaeng.jarvis.settings.CloudPreset.GROQ.name || it.preset == com.joctaeng.jarvis.settings.CloudPreset.OPENROUTER.name }
+        .filter { it.preset != com.joctaeng.jarvis.settings.CloudPreset.GEMINI.name }
         .map { "brain_${it.id}" }.toSet()
 
     /** Cérebros que bateram limite (429) descansam o tempo pedido pelo provedor e o próximo da lista responde. */
@@ -416,7 +434,7 @@ class ConversationController(private val app: JarvisApp) {
     private var engine = newEngine()
     private var engineKey = engineNames()
     private var pendingAsk: Pair<Ask, Long>? = null
-    private val executor by lazy { EngineExecutor(app, sessionId) }
+    private var executor = EngineExecutor(app, sessionId)
     private var toolsCache: Pair<Long, List<com.joctaeng.jarvis.core.contracts.Tool>>? = null
     private var appsCache: Pair<Long, List<Pair<String, String>>>? = null
 
@@ -617,7 +635,8 @@ class ConversationController(private val app: JarvisApp) {
         app.sync.refreshIfStale("conversa")
         val live = app.sync.liveSection(if (onlyLocal) LOCAL_LIVE_CHARS else LIVE_CHARS)
         val version = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull() ?: "?"
-        val summaries = if (useSummaries) app.summaries.activeContext(if (onlyLocal) LOCAL_SUMMARY_CHARS else PersonaEngine.MAX_SUMMARY_CHARS) else ""
+        // Resumo só quando a pessoa escolheu "com resumo", e curto: a IA recebe um parágrafo, não a conversa inteira.
+        val summaries = if (useSummaries) app.summaries.activeContext(if (onlyLocal) LOCAL_SUMMARY_CHARS else SUMMARY_CHARS) else ""
 
         // Dois prompts: o completo (nuvem) e o enxuto (celular). Cada cérebro recebe só o que cabe nele.
         // Terceiro prompt (pedido 78): "enxuto" para cérebros com pouca cota por minuto (Groq grátis ~8 mil tokens/min):
@@ -639,13 +658,13 @@ class ConversationController(private val app: JarvisApp) {
             toolsSection = if (noTools || tools.isEmpty() || !toolsNeeded(compact)) "" else ToolProtocol.systemSection(
                 (when {
                     compact -> com.joctaeng.jarvis.mind.orchestrator.ToolSelector.forLocal(tools.map { it.name }, lastUser, activeSkill?.steps.orEmpty(), maxTools)
-                    lean -> com.joctaeng.jarvis.mind.orchestrator.ToolSelector.select(tools.map { it.name }, lastUser, activeSkill?.steps.orEmpty())
+                    lean -> com.joctaeng.jarvis.mind.orchestrator.ToolSelector.select(tools.map { it.name }, lastUser, activeSkill?.steps.orEmpty(), max = LEAN_TOOLS)
                     else -> tools.map { it.name }
                 }).let { names -> tools.filter { it.name in names } },
             ) +
                 (activeSkill?.let { "\n" + app.skills.describe(it) }.orEmpty()) +
                 (if (compact || lean) "" else "\nSKILLS (pedidos curtos que viram passos combinados; o usuário ensina novas com \"quando eu disser X, faça Y\" ou skill_ensinar): " + app.skills.catalogLine()) +
-                (if (compact || activeSkill != null) "" else app.recipes.find(lastUser)?.let { "\n" + app.recipes.describe(it) }.orEmpty()),
+                (if (compact || activeSkill != null || freshSession) "" else app.recipes.find(lastUser)?.let { "\n" + app.recipes.describe(it) }.orEmpty()),
             userBio = if (compact) settings.userBio.take(LOCAL_BIO_CHARS) else settings.userBio,
             summaries = if (compact) summaries.take(LOCAL_SUMMARY_CHARS) else summaries,
             liveSection = if (compact) live.take(LOCAL_LIVE_CHARS) else live,
@@ -996,6 +1015,9 @@ class ConversationController(private val app: JarvisApp) {
         const val STEP_NOTE = "Agindo"
         /** Retrato sincronizado no prompt: nuvem e celular (este cabe na janela de 4.096 tokens). */
         const val LIVE_CHARS = 1_600
+        /** Nuvem com prompt enxuto: ferramentas do pedido (no máximo 12) e resumo curto da conversa anterior. */
+        const val LEAN_TOOLS = 12
+        const val SUMMARY_CHARS = 600
         const val LOCAL_LIVE_CHARS = 500
         /** Descanso do cérebro que voltou vazio. */
         const val EMPTY_REST_MS = 90_000L
