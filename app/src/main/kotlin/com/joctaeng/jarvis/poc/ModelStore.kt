@@ -55,7 +55,10 @@ class ModelStore(context: Context) {
     }
 
     fun delete(file: File) {
-        if (file.parentFile == directory) file.delete()
+        if (file.parentFile == directory) {
+            file.delete()
+            File(file.path + ".sha256").delete()
+        }
     }
 
     companion object {

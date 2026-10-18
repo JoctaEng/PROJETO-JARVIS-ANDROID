@@ -62,6 +62,8 @@ class AgentRunner(
             val raw = StringBuilder()
             val held = StringBuilder()
             val calls = mutableListOf<ToolCall>()
+            // Chamadas nativas (função do próprio modelo, ex.: Gemma 4 no LiteRT-LM): não aparecem no texto.
+            val nativeCalls = mutableListOf<ToolCall>()
             var failed: String? = null
             generate(messages).collect { chunk ->
                 when (chunk) {
@@ -74,7 +76,10 @@ class AgentRunner(
                         calls += out.calls
                     }
                     is LlmChunk.Error -> failed = chunk.message
-                    is LlmChunk.ToolRequest -> calls += chunk.call
+                    is LlmChunk.ToolRequest -> {
+                        calls += chunk.call
+                        nativeCalls += chunk.call
+                    }
                     is LlmChunk.Done -> Unit
                 }
             }
@@ -115,7 +120,8 @@ class AgentRunner(
                 emit(AgentEvent.Error("Parei: muitas ferramentas seguidas numa resposta só."))
                 return@flow
             }
-            messages += ChatMessage(Role.ASSISTANT, raw.toString())
+            // A chamada nativa entra no histórico escrita no protocolo de texto: na rodada seguinte o cérebro vê o que pediu.
+            messages += ChatMessage(Role.ASSISTANT, raw.toString() + nativeCalls.joinToString("") { ToolProtocol.callText(it) })
             val responses = calls.map { call ->
                 emit(AgentEvent.ToolStarted(call))
                 val result = gateway.execute(call, context, confirm = confirm)

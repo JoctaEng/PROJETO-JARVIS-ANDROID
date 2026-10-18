@@ -69,6 +69,7 @@ dependencies {
     implementation(project(":mind:persona"))
     implementation(project(":mind:memory"))
     implementation(project(":mind:embed"))
+    implementation(project(":mind:models"))
     implementation(project(":mind:intent"))
     implementation(libs.litertlm.android)
     implementation(project(":action:gateway"))

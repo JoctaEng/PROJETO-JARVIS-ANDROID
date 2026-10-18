@@ -47,6 +47,7 @@
 - **v0.30.0 feita** (12/10, pedido 82): **Fase 3 iniciada**. Módulo `:mind:embed` puro JVM integrado via LiteRT-LM 0.17.1 (EmbeddingGemma 2, ~157 MB). Memória por sentido opcional (desligada por padrão), com download em primeiro plano (ID 4208, canal `euno_embedding`), conferência SHA-256 e injeção semântica dos top-8 itens no prompt (com teto de 900 caracteres). Ver `docs/FASE-3.md` e ADR 0014.
 - **v0.31.0 feita** (14/10, pedido 84): agente que faz — fala natural, sincronização contínua, clima, SMS, resumo do dia, despertar com resumo, tarefas sem ANR. Ver `docs/FASE-3.md` (0.31.0).
 - **v0.32.0 feita** (15/10, pedido 86): prompt enxuto nos provedores online, nova conversa limpa, relatórios só da versão atual. Ver `docs/FASE-3.md` (0.32.0).
+- **v0.33.0 feita** (18/10, pedido 87, ramo `claude/catalogo-modelos-atuais`): catálogo de modelos offline com Salvar, anexos, ferramentas nativas, porta de modelos para o Joca (ADR 0015, `docs/CONTRATO-MODELOS-JOCA.md`). Falta: Salvar explícito também para voz e avatar.
 - **PRÓXIMO**: aguardar teste do usuário com o APK 0.32.0 no celular. Antes, 0.31.0 no celular (roteiro em `docs/FASE-3.md`). Verificar métricas no relatório de diagnósticos (carga, tempo médio de consulta, taxa de acerto por sentido). Em seguida, tarefas por condição e novas integrações da Fase 3.
 
 ## 5. Lembretes técnicos

@@ -248,6 +248,26 @@ class ChatActivity : ComponentActivity() {
         val speaking by app.voice.speaking.collectAsState()
         val pendingAction by app.toolbox.pending.collectAsState()
         var input by remember { mutableStateOf("") }
+        // Anexos escolhidos pelo seletor do sistema, esperando o Enviar (imagem, áudio, PDF, DOCX, TXT, CSV).
+        var files by remember { mutableStateOf(listOf<com.joctaeng.jarvis.core.model.Attachment>()) }
+        var reading by remember { mutableStateOf(false) }
+        val attachScope = androidx.compose.runtime.rememberCoroutineScope()
+        val picker = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isEmpty()) return@rememberLauncherForActivityResult
+            reading = true
+            attachScope.launch {
+                val reader = AttachmentReader(this@ChatActivity)
+                val problems = mutableListOf<String>()
+                uris.take(5).forEach { uri ->
+                    when (val r = reader.read(uri)) {
+                        is AttachmentReader.Result.Ok -> files = files + r.attachments
+                        is AttachmentReader.Result.Refused -> problems += r.reason
+                    }
+                }
+                if (problems.isNotEmpty()) status = problems.joinToString("; ")
+                reading = false
+            }
+        }
         var showNew by remember { mutableStateOf(false) }
         var summarizing by remember { mutableStateOf(false) }
         var loadSummaries by remember { mutableStateOf(false) }
@@ -320,7 +340,17 @@ class ChatActivity : ComponentActivity() {
                             }
                         }
                     }
+                    if (files.isNotEmpty() || reading) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                if (reading) "Lendo o anexo…" else "Anexos: " + files.joinToString(", ") { it.name },
+                                style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), maxLines = 2,
+                            )
+                            if (files.isNotEmpty()) TextButton(onClick = { files = emptyList() }) { Text("Tirar", style = MaterialTheme.typography.labelSmall) }
+                        }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { picker.launch(AttachmentReader.MIME_TYPES) }, enabled = !reading) { Text("Anexar") }
                         OutlinedTextField(
                             value = input,
                             onValueChange = {
@@ -331,10 +361,11 @@ class ChatActivity : ComponentActivity() {
                             placeholder = { Text("Escreva aqui") },
                             maxLines = 4,
                         )
-                        if (input.isNotBlank()) {
-                            Button(onClick = {
-                                app.conversation.send(input, speak = false)
+                        if (input.isNotBlank() || files.isNotEmpty()) {
+                            Button(enabled = !reading, onClick = {
+                                app.conversation.send(input, speak = false, attachments = files)
                                 input = ""
+                                files = emptyList()
                             }) { Text(if (busy) "Enviar (fila)" else "Enviar") }
                         } else {
                             FilledTonalButton(onClick = {
@@ -427,7 +458,13 @@ class ChatActivity : ComponentActivity() {
                     FormattedText(entry.text, textColor, MaterialTheme.colorScheme.primary, Modifier.fillMaxWidth())
                 }
             } else {
-                Text(text = entry.text.ifEmpty { "…" }, modifier = bubble, color = textColor)
+                Text(text = entry.text.ifEmpty { if (entry.attachments.isNotEmpty()) "(anexo)" else "…" }, modifier = bubble, color = textColor)
+            }
+            if (entry.attachments.isNotEmpty()) {
+                Text(
+                    "Anexo: " + entry.attachments.joinToString(", ") { it.name },
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             if (!mine && !entry.streaming && entry.text.isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

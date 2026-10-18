@@ -28,6 +28,8 @@ kotlin {
 
 dependencies {
     api(project(":core:contracts"))
+    // Ponte das ferramentas nativas (bloco <tools> → OpenApiTool) e tipos de anexo.
+    implementation(project(":mind:models"))
     implementation(libs.litertlm.android)
     implementation(libs.kotlinx.coroutines.android)
 }

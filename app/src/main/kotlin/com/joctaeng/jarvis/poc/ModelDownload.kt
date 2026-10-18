@@ -13,6 +13,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.joctaeng.jarvis.JarvisApp
 import com.joctaeng.jarvis.R
+import com.joctaeng.jarvis.mind.models.CatalogModel
+import com.joctaeng.jarvis.mind.models.ModelCatalog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -37,18 +39,31 @@ import kotlin.coroutines.coroutineContext
 class ModelDownload(context: Context, private val store: ModelStore) {
     private val appContext = context.applicationContext
 
+    /** Catálogo versionado (mind:models); o Gemma 4 E2B continua o modelo padrão. */
+    val catalog: ModelCatalog = ModelCatalog.bundled()
+
     sealed interface State {
         data object Idle : State
-        data class Running(val downloadedBytes: Long, val totalBytes: Long, val waitingReason: String?) : State
+        data class Running(val downloadedBytes: Long, val totalBytes: Long, val waitingReason: String?, val modelId: String = "") : State
+        /** Pausado pelo usuário: o pedaço baixado fica guardado e "Retomar" continua de onde parou. */
+        data class Paused(val downloadedBytes: Long, val modelId: String) : State
         data class Done(val file: File) : State
-        data class Failed(val reason: String) : State
+        data class Failed(val reason: String, val modelId: String = "", val needsLogin: Boolean = false) : State
     }
 
-    val target: File get() = File(store.directory, RECOMMENDED_FILE)
-    private val partial: File get() = File(store.directory, "$RECOMMENDED_FILE.download")
+    /** Modelo do download em andamento (um por vez: o arquivo tem gigabytes e a rede é uma só). */
+    @Volatile var model: CatalogModel = catalog.byId(DEFAULT_ID)!!
+        private set
+
+    val target: File get() = fileOf(model)
+    private val partial: File get() = partialOf(model)
+
+    fun fileOf(m: CatalogModel): File = File(store.directory, m.file)
+    fun partialOf(m: CatalogModel): File = File(store.directory, "${m.file}.download")
 
     @Volatile private var state: State = State.Idle
     @Volatile private var job: Job? = null
+    @Volatile private var pauseRequested = false
 
     init {
         // O pedido antigo, preso no gerenciador de downloads do Android (0.28.0), é cancelado para não ficar ocupando a fila.
@@ -62,12 +77,31 @@ class ModelDownload(context: Context, private val store: ModelStore) {
         }
     }
 
-    fun start() {
-        if (state is State.Running) return
-        state = State.Running(partial.length(), 0, "começando…")
+    /** Baixa o modelo padrão (Gemma 4 E2B), como antes. */
+    fun start() = start(catalog.byId(DEFAULT_ID)!!)
+
+    /** Começa ou retoma (pela parte já baixada) o download de [m]. Falso se outro modelo já está baixando. */
+    fun start(m: CatalogModel): Boolean {
+        val s = state
+        if (s is State.Running) return s.modelId == m.id
+        model = m
+        pauseRequested = false
+        state = State.Running(partial.length(), m.sizeBytes, "começando…", m.id)
         ContextCompat.startForegroundService(appContext, Intent(appContext, ModelDownloadService::class.java))
+        return true
     }
 
+    /** Para o download e guarda o que já veio (Retomar continua). */
+    fun pause() {
+        if (state !is State.Running) return
+        pauseRequested = true
+        job?.cancel()
+        job = null
+        appContext.stopService(Intent(appContext, ModelDownloadService::class.java))
+        state = State.Paused(partial.length(), model.id)
+    }
+
+    /** Cancela e apaga o pedaço baixado. */
     fun cancel() {
         job?.cancel()
         job = null
@@ -76,19 +110,42 @@ class ModelDownload(context: Context, private val store: ModelStore) {
         state = State.Idle
     }
 
+    /** Cancela/apaga o pedaço de um modelo que não é o do download atual. */
+    fun cancel(m: CatalogModel) {
+        if (m.id == model.id) cancel() else partialOf(m).delete()
+    }
+
     fun current(): State {
         val s = state
-        return if (s !is State.Running && target.isFile) State.Done(target) else s
+        return if (s !is State.Running && s !is State.Paused && target.isFile) State.Done(target) else s
+    }
+
+    /** Estado de um modelo qualquer do catálogo (para a tela do catálogo). */
+    fun stateOf(m: CatalogModel): State {
+        val s = state
+        if (m.id == model.id && (s is State.Running || s is State.Paused || s is State.Failed)) return s
+        if (fileOf(m).isFile) return State.Done(fileOf(m))
+        val part = partialOf(m)
+        return if (part.isFile && part.length() > 0) State.Paused(part.length(), m.id) else State.Idle
     }
 
     /** Roda dentro do serviço. [progress] atualiza a notificação. */
     internal suspend fun run(progress: (State) -> Unit) {
+        try {
+            runLoop(progress)
+        } finally {
+            // Pausa no meio de uma leitura: a última atualização de progresso não pode deixar a tela em "baixando".
+            if (pauseRequested) state = State.Paused(partial.length(), model.id)
+        }
+    }
+
+    private suspend fun runLoop(progress: (State) -> Unit) {
         val events = JarvisApp.from(appContext).events
         var attempts = 0
         while (coroutineContext.isActive) {
             // Só no Wi-Fi (o modelo tem 2,6 GB): espera em vez de falhar.
             if (isMetered()) {
-                state = State.Running(partial.length(), 0, "aguardando Wi-Fi").also(progress)
+                state = State.Running(partial.length(), model.sizeBytes, "aguardando Wi-Fi", model.id).also(progress)
                 delay(5_000)
                 continue
             }
@@ -98,11 +155,11 @@ class ModelDownload(context: Context, private val store: ModelStore) {
                 var done = result.getOrNull()!!
                 // Tamanho certo não basta: confere o SHA-256 (um arquivo danificado faz o motor dizer só "Engine is not initialized").
                 if (done is State.Done) {
-                    state = State.Running(done.file.length(), done.file.length(), "conferindo o arquivo…").also(progress)
-                    val verdict = runCatching { ModelIntegrity.verify(done.file) }.getOrNull()
+                    state = State.Running(done.file.length(), done.file.length(), "conferindo o arquivo…", model.id).also(progress)
+                    val verdict = runCatching { ModelIntegrity.verify(done.file, model) }.getOrNull()
                     if (verdict is ModelIntegrity.Verdict.Damaged) {
                         done.file.delete()
-                        done = State.Failed(ModelIntegrity.describe(verdict, done.file.name))
+                        done = State.Failed(ModelIntegrity.describe(verdict, done.file.name), model.id)
                     }
                 }
                 state = done
@@ -110,14 +167,14 @@ class ModelDownload(context: Context, private val store: ModelStore) {
                 events.info("modelo", "download: ${if (done is State.Done) "concluído (${done.file.length() shr 20} MB)" else (done as? State.Failed)?.reason}")
                 return
             }
-            if (error is kotlinx.coroutines.CancellationException) throw error
+            if (error is kotlinx.coroutines.CancellationException || pauseRequested) throw (error as? kotlinx.coroutines.CancellationException ?: kotlinx.coroutines.CancellationException("pausado"))
             attempts++
             events.warn("modelo", "download: falha de rede (${error.javaClass.simpleName}: ${error.message}); tentativa $attempts")
             if (attempts >= 8) {
-                state = State.Failed("a conexão caiu várias vezes (${error.message}); toque em Baixar de novo: continua de onde parou").also(progress)
+                state = State.Failed("a conexão caiu várias vezes (${error.message}); toque em Retomar: continua de onde parou", model.id).also(progress)
                 return
             }
-            state = State.Running(partial.length(), 0, "falha de rede; tentando de novo").also(progress)
+            state = State.Running(partial.length(), model.sizeBytes, "falha de rede; tentando de novo", model.id).also(progress)
             delay((attempts * 5_000L).coerceAtMost(30_000L))
         }
     }
@@ -126,7 +183,7 @@ class ModelDownload(context: Context, private val store: ModelStore) {
     private suspend fun attempt(progress: (State) -> Unit): State {
         store.directory.mkdirs()
         val have = partial.takeIf { it.isFile }?.length() ?: 0L
-        val conn = (URL(RECOMMENDED_URL).openConnection() as HttpURLConnection).apply {
+        val conn = (URL(model.url).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = true
             connectTimeout = 20_000
             readTimeout = 60_000
@@ -139,12 +196,13 @@ class ModelDownload(context: Context, private val store: ModelStore) {
             when (code) {
                 401, 403 -> return State.Failed(
                     "o Hugging Face pediu login ($code). Abra a página do modelo no navegador, entre na sua conta, aceite a licença " +
-                        "e cole um token de leitura (huggingface.co/settings/tokens) no campo abaixo; ou baixe pelo navegador e use Importar.",
+                        "e cole um token de leitura (huggingface.co/settings/tokens) no campo do token; ou baixe pelo navegador e use Importar.",
+                    model.id, needsLogin = true,
                 )
-                404 -> return State.Failed("o arquivo não está mais nesse endereço (404); me avise para eu atualizar o link")
+                404 -> return State.Failed("o arquivo não está mais nesse endereço (404); me avise para eu atualizar o catálogo", model.id)
                 416 -> if (have > 0) return finish(have, have)
             }
-            if (code !in 200..299) return State.Failed("o servidor respondeu erro $code")
+            if (code !in 200..299) return State.Failed("o servidor respondeu erro $code", model.id)
             val resumed = code == 206 && have > 0
             val length = conn.getHeaderFieldLong("Content-Length", -1L)
             val total = if (length > 0) length + (if (resumed) have else 0L) else -1L
@@ -162,7 +220,7 @@ class ModelDownload(context: Context, private val store: ModelStore) {
                         val now = System.currentTimeMillis()
                         if (now - lastUi > 700) {
                             lastUi = now
-                            state = State.Running(done, total, null).also(progress)
+                            state = State.Running(done, total, null, model.id).also(progress)
                         }
                     }
                 }
@@ -175,9 +233,10 @@ class ModelDownload(context: Context, private val store: ModelStore) {
     }
 
     private fun finish(done: Long, total: Long): State = when {
-        total > 0 && partial.length() != total -> State.Failed("arquivo incompleto (${partial.length() shr 20} de ${total shr 20} MB)")
+        total > 0 && partial.length() != total -> State.Failed("arquivo incompleto (${partial.length() shr 20} de ${total shr 20} MB)", model.id)
+        !model.sizeApproximate && partial.length() != model.sizeBytes -> State.Failed("tamanho diferente do catálogo (${partial.length()} ≠ ${model.sizeBytes} bytes)", model.id)
         partial.renameTo(target) -> State.Done(target)
-        else -> State.Failed("não consegui salvar o arquivo (${done shr 20} MB baixados)")
+        else -> State.Failed("não consegui salvar o arquivo (${done shr 20} MB baixados)", model.id)
     }
 
     private fun isMetered(): Boolean =
@@ -188,6 +247,8 @@ class ModelDownload(context: Context, private val store: ModelStore) {
     }
 
     companion object {
+        /** Modelo padrão do catálogo (o mesmo da 0.28). */
+        const val DEFAULT_ID = "gemma-4-e2b"
         /** Repositório oficial do LiteRT-LM (Google, Gemma 4 com licença Apache 2.0); arquivo genérico (CPU e GPU), ~2,59 GB. */
         const val RECOMMENDED_URL =
             "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
@@ -215,8 +276,9 @@ class ModelDownloadService : Service() {
                 download.run { s ->
                     val text = when (s) {
                         is ModelDownload.State.Running ->
-                            "${s.downloadedBytes shr 20} de ${if (s.totalBytes > 0) s.totalBytes shr 20 else 2600} MB" + (s.waitingReason?.let { " — $it" } ?: "")
-                        is ModelDownload.State.Done -> "Pronto: ${ModelDownload.RECOMMENDED_NAME}"
+                            "${s.downloadedBytes shr 20} de ${if (s.totalBytes > 0) s.totalBytes shr 20 else download.model.sizeBytes shr 20} MB" + (s.waitingReason?.let { " — $it" } ?: "")
+                        is ModelDownload.State.Paused -> "Pausado em ${s.downloadedBytes shr 20} MB"
+                        is ModelDownload.State.Done -> "Pronto: ${download.model.name}"
                         is ModelDownload.State.Failed -> "Falhou: ${s.reason}"
                         ModelDownload.State.Idle -> ""
                     }
@@ -239,7 +301,7 @@ class ModelDownloadService : Service() {
     private fun notification(text: String, progress: Int, max: Int): Notification =
         NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_jarvis)
-            .setContentTitle("Euno: baixando ${ModelDownload.RECOMMENDED_NAME}")
+            .setContentTitle("Euno: baixando ${JarvisApp.from(this).modelDownload.model.name}")
             .setContentText(text)
             .setOnlyAlertOnce(true)
             .setOngoing(max > 0)

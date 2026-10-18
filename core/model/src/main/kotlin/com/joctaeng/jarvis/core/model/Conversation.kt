@@ -8,6 +8,23 @@ data class ChatMessage(
     val role: Role,
     val text: String,
     val timestampMillis: Long = System.currentTimeMillis(),
+    /** Arquivos anexados pelo usuário (imagem/áudio vão ao modelo que os lê; documentos já viram texto em [text]). */
+    val attachments: List<Attachment> = emptyList(),
+)
+
+/** Tipo de anexo, pelo que o cérebro precisa para ler. */
+enum class AttachmentKind { IMAGE, AUDIO, DOCUMENT }
+
+/**
+ * Arquivo que o usuário anexou pelo seletor do sistema. [path] é a cópia privada no aparelho (imagem e áudio vão
+ * como arquivo ao modelo multimodal); [text] é o texto extraído localmente (PDF, DOCX, TXT, CSV).
+ */
+data class Attachment(
+    val kind: AttachmentKind,
+    val name: String,
+    val mime: String,
+    val path: String? = null,
+    val text: String? = null,
 )
 
 /** O que um provedor de IA sabe fazer. */

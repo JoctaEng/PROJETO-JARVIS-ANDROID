@@ -36,6 +36,7 @@ include(
     ":mind:persona",
     ":mind:memory",
     ":mind:embed",
+    ":mind:models",
     ":mind:intent",
     ":mind:provider-cloud",
     ":action:gateway",

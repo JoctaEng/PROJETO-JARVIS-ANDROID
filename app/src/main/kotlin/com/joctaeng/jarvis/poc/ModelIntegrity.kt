@@ -35,8 +35,11 @@ object ModelIntegrity {
     }
 
     /** SHA-256 esperado do arquivo [name] no repositório do modelo recomendado, ou null. */
-    fun expectedSha256(name: String): String? = runCatching {
-        val conn = (URL(TREE_URL).openConnection() as HttpURLConnection).apply {
+    fun expectedSha256(name: String): String? = expectedSha256(name, TREE_URL)
+
+    /** SHA-256 que o Hugging Face publica para [name] na lista de arquivos [treeUrl] do repositório. */
+    fun expectedSha256(name: String, treeUrl: String): String? = runCatching {
+        val conn = (URL(treeUrl).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000; readTimeout = 20_000
             setRequestProperty("User-Agent", "Euno-Android")
         }
@@ -51,11 +54,30 @@ object ModelIntegrity {
         }
     }.getOrNull()
 
-    fun verify(file: File, onProgress: ((Long) -> Unit)? = null): Verdict {
+    fun verify(file: File, onProgress: ((Long) -> Unit)? = null): Verdict = verifyAgainst(file, null, TREE_URL, onProgress)
+
+    /** Confere contra o modelo do catálogo: o SHA-256 fixo do catálogo, se houver; senão o do Hugging Face. */
+    fun verify(file: File, model: com.joctaeng.jarvis.mind.models.CatalogModel, onProgress: ((Long) -> Unit)? = null): Verdict =
+        verifyAgainst(file, model.sha256, model.treeApi, onProgress)
+
+    private fun verifyAgainst(file: File, known: String?, treeUrl: String, onProgress: ((Long) -> Unit)?): Verdict {
         val actual = sha256(file, onProgress)
-        val expected = expectedSha256(file.name)
+        remember(file, actual)
+        val expected = known ?: expectedSha256(file.name, treeUrl)
             ?: return Verdict.Unknown(actual, "não consegui consultar o valor original no Hugging Face (sem internet?)")
         return if (expected.equals(actual, ignoreCase = true)) Verdict.Ok(actual) else Verdict.Damaged(expected, actual)
+    }
+
+    /** Guarda o SHA-256 calculado ao lado do arquivo (`<arquivo>.sha256`), para não recalcular gigabytes a cada consulta. */
+    fun remember(file: File, sha: String) {
+        runCatching { File(file.path + ".sha256").writeText(sha) }
+    }
+
+    /** SHA-256 já calculado deste arquivo, se o arquivo não mudou depois. */
+    fun remembered(file: File): String? {
+        val side = File(file.path + ".sha256")
+        if (!side.isFile || side.lastModified() < file.lastModified()) return null
+        return runCatching { side.readText().trim() }.getOrNull()?.takeIf { it.length == 64 }
     }
 
     /** Frase curta para a tela. */
@@ -63,7 +85,7 @@ object ModelIntegrity {
         is Verdict.Ok -> "Arquivo conferido: $name é o original (SHA-256 confere)."
         is Verdict.Damaged ->
             "ARQUIVO DANIFICADO: $name tem o tamanho certo, mas o conteúdo não é o original (SHA-256 ${v.actual.take(10)}… ≠ ${v.expected.take(10)}…). " +
-                "Toque em Apagar e baixe de novo (de preferência por \"Baixar Gemma 4\" no Wi-Fi)."
+                "Toque em Apagar e baixe de novo pelo catálogo de modelos, no Wi-Fi."
         is Verdict.Unknown -> "Não deu para conferir: ${v.why}. SHA-256 do arquivo: ${v.actual.take(16)}…"
     }
 

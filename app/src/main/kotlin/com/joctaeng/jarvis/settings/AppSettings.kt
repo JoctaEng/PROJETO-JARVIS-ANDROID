@@ -165,6 +165,8 @@ class AppSettings(context: Context) {
     var privateMode by boolean("privateMode", false)
     /** v0.30: Busca semântica na memória com vetores do LiteRT-LM (EmbeddingGemma 2). Desligado por padrão. */
     var semanticMemory by boolean("semanticMemory", false)
+    /** Joca Finanças pode ler a lista e os arquivos dos modelos baixados (só leitura; docs/CONTRATO-MODELOS-JOCA.md). */
+    var shareModelsWithJoca by boolean("shareModelsWithJoca", true)
     /** Marcado sozinho quando o Kokoro sintetiza bem mais devagar que o tempo real neste aparelho (modo Automático o evita). */
     var kokoroTooSlow by boolean("kokoroTooSlow", false)
 

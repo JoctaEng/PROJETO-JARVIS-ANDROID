@@ -77,6 +77,12 @@ object ToolProtocol {
 
     private val META_KEYS = setOf("name", "tool", "tool_name", "ferramenta", "type", "id", "function")
 
+    /** Uma chamada escrita no formato de texto (para o histórico, quando ela veio pela chamada nativa do modelo). */
+    fun callText(call: ToolCall): String {
+        val args = runCatching { json.parseToJsonElement(call.argumentsJson) }.getOrElse { JsonObject(emptyMap()) }
+        return OPEN + buildJsonObject { put("name", call.toolName); put("arguments", args) } + CLOSE
+    }
+
     fun responseMessage(call: ToolCall, result: ToolResult): String {
         val body = buildJsonObject {
             put("name", call.toolName)

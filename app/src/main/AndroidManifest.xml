@@ -118,6 +118,19 @@
             android:name=".ui.TestsActivity"
             android:exported="false" />
 
+        <!-- Catálogo de modelos offline: baixar, pausar, conferir e trocar o cérebro do celular (com Salvar). -->
+        <activity
+            android:name=".ui.ModelCatalogActivity"
+            android:exported="false" />
+
+        <!-- Somente leitura: o Joca Finanças lê a lista e os arquivos dos modelos já baixados (docs/CONTRATO-MODELOS-JOCA.md).
+             O provedor confere o pacote de quem chama pelo UID e recusa qualquer outro app. -->
+        <provider
+            android:name=".share.SharedModelsProvider"
+            android:authorities="com.joctaeng.jarvis.modelos"
+            android:exported="true"
+            android:grantUriPermissions="false" />
+
         <activity
             android:name=".ui.DiagnosticsActivity"
             android:exported="false" />

@@ -86,6 +86,8 @@ data class ChatEntry(
     val note: Boolean = false,
     /** Mensagem recebida durante a resposta: espera na fila para ser respondida junto. */
     val queued: Boolean = false,
+    /** Arquivos anexados pelo usuário (imagem, áudio, PDF, DOCX, TXT, CSV). */
+    val attachments: List<com.joctaeng.jarvis.core.model.Attachment> = emptyList(),
 )
 
 /**
@@ -125,10 +127,24 @@ class ConversationController(private val app: JarvisApp) {
 
     private val queue = ArrayDeque<String>()
     private var queuedSpeak = false
+    /** Anexos de mensagens que estão na fila (vão juntos quando a fila for respondida). */
+    private val queuedAttachments = mutableListOf<com.joctaeng.jarvis.core.model.Attachment>()
 
-    fun send(text: String, speak: Boolean) {
+    fun send(text: String, speak: Boolean, attachments: List<com.joctaeng.jarvis.core.model.Attachment> = emptyList()) {
         val clean = text.trim()
-        if (clean.isEmpty()) return
+        if (clean.isEmpty() && attachments.isEmpty()) return
+        if (_busy.value && attachments.isNotEmpty()) {
+            queue.addLast(clean)
+            queuedSpeak = speak
+            queuedAttachments += attachments
+            add(ChatEntry(nextId++, Role.USER, clean, queued = true, attachments = attachments))
+            app.events.info("conversa", "mensagem com ${attachments.size} anexo(s) na fila")
+            return
+        }
+        if (attachments.isNotEmpty()) {
+            startWithAttachments(clean, speak, attachments, addEntry = true)
+            return
+        }
         if (_busy.value) {
             // Ele está pensando ou falando: comandos valem na hora; o resto entra na fila (nada se perde).
             when (VoiceCommands.parse(clean)) {
@@ -280,14 +296,48 @@ class ConversationController(private val app: JarvisApp) {
         }
     }
 
+    /**
+     * Mensagem com anexo: vai direto ao cérebro (o motor de pedidos e os atalhos não leem arquivos). Documentos já
+     * chegam com o texto extraído no aparelho; imagem e áudio vão ao modelo do celular que os lê.
+     */
+    private fun startWithAttachments(clean: String, speak: Boolean, attachments: List<com.joctaeng.jarvis.core.model.Attachment>, addEntry: Boolean) {
+        voice.stop()
+        job = scope.launch {
+            _busy.value = true
+            if (addEntry) add(ChatEntry(nextId++, Role.USER, clean, attachments = attachments))
+            try {
+                app.events.info("conversa", "mensagem com anexos: " + attachments.joinToString { "${it.kind.name.lowercase()} ${it.mime}" })
+                respond(speak)
+                if (speak) voice.awaitIdle()
+            } finally {
+                _busy.value = false
+                OverlayBus.acting.value = false
+                freshSession = false
+                relax()
+                if (queue.isEmpty()) _turnFinished.tryEmit(Unit) else drainQueue()
+            }
+        }
+    }
+
     /** Junta o que chegou durante a resposta e responde de uma vez (a pessoa já viu cada mensagem no chat). */
     private fun drainQueue() {
-        val merged = queue.joinToString(" ")
+        val merged = queue.joinToString(" ").trim()
         val speak = queuedSpeak
+        val files = queuedAttachments.toList()
         queue.clear()
+        queuedAttachments.clear()
         _entries.update { list -> list.map { if (it.queued) it.copy(queued = false) else it } }
         app.events.info("conversa", "respondendo as mensagens da fila juntas")
-        start(merged, speak, addEntry = false)
+        if (files.isNotEmpty()) {
+            // A última mensagem da fila passa a carregar todos os anexos (é ela que vai ao cérebro).
+            _entries.update { list ->
+                val idx = list.indexOfLast { it.role == Role.USER }
+                if (idx < 0) list else list.toMutableList().also { it[idx] = it[idx].copy(text = merged, attachments = files) }
+            }
+            startWithAttachments(merged, speak, files, addEntry = false)
+        } else {
+            start(merged, speak, addEntry = false)
+        }
     }
 
     /** Interrompe a resposta e a fala. */
@@ -296,6 +346,7 @@ class ConversationController(private val app: JarvisApp) {
         voice.stop()
         OverlayBus.acting.value = false
         queue.clear()
+        queuedAttachments.clear()
         _entries.update { list -> list.filterNot { it.queued }.map { if (it.streaming) it.copy(streaming = false) else it } }
         OverlayBus.anim.value = AnimState.IDLE
     }
@@ -614,7 +665,11 @@ class ConversationController(private val app: JarvisApp) {
     private suspend fun respond(speak: Boolean, retried: Boolean = false) {
         val startedAt = System.nanoTime()
         val device = DeviceState.snapshot(app, privateMode = settings.privateMode)
-        val providers = configuredProviders()
+        // Imagem/áudio anexado: só o modelo do celular que lê isso responde (os online do Euno recebem só texto).
+        val media = _entries.value.lastOrNull { it.role == Role.USER }?.attachments.orEmpty()
+            .filter { it.kind != com.joctaeng.jarvis.core.model.AttachmentKind.DOCUMENT }
+        val mediaBrain = if (media.isEmpty()) null else mediaProvider(media, speak) ?: return
+        val providers = mediaBrain?.let { listOf(it) } ?: configuredProviders()
         if (providers.isEmpty()) {
             say(
                 "Ainda não tenho um cérebro. Abra Meu Euno → Cérebro e configure uma API (por exemplo, Gemini) " +
@@ -623,7 +678,7 @@ class ConversationController(private val app: JarvisApp) {
             )
             return
         }
-        val onlyLocal = providers.all { it.location == ProviderLocation.ON_DEVICE } || settings.brainPreference == BrainPreference.LOCAL_ONLY
+        val onlyLocal = mediaBrain != null || providers.all { it.location == ProviderLocation.ON_DEVICE } || settings.brainPreference == BrainPreference.LOCAL_ONLY
         val lastUser = _entries.value.lastOrNull { it.role == Role.USER }?.text.orEmpty()
         val memories = app.memoryRecall.relevantLines(lastUser, k = 8)
         // Skill pedida ("modo aula", "preparar aula", ou uma ensinada): os passos dela entram no prompt deste turno.
@@ -702,7 +757,12 @@ class ConversationController(private val app: JarvisApp) {
                 else -> p
             }
         }
-        val allHistory = _entries.value.filter { !it.note && !it.streaming }.map { ChatMessage(it.role, it.text) }
+        // Documentos anexados entram como texto (extraído no aparelho), com teto menor no cérebro do celular.
+        val docChars = if (onlyLocal) LOCAL_DOC_CHARS else com.joctaeng.jarvis.mind.models.AttachmentTypes.CLOUD_TEXT_CHARS
+        val allHistory = _entries.value.filter { !it.note && !it.streaming }.map {
+            if (it.attachments.isEmpty()) ChatMessage(it.role, it.text)
+            else ChatMessage(it.role, com.joctaeng.jarvis.mind.models.AttachmentTypes.promptText(it.text, it.attachments, docChars), attachments = it.attachments)
+        }
         val history = if (onlyLocal) localHistory(allHistory) else allHistory.takeLast(HISTORY)
         val maxTokens = if (onlyLocal) 512 else null
 
@@ -958,11 +1018,123 @@ class ConversationController(private val app: JarvisApp) {
         val key = "$path|${settings.localBackend}"
         if (key != localKey) {
             local?.let { old -> scope.launch { old.unload() } }
-            val file = File(path)
-            local = if (ModelStore.isGguf(file)) LlamaCppProvider(file) { app.events.info("llama", it) } else LiteRtLmProvider(file, settings.localBackend, app.cacheDir)
+            local = buildLocal(File(path), settings.localBackend)
             localKey = key
         }
         return local
+    }
+
+    private fun buildLocal(file: File, backend: com.joctaeng.jarvis.mind.local.LocalBackend): LocalLlmProvider =
+        if (ModelStore.isGguf(file)) LlamaCppProvider(file) { app.events.info("llama", it) }
+        else LiteRtLmProvider(file, backend, app.cacheDir, label = app.modelDownload.catalog.byFile(file.name)?.name) { app.events.info("litertlm", it) }
+
+    /** Nome do modelo do celular configurado agora (catálogo ou nome do arquivo); vazio = desligado. */
+    fun activeLocalName(): String {
+        val path = settings.localModelPath
+        if (path.isBlank()) return ""
+        val f = File(path)
+        return app.modelDownload.catalog.byFile(f.name)?.name ?: f.nameWithoutExtension
+    }
+
+    /** O que o motor carregado diz agora (nome, processador/placa, o que lê); null se nada carregado. */
+    fun loadedLocalDescription(): String? {
+        val p = local ?: return null
+        return when (p) {
+            is LiteRtLmProvider -> if (!p.isLoaded) null else buildString {
+                append(p.displayName)
+                if (p.nativeToolsReady) append(" · ferramentas nativas")
+                if (p.visionReady) append(" · lê imagens")
+                if (p.audioReady) append(" · ouve áudio")
+            }
+            is LlamaCppProvider -> if (p.isLoaded) p.displayName else null
+            else -> null
+        }
+    }
+
+    /**
+     * Troca o modelo do celular de verdade (botão Salvar do catálogo): libera o anterior da memória, abre o novo, faz
+     * uma geração curta de teste e só então grava a escolha. Se falhar, o anterior continua sendo o escolhido.
+     * [path] vazio = desligar o cérebro do celular.
+     */
+    suspend fun switchLocalModel(path: String, backend: com.joctaeng.jarvis.mind.local.LocalBackend): com.joctaeng.jarvis.mind.models.SwitchOutcome =
+        withContext(Dispatchers.Main) {
+            val previous = activeLocalName()
+            // Dois modelos de gigabytes juntos podem estourar a memória: o anterior sai primeiro.
+            local?.let { old -> runCatching { withContext(Dispatchers.IO) { old.unload() } } }
+            local = null
+            localKey = null
+            if (path.isBlank()) {
+                settings.localModelPath = ""
+                app.events.info("modelo", "cérebro do celular desligado (antes: ${previous.ifBlank { "nenhum" }})")
+                return@withContext com.joctaeng.jarvis.mind.models.SwitchOutcome.Done(
+                    com.joctaeng.jarvis.mind.models.EngineReport("", "", "", false, false, false, "", 0),
+                )
+            }
+            val file = File(path)
+            if (!file.isFile) return@withContext com.joctaeng.jarvis.mind.models.SwitchOutcome.Failed("o arquivo ${file.name} não está no celular", previous)
+            val candidate = buildLocal(file, backend)
+            try {
+                val t0 = System.currentTimeMillis()
+                withContext(Dispatchers.IO) {
+                    when (candidate) {
+                        is LiteRtLmProvider -> candidate.load()
+                        is LlamaCppProvider -> candidate.load()
+                        else -> Unit
+                    }
+                }
+                val loadMs = System.currentTimeMillis() - t0
+                val reply = StringBuilder()
+                var error: String? = null
+                kotlinx.coroutines.withTimeout(120_000) {
+                    candidate.generate(LlmRequest("Responda em português, em uma frase curta.", listOf(ChatMessage(Role.USER, "Diga oi.")), 24)).collect {
+                        when (it) {
+                            is LlmChunk.Text -> reply.append(it.text)
+                            is LlmChunk.Error -> error = it.message
+                            else -> Unit
+                        }
+                    }
+                }
+                error?.let { throw IllegalStateException(it) }
+                if (reply.isBlank()) throw IllegalStateException("o modelo abriu mas não respondeu ao teste")
+                settings.localModelPath = path
+                settings.localBackend = backend
+                local = candidate
+                localKey = "$path|$backend"
+                val lite = candidate as? LiteRtLmProvider
+                val report = com.joctaeng.jarvis.mind.models.EngineReport(
+                    fileName = file.name,
+                    displayName = app.modelDownload.catalog.byFile(file.name)?.name ?: file.nameWithoutExtension,
+                    backend = lite?.backendLabel() ?: "CPU, llama.cpp",
+                    vision = lite?.visionReady == true,
+                    audio = lite?.audioReady == true,
+                    nativeTools = lite?.nativeToolsReady == true,
+                    testReply = TextCleanup.clean(reply.toString()),
+                    loadMillis = loadMs,
+                )
+                app.events.info("modelo", "troca concluída: ${report.displayName} (${report.backend}); visão=${report.vision} áudio=${report.audio} nativas=${report.nativeTools}; antes: ${previous.ifBlank { "nenhum" }}" + (lite?.mediaNote?.let { "; $it" } ?: ""))
+                com.joctaeng.jarvis.mind.models.SwitchOutcome.Done(report)
+            } catch (e: Exception) {
+                runCatching { withContext(Dispatchers.IO) { candidate.unload() } }
+                val reason = if (e is kotlinx.coroutines.TimeoutCancellationException) "o teste passou de 2 minutos sem resposta" else (e.message ?: e.javaClass.simpleName)
+                app.events.warn("modelo", "troca para ${file.name} falhou: $reason; continua: ${previous.ifBlank { "nenhum" }}")
+                com.joctaeng.jarvis.mind.models.SwitchOutcome.Failed(reason, previous)
+            }
+        }
+
+    /**
+     * Cérebro para uma mensagem com imagem/áudio: o modelo do celular, se ele lê isso. Senão, diz com honestidade o que
+     * falta e devolve null (a conversa não finge que viu a imagem).
+     */
+    private suspend fun mediaProvider(media: List<com.joctaeng.jarvis.core.model.Attachment>, speak: Boolean): LlmProvider? {
+        val p = localProvider() as? LiteRtLmProvider
+        if (p != null) runCatching { withContext(Dispatchers.IO) { p.load() } }.onFailure { app.events.warn("conversa", "modelo do celular não abriu para o anexo", it) }
+        val missing = com.joctaeng.jarvis.mind.models.AttachmentTypes.missing(media, p?.visionReady == true, p?.audioReady == true)
+        if (p != null && missing == null) return p
+        val who = activeLocalName().ifBlank { "nenhum modelo do celular escolhido" }
+        val text = "Não consigo $missing com o cérebro atual ($who): os cérebros online do Euno recebem só texto. " +
+            "Em Meu Euno → Cérebro → Catálogo de modelos, baixe e salve um que leia isso (Gemma 4 E2B ou E4B). PDF, Word, TXT e CSV eu leio com qualquer cérebro."
+        say(text, Emotion.CONCERNED, speak)
+        return null
     }
 
     /**
@@ -1021,6 +1193,8 @@ class ConversationController(private val app: JarvisApp) {
         const val LOCAL_LIVE_CHARS = 500
         /** Descanso do cérebro que voltou vazio. */
         const val EMPTY_REST_MS = 90_000L
+        /** Texto de documento anexado que cabe no cérebro do celular (janela pequena). */
+        const val LOCAL_DOC_CHARS = 4_000
     }
 }
 

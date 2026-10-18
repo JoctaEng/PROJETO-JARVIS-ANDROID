@@ -66,3 +66,30 @@ class AgentRunnerHonestyTest {
         assertEquals(AgentRunner.UNDONE, events.filterIsInstance<AgentEvent.Text>().joinToString("") { it.text })
     }
 }
+
+class AgentRunnerNativeToolTest {
+    @Test fun nativeCallRunsThroughGatewayAndGoesToHistoryAsProtocolText() = runTest {
+        val gateway = ToolGateway(
+            listOf(HoldFakeTool("abrir_app")), InMemoryAuditLog(),
+            autonomy = { AutonomyLevel.OPERATOR }, permissions = { PermissionState(true, true) },
+        )
+        val seen = mutableListOf<List<ChatMessage>>()
+        val events = AgentRunner(gateway).run(
+            listOf(ChatMessage(Role.USER, "abra o Gmail")),
+            { msgs ->
+                seen += msgs
+                flow {
+                    if (seen.size == 1) emit(LlmChunk.ToolRequest(com.joctaeng.jarvis.core.model.ToolCall("n1", "abrir_app", "{\"nome\":\"Gmail\"}")))
+                    else emit(LlmChunk.Text("Pronto, Gmail aberto."))
+                    emit(LlmChunk.Done())
+                }
+            },
+            ToolContext("s", "r"), { _, _ -> true }, holdToolRoundText = true,
+        ).toList()
+        assertEquals("Pronto, Gmail aberto.", events.filterIsInstance<AgentEvent.Text>().joinToString("") { it.text })
+        assertEquals(ToolResult.Success("{\"ok\":true}"), events.filterIsInstance<AgentEvent.ToolFinished>().single().result)
+        val second = seen[1]
+        assertEquals("<tool_call>{\"name\":\"abrir_app\",\"arguments\":{\"nome\":\"Gmail\"}}</tool_call>", second[1].text)
+        assertEquals(Role.USER, second[2].role)
+    }
+}

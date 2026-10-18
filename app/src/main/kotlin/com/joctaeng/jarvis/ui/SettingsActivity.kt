@@ -101,6 +101,14 @@ class SettingsActivity : ComponentActivity() {
     private val app get() = JarvisApp.from(this)
     private val settings get() = app.settings
 
+    /** Conta as voltas a esta tela (onResume), para reler o que outra tela mudou. */
+    private var resumes by mutableStateOf(0)
+
+    override fun onResume() {
+        super.onResume()
+        resumes++
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -848,38 +856,11 @@ class SettingsActivity : ComponentActivity() {
     @Composable
     private fun LocalBrain() {
         val scope = rememberCoroutineScope()
-        var localPath by remember { mutableStateOf(settings.localModelPath) }
-        var backend by remember { mutableStateOf(settings.localBackend) }
-        var localModels by remember { mutableStateOf(app.modelStore.list()) }
-        var download by remember { mutableStateOf(app.modelDownload.current()) }
+        // A troca do modelo agora é só no catálogo, com Salvar (escolher não aplica sozinho; pedido do usuário, 18/10).
+        // Relido a cada volta para esta tela (o usuário pode ter salvo outro modelo no catálogo).
+        val active = remember(resumes) { app.conversation.activeLocalName() }
         var status by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
-
-        fun choose(path: String) {
-            localPath = path
-            settings.localModelPath = path
-        }
-
-        fun refresh() {
-            localModels = app.modelStore.list()
-            if (localPath.isNotEmpty() && localModels.none { it.path == localPath }) choose("")
-            if (localPath.isEmpty()) (localModels.firstOrNull { !ModelStore.isGguf(it) } ?: localModels.firstOrNull())?.let { choose(it.path) }
-        }
-
-        LaunchedEffect(download is ModelDownload.State.Running) {
-            if (download !is ModelDownload.State.Running) return@LaunchedEffect
-            while (download is ModelDownload.State.Running) {
-                delay(1000)
-                download = app.modelDownload.current()
-            }
-            refresh()
-            // Gemma 4 recém-baixado passa a ser o cérebro do celular, na placa de vídeo (pedido 78).
-            if (download is ModelDownload.State.Done && app.modelDownload.target.isFile) {
-                choose(app.modelDownload.target.path)
-                backend = com.joctaeng.jarvis.mind.local.LocalBackend.GPU
-                settings.localBackend = backend
-            }
-        }
 
         val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
@@ -889,9 +870,7 @@ class SettingsActivity : ComponentActivity() {
                     val file = app.modelStore.import(uri) { copied, total ->
                         status = "Copiando: ${copied shr 20} MB" + if (total > 0) " de ${total shr 20} MB" else ""
                     }
-                    refresh()
-                    choose(file.path)
-                    "Modelo pronto: ${file.name}"
+                    "Arquivo pronto: ${file.name}. Para usar, escolha-o no catálogo e toque em Salvar."
                 } catch (e: Exception) {
                     "Falha ao importar: ${e.message}"
                 }
@@ -900,121 +879,45 @@ class SettingsActivity : ComponentActivity() {
         }
 
         Text("Cérebro no celular (offline)", style = MaterialTheme.typography.labelLarge)
-        Hint("Funciona sem internet e sem chave, e entra sozinho quando os cérebros online falham. Recomendado: Gemma 4 E2B, que roda na placa de vídeo do celular (bem mais rápido que o Qwen3-4B, que roda só no processador). Mais lento que o online.")
-
-        val recommended = app.modelDownload.target
-        if (!recommended.isFile) {
-            when (val d = download) {
-                is ModelDownload.State.Running -> {
-                    val pct = if (d.totalBytes > 0) " (${d.downloadedBytes * 100 / d.totalBytes}%)" else ""
-                    Hint("Baixando ${ModelDownload.RECOMMENDED_NAME}: ${d.downloadedBytes shr 20} de ${if (d.totalBytes > 0) d.totalBytes shr 20 else 2600} MB$pct" + (d.waitingReason?.let { " — $it" } ?: ""))
-                    OutlinedButton(onClick = {
-                        app.modelDownload.cancel()
-                        download = app.modelDownload.current()
-                    }) { Text("Cancelar download") }
-                }
-                else -> {
-                    if (d is ModelDownload.State.Failed) Hint("O download falhou: ${d.reason}")
-                    Button(onClick = {
-                        app.modelDownload.start()
-                        download = app.modelDownload.current()
-                    }) { Text("Baixar ${ModelDownload.RECOMMENDED_NAME} (2,6 GB, só no Wi-Fi)") }
-                    Hint("Modelo do Google para celular (LiteRT-LM). Pode fechar o app: o download continua e aparece nas notificações. Depois de pronto, ele vira o cérebro do celular sozinho.")
-                }
-            }
-            // Se o Hugging Face pedir login: token de leitura (guardado criptografado) ou baixar pelo navegador e Importar.
-            var hfToken by remember { mutableStateOf("") }
-            val hasToken = remember(download) { app.secrets.get(ModelDownload.HF_TOKEN) != null }
-            OutlinedTextField(
-                hfToken, { hfToken = it },
-                label = { Text(if (hasToken) "Token do Hugging Face (salvo)" else "Token do Hugging Face (só se pedir login)") },
-                visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (hfToken.isNotBlank()) TextButton(onClick = { app.secrets.put(ModelDownload.HF_TOKEN, hfToken.trim()); hfToken = ""; status = "Token salvo. Toque em Baixar de novo." }) { Text("Salvar token") }
-                TextButton(onClick = { runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ModelDownload.RECOMMENDED_URL))) } }) { Text("Baixar pelo navegador") }
-                TextButton(onClick = { runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ModelDownload.MODEL_PAGE))) } }) { Text("Página do modelo") }
-            }
-            Hint("Pelo navegador: o arquivo ${ModelDownload.RECOMMENDED_FILE} vai para Downloads; depois toque em Importar.")
+        Hint("Funciona sem internet e sem chave, e entra sozinho quando os cérebros online falham. Recomendado: Gemma 4 (E2B ou E4B), que roda na placa de vídeo, usa ferramentas e lê imagens e áudio. Mais lento que o online.")
+        Text("Ativo: ${active.ifBlank { "nenhum" }}", style = MaterialTheme.typography.bodyMedium)
+        Button(onClick = { startActivity(Intent(this@SettingsActivity, ModelCatalogActivity::class.java)) }) {
+            Text("Catálogo de modelos (baixar, testar e trocar)")
         }
-
         OutlinedButton(onClick = { importer.launch(arrayOf("*/*")) }, enabled = !busy) { Text("Importar arquivo .gguf ou .litertlm") }
         Hint(
             "O Android não deixa um app abrir os arquivos de outro, então o Euno não enxerga o modelo guardado pelo EduMath. " +
                 "Para não baixar de novo: copie Qwen3-4B-Q4_K_M.gguf do PC (pasta %APPDATA%\\codigomaker\\modelos\\celular) para a pasta Download do celular e toque em Importar.",
         )
-        if (status.isNotEmpty()) Hint(status)
-
-        if (localModels.isEmpty()) {
-            Hint("Nenhum modelo no celular ainda.")
-        } else {
-            Choice(listOf("") + localModels.map { it.path }, localPath, { path ->
-                if (path.isEmpty()) "Não usar" else localModels.first { it.path == path }.let { "${it.name} (${it.length() shr 20} MB)" }
-            }) { choose(it) }
-        }
-
-        val selected = localModels.firstOrNull { it.path == localPath }
-        if (selected != null && !ModelStore.isGguf(selected)) {
-            Choice(LocalBackend.entries, backend, { if (it == LocalBackend.GPU) "GPU (mais rápido)" else "CPU (mais compatível)" }) {
-                backend = it
-                settings.localBackend = it
-            }
-        }
-        if (selected != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(enabled = !busy, onClick = {
-                    val brain = app.conversation.localBrain() ?: return@OutlinedButton
-                    busy = true
-                    status = "Carregando o modelo e pensando… (a primeira vez demora)"
-                    scope.launch {
-                        val start = System.currentTimeMillis()
-                        var first = -1L
-                        val text = StringBuilder()
-                        var error: String? = null
-                        brain.generate(LlmRequest("Responda em português, em uma frase curta.", listOf(ChatMessage(Role.USER, "Diga oi.")), 40)).collect {
-                            when (it) {
-                                is LlmChunk.Text -> {
-                                    if (first < 0) first = System.currentTimeMillis() - start
-                                    text.append(it.text)
-                                    status = "Respondendo: ${text.toString().trim().take(80)}"
-                                }
-                                is LlmChunk.Error -> error = it.message
-                                else -> Unit
+        if (active.isNotBlank()) {
+            OutlinedButton(enabled = !busy, onClick = {
+                val brain = app.conversation.localBrain() ?: return@OutlinedButton
+                busy = true
+                status = "Carregando o modelo e pensando… (a primeira vez demora)"
+                scope.launch {
+                    val start = System.currentTimeMillis()
+                    var first = -1L
+                    val text = StringBuilder()
+                    var error: String? = null
+                    brain.generate(LlmRequest("Responda em português, em uma frase curta.", listOf(ChatMessage(Role.USER, "Diga oi.")), 40)).collect {
+                        when (it) {
+                            is LlmChunk.Text -> {
+                                if (first < 0) first = System.currentTimeMillis() - start
+                                text.append(it.text)
+                                status = "Respondendo: ${text.toString().trim().take(80)}"
                             }
+                            is LlmChunk.Error -> error = it.message
+                            else -> Unit
                         }
-                        val total = System.currentTimeMillis() - start
-                        status = error?.let { "Falhou: $it" }
-                            ?: "Funcionou: \"${text.toString().trim().take(80)}\" · 1ª palavra em ${first / 1000.0} s · total ${total / 1000.0} s"
-                        // Falhou com um arquivo .litertlm: confere se ele é o original (o arquivo danificado era a causa na 0.28.1).
-                        if (error != null && !ModelStore.isGguf(selected) && selected.name == ModelDownload.RECOMMENDED_FILE) {
-                            status += "\nConferindo o arquivo (leva uns 30 s)…"
-                            val verdict = withContext(Dispatchers.IO) { runCatching { ModelIntegrity.verify(selected) }.getOrNull() }
-                            status = "Falhou: $error\n" + (verdict?.let { ModelIntegrity.describe(it, selected.name) } ?: "Não deu para conferir o arquivo.")
-                        }
-                        busy = false
                     }
-                }) { Text("Testar IA do celular") }
-                if (!ModelStore.isGguf(selected) && selected.name == ModelDownload.RECOMMENDED_FILE) {
-                    TextButton(enabled = !busy, onClick = {
-                        busy = true
-                        status = "Conferindo o arquivo… (leva uns 30 s)"
-                        scope.launch {
-                            val verdict = withContext(Dispatchers.IO) { runCatching { ModelIntegrity.verify(selected) }.getOrNull() }
-                            status = verdict?.let { ModelIntegrity.describe(it, selected.name) } ?: "Não deu para conferir o arquivo."
-                            busy = false
-                        }
-                    }) { Text("Conferir arquivo") }
+                    val total = System.currentTimeMillis() - start
+                    status = error?.let { "Falhou: $it (confira o arquivo no catálogo: Conferir integridade)" }
+                        ?: "Funcionou (${brain.displayName}): \"${text.toString().trim().take(80)}\" · 1ª palavra em ${first / 1000.0} s · total ${total / 1000.0} s"
+                    busy = false
                 }
-                TextButton(enabled = !busy, onClick = {
-                    app.conversation.releaseLocalModel()
-                    app.modelStore.delete(selected)
-                    status = "Apagado: ${selected.name}"
-                    choose("")
-                    download = app.modelDownload.current()
-                    refresh()
-                }) { Text("Apagar") }
-            }
+            }) { Text("Testar IA do celular") }
         }
+        if (status.isNotEmpty()) Hint(status)
     }
 
     @Composable
