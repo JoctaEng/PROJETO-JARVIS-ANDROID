@@ -10,6 +10,8 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.joctaeng.jarvis.JarvisApp
 import com.joctaeng.jarvis.R
+import com.joctaeng.jarvis.conversation.TaskAnswer
+import com.joctaeng.jarvis.ui.SummaryActivity
 import com.joctaeng.jarvis.mind.memory.ScheduledTask
 import com.joctaeng.jarvis.mind.memory.TaskSchedule
 import kotlinx.coroutines.CoroutineScope
@@ -88,16 +90,17 @@ object TaskScheduler {
         val answer = runCatching {
             withTimeoutOrNull(4 * 60_000L) {
                 if (parts != null) app.conversation.runBriefing(task.name, parts)
-                else app.conversation.runScheduled(task.name, task.instruction)
+                else app.conversation.runScheduled(task.name, task.instruction)?.let { TaskAnswer(it, it) }
             }
         }.onFailure { app.events.warn("tarefas", "\"${task.name}\" quebrou", it) }.getOrNull()
-        val ok = !answer.isNullOrBlank()
-        val text = answer?.takeIf { it.isNotBlank() } ?: "Não consegui fazer a tarefa \"${task.name}\" desta vez (sem resposta a tempo)."
-        app.tasks.recordRun(task.id, ok, text)
+        val ok = !answer?.spoken.isNullOrBlank()
+        val text = answer?.spoken?.takeIf { it.isNotBlank() } ?: "Não consegui fazer a tarefa \"${task.name}\" desta vez (sem resposta a tempo)."
+        val full = answer?.full?.takeIf { it.isNotBlank() } ?: text
+        app.tasks.recordRun(task.id, ok, full)
         app.events.info("tarefas", "\"${task.name}\": ${if (ok) "feita" else "falhou"}")
         val said = task.instruction + " " + task.name
         val wake = wakeWords.containsMatchIn(said)
-        notify(context, task.name, text, wake)
+        notify(context, task.name, full, wake)
         if (task.speak || speakWords.containsMatchIn(said)) {
             runCatching {
                 app.voice.speak(text)
@@ -125,14 +128,16 @@ object TaskScheduler {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "Tarefas programadas", NotificationManager.IMPORTANCE_DEFAULT))
             CHANNEL
         }
-        val open = context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
-            PendingIntent.getActivity(context, 0, it, PendingIntent.FLAG_IMMUTABLE)
-        }
+        // Tocar na notificação abre o resumo inteiro (antes só abria o app, e a conversa podia estar vazia).
+        val open = PendingIntent.getActivity(
+            context, title.hashCode(), SummaryActivity.intent(context, title, text),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
         val n = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_jarvis)
             .setContentTitle(title)
-            .setContentText(text.take(120))
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text.take(1_500)))
+            .setContentText(text.lineSequence().first().take(120))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text.take(4_000)))
             .setContentIntent(open)
             .setAutoCancel(true)
             .setPriority(if (wake) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)

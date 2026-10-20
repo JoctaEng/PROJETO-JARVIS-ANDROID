@@ -55,3 +55,4 @@
 - Avatar: refazer o bundle com `cd tools/avatar3d && npm install && npm run build` (ou esbuild apontando para node_modules). Testar página servindo `app/src/main/assets/avatar3d/` + Playwright (Chromium em /opt/pw-browsers, flags `--use-angle=swiftshader`).
 - Galeria de modelos VRM livres: repositório público `madjin/vrm-samples` (clonar com `GIT_LFS_SKIP_SMUDGE=1`).
 - Relatório do app mostra primeiro só os eventos da versão atual.
+- **v0.34.0 feita** (20/10, pedido 88, sobre a 0.33.0): resumo da manhã completo (voz fala o resumo; notificação e tela `SummaryActivity` levam resumo + lista), campo Cidade do clima em Ajustes. **Próximo:** IA primeiro e motor como atuador (medir prompt/contexto do Gemma E4B antes; relatório de 19/10: 33–77 s até a 1ª palavra, Gemini no teto mensal, Groq 8k TPM), e achar modelos mais potentes (Hugging Face bloqueado na sessão de nuvem; conferir nas páginas oficiais).

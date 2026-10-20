@@ -118,6 +118,11 @@
             android:name=".ui.TestsActivity"
             android:exported="false" />
 
+        <!-- Resumo completo de uma tarefa programada (abre ao tocar na notificação). -->
+        <activity
+            android:name=".ui.SummaryActivity"
+            android:exported="false" />
+
         <!-- Catálogo de modelos offline: baixar, pausar, conferir e trocar o cérebro do celular (com Salvar). -->
         <activity
             android:name=".ui.ModelCatalogActivity"

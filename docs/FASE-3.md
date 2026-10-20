@@ -67,3 +67,6 @@ ele o problema. Em uma resposta com ferramentas, o mesmo prompt é reenviado a c
 **Pendências conhecidas**: Gemini sem cota (pesquisa na internet continua falhando até haver outra fonte de busca);
 controle da tela caindo ("NÃO conectado"); clima sem cidade; memória por sentido ainda sem medição.
 
+
+## 0.34.0 (20/10, pedido 88)
+Sobre a 0.33.0. `TaskAnswer(spoken, full)`: a tarefa programada fala o resumo e a notificação (4.000 caracteres) e a nova `SummaryActivity` mostram resumo + lista completa; `humanize(long=true)` para o resumo da manhã (5 a 9 frases, avisa dado faltante como o clima); campo "Cidade do clima" em Ajustes (`weatherCity`). Sem teste no aparelho. Não feito: IA primeiro/motor atuador.

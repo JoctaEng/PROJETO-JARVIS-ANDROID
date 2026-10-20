@@ -1368,6 +1368,15 @@ class SettingsActivity : ComponentActivity() {
                     syncInfo = if (snap == null) "Não consegui sincronizar agora." else "Sincronizado agora." + if (snap.notes.isEmpty()) "" else " (${snap.notes.joinToString("; ")})"
                 }
             }) { Text("Sincronizar agora") }
+            var city by remember { mutableStateOf(settings.weatherCity) }
+            OutlinedTextField(
+                value = city,
+                onValueChange = { city = it; settings.weatherCity = it.trim() },
+                label = { Text("Cidade do clima") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Hint("Sem cidade (e sem permissão de localização) o clima não entra no resumo da manhã. Escreva só o nome, por exemplo: Belém.")
             var natural by remember { mutableStateOf(settings.naturalReplies) }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.weight(1f)) {

@@ -214,7 +214,7 @@ class ConversationController(private val app: JarvisApp) {
     }
 
     /** Resumo programado ("me acorde com o resumo do dia e dos e-mails"): o motor busca tudo pelas ferramentas, a IA só deixa natural. */
-    suspend fun runBriefing(name: String, parts: com.joctaeng.jarvis.mind.intent.Briefing.Parts): String? = withContext(Dispatchers.Main) {
+    suspend fun runBriefing(name: String, parts: com.joctaeng.jarvis.mind.intent.Briefing.Parts): TaskAnswer? = withContext(Dispatchers.Main) {
         if (!awaitFree()) return@withContext null
         _busy.value = true
         try {
@@ -223,9 +223,10 @@ class ConversationController(private val app: JarvisApp) {
             val ctx = engineCtx()
             val out = com.joctaeng.jarvis.mind.intent.Briefing.plan("day.briefing", ctx, parts)
             val reply = (out as? Run)?.let { executor.execute(it.plan, engineTools(), "Tarefa: $name") } ?: return@withContext null
-            val text = humanize(reply, "resumo do dia para o usuário ouvir ao acordar")
+            val text = humanize(reply, "resumo do dia para o usuário ouvir ao acordar", long = true)
             sayRich(text, reply.detail, Emotion.HAPPY, speak = false, brain = "motor do Euno")
-            text
+            // A voz fala o resumo; a notificação e a tela de leitura levam o resumo mais a lista completa.
+            TaskAnswer(text, if (reply.detail.isNullOrBlank()) text else "$text\n\n${reply.detail}")
         } finally {
             _busy.value = false
         }
@@ -596,7 +597,7 @@ class ConversationController(private val app: JarvisApp) {
      * houver e responder em até 8 s, só reescreve de um jeito natural e curto. Sem nuvem, sem internet ou se ela inventar
      * (texto vazio, longo demais, ferramenta no meio), fica o texto do motor. O cérebro do celular não entra: é lento.
      */
-    private suspend fun humanize(reply: Reply, request: String): String {
+    private suspend fun humanize(reply: Reply, request: String, long: Boolean = false): String {
         val facts = reply.facts ?: return reply.text
         if (!settings.naturalReplies || settings.privateMode) return reply.text
         val device = DeviceState.snapshot(app, privateMode = false)
@@ -605,7 +606,7 @@ class ConversationController(private val app: JarvisApp) {
         if (providers.isEmpty()) return reply.text
         val name = settings.displayName.ifBlank { "Euno" }
         val system = "Você é $name, assistente pessoal de ${settings.userName.ifBlank { "o usuário" }}, falando em voz alta, em português do Brasil. " +
-            "Reescreva a RESPOSTA PRONTA de um jeito natural, caloroso e curto (2 a 5 frases), como uma pessoa falaria. Regras: use SÓ os fatos " +
+            "Reescreva a RESPOSTA PRONTA de um jeito natural, caloroso e ${if (long) "completo (5 a 9 frases, cobrindo agenda, clima e e-mails; se algum dado faltou, como o clima, diga isso numa frase curta no fim)" else "curto (2 a 5 frases)"}, como uma pessoa falaria. Regras: use SÓ os fatos " +
             "dados (nunca invente compromisso, horário, remetente ou número); não leia códigos, números de processo, barras nem hífens; " +
             "agrupe o que se repete; diga horários como \"às 15h\"; com muitos itens, destaque os mais importantes e diga que a lista completa " +
             "está na tela; sem markdown, sem listas, sem emojis, sem etiqueta de emoção. Responda só com o texto final."
@@ -614,14 +615,14 @@ class ConversationController(private val app: JarvisApp) {
         val t0 = System.nanoTime()
         kotlinx.coroutines.withTimeoutOrNull(8_000L) {
             runCatching {
-                Orchestrator(providers).respond(LlmRequest(system, listOf(ChatMessage(Role.USER, user)), 350), device, RoutingHints(preference = BrainPreference.ONLINE_FIRST)).collect { e ->
+                Orchestrator(providers).respond(LlmRequest(system, listOf(ChatMessage(Role.USER, user)), if (long) 800 else 350), device, RoutingHints(preference = BrainPreference.ONLINE_FIRST)).collect { e ->
                     if (e is OrchestratorEvent.Chunk) (e.chunk as? LlmChunk.Text)?.let { out.append(it.text) }
                 }
             }
         }
         val text = TextCleanup.clean(StreamingEmotionParser().let { p -> p.feed(out.toString()) + p.finish() }).trim()
         val ms = (System.nanoTime() - t0) / 1_000_000
-        val bad = text.length < 15 || text.length > 1_400 || "<tool" in text || "tool_call" in text
+        val bad = text.length < 15 || text.length > (if (long) 2_400 else 1_400) || "<tool" in text || "tool_call" in text
         app.events.info("motor", "resposta natural pela IA: ${if (bad) "descartada" else "usada"} (${text.length} car., $ms ms)")
         return if (bad) reply.text else text
     }
@@ -1215,3 +1216,6 @@ private class CompactProvider(private val inner: LlmProvider, private val compac
         LlmRequest(compactPrompt, localHistory(request.messages, keep), request.maxOutputTokens ?: 512),
     )
 }
+
+/** Resposta de tarefa programada: [spoken] vai para a voz; [full] (com a lista completa) vai para a notificação e a tela de leitura. */
+data class TaskAnswer(val spoken: String, val full: String)
