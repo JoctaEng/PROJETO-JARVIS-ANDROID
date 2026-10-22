@@ -7,3 +7,4 @@
 - **Comece por `docs/CONTINUAR-AQUI.md`** (resumo do estado atual, decisões e próximo passo). Depois leia `docs/MEMORIA-DO-PROJETO.md`: visão, regras de trabalho com o usuário, fases, ajustes do plano e pendências. **Atualize-a a cada fase e a cada pedido novo do usuário.**
 - **Repositório público: nenhum dado pessoal do usuário** (nome completo, familiares, telefones, empregador) em código, testes, docs ou commits; use nomes e números fictícios.
 - **Contexto completo e próximos passos:** `docs/HANDOFF.md` (leia primeiro) e `AGENTS.md`. Acrescente uma linha ao Diário no fim de cada sessão.
+- **Ideia central (não perder de vista):** `docs/IDEIA-CENTRAL.md` — Euno é o corpo/atuador; as IAs são as cabeças; porta interna + conector MCP. Ler antes de mexer em arquitetura.

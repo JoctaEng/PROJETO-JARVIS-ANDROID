@@ -56,3 +56,4 @@
 - Galeria de modelos VRM livres: repositório público `madjin/vrm-samples` (clonar com `GIT_LFS_SKIP_SMUDGE=1`).
 - Relatório do app mostra primeiro só os eventos da versão atual.
 - **v0.34.0 feita** (20/10, pedido 88, sobre a 0.33.0): resumo da manhã completo (voz fala o resumo; notificação e tela `SummaryActivity` levam resumo + lista), campo Cidade do clima em Ajustes. **Próximo:** IA primeiro e motor como atuador (medir prompt/contexto do Gemma E4B antes; relatório de 19/10: 33–77 s até a 1ª palavra, Gemini no teto mensal, Groq 8k TPM), e achar modelos mais potentes (Hugging Face bloqueado na sessão de nuvem; conferir nas páginas oficiais).
+- **IDEIA CENTRAL (22/10, pedido 89): leia `docs/IDEIA-CENTRAL.md` e `docs/ADR/0016-euno-corpo-e-conector-mcp.md` antes de qualquer mudança de arquitetura.** Euno = corpo; IAs = cabeças; duas portas (orquestrador interno + servidor MCP). Só registrada; começa pelo passo 0 (estabilizar acessibilidade/Xiaomi) e pelo pedido 88.

@@ -83,3 +83,6 @@
 - **Fontes conferidas:** vozes e gêneros apenas parcialmente confirmados (ver a conversa de 15/10). O timbre "grave" de cada voz não foi verificado por áudio.
 - **Pendente antes de começar:** decisão do usuário sobre a voz base; teste de qualidade no celular; checagem de cota se a voz base for online.
 
+
+## Projeto — Euno corpo + conector MCP (pedido 89, registrado em 22/10/2026, não iniciado)
+Ver `docs/IDEIA-CENTRAL.md` §6 (passos 0 a 5) e ADR 0016. Antes: estabilizar acessibilidade/Xiaomi e inverter a ordem IA/motor (pedido 88).
