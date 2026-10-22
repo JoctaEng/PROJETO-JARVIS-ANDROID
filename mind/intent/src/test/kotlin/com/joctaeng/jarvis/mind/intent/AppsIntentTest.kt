@@ -38,6 +38,13 @@ class AppsIntentTest {
         assertTrue(r.text.contains("Sua fatura vence dia 20."), r.text)
     }
 
+    @Test fun gmailDoesNotAskWhatWasAlreadySaid() {
+        val out = e().handle("me dá as informações do meu gmail de hoje", Fixtures.ctx())
+        assertTrue(out !is Ask, "$out")
+        val sub = e().handle("leia o resumo diário do e-mail hoje", Fixtures.ctx())
+        assertTrue(sub is Run && sub.plan.toString().isNotBlank(), "$sub")
+    }
+
     @Test fun gmailNotConnectedIsHonest() {
         val out = e().handle("tenho e-mail novo", Fixtures.ctx(gmail = false))
         assertTrue(out is Say && out.text.contains("Conectar Gmail"), "$out")

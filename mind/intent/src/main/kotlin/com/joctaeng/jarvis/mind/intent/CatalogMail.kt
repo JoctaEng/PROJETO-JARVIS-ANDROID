@@ -28,7 +28,17 @@ internal object CatalogMail {
     }
 
     /** Pergunta aberta (pedido de 14/10): "quer os de hoje, um resumo dos não lidos ou os mais antigos?". */
-    private fun choose(m: M): Outcome = Kit.ask(m, "Quer os e-mails de hoje, um resumo dos não lidos, ou procuro mais antigos (por exemplo, da semana passada)?") { ex, c ->
+    private fun choose(m: M): Outcome {
+        // Teste de 19 e 22/10: "resumo do meu Gmail de hoje" voltava a perguntar "de hoje?". Se o pedido já diz, não pergunta.
+        val said0 = PtText.fold(m.ex.raw)
+        if (Regex("""\b(hoje|do dia)\b""").containsMatchIn(said0)) return period(m, DateSlot(m.today))
+        if (Regex("""\b(resumo|nao lidos?|novos?)\b""").containsMatchIn(said0)) {
+            return search(m, "is:unread in:inbox", "Seus e-mails não lidos mais recentes", "Você não tem e-mails novos.")
+        }
+        return ask(m)
+    }
+
+    private fun ask(m: M): Outcome = Kit.ask(m, "Quer os e-mails de hoje, um resumo dos não lidos, ou procuro mais antigos (por exemplo, da semana passada)?") { ex, c ->
         val said = PtText.fold(ex.raw)
         val mm = M(ex, emptyMap(), c, m.intentId)
         when {
@@ -159,6 +169,21 @@ internal object CatalogMail {
             ),
             priority = 3,
         ) { m -> gate(m) ?: readFirst(m, "in:inbox", "Sua caixa de entrada está vazia.") },
+        IntentDef(
+            "gmail.read_subject", "Gmail", "abre e lê o e-mail de um assunto conhecido (por exemplo, o resumo diário)",
+            slots = listOf(SlotSpec("assunto", "assunto do e-mail", true)),
+            templates = listOf(
+                "(le|leia|ler|me le|me leia|abre|abra|ve|veja|mostra|mostre|me diga|me fala|fala|quero ver) (o |a )?(meu |minha )?{assunto} (do|no|de) (meu )?(email|e mail|gmail) <D?>",
+            ),
+            priority = 6,
+        ) { m ->
+            gate(m) ?: run {
+                val q = m["assunto"]?.trim() ?: return@run NoMatch
+                val folded = PtText.fold(q)
+                if (folded.split(' ').size > 5 || folded in setOf("ultimo", "primeiro", "mais recente", "novo", "novos", "resumo", "meu", "email", "emails")) return@run NoMatch
+                readFirst(m, "subject:(\"$q\") newer_than:3d", "Não achei e-mail recente com o assunto \"$q\".")
+            }
+        },
         IntentDef(
             "gmail.read_from", "Gmail", "lê o último e-mail de alguém",
             slots = listOf(SlotSpec("quem", "remetente", true)),

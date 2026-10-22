@@ -37,7 +37,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * Sincronização contínua (0.31, pedido de 14/10: "sincronizado sempre, todos os dias, até eu tirar"): a cada ~30 minutos,
+ * Sincronização contínua (0.31, pedido de 14/10: "sincronizado sempre, todos os dias, até eu tirar"): a cada ~1 hora,
  * e ao abrir a conversa se estiver velho, o Euno lê sozinho a agenda (a do Google chega pelo próprio Android), o clima e
  * os e-mails novos, e guarda um retrato. A IA recebe esse retrato no prompt e responde "como está meu dia" sem abrir nada.
  * Desliga em Ajustes (continuousSync). Nada sai do celular além das consultas de clima e Gmail.
@@ -185,7 +185,7 @@ class EunoSync(private val context: Context) {
             }
             val pi = pending(context, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
             am.setInexactRepeating(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 60_000L, AlarmManager.INTERVAL_HALF_HOUR, pi,
+                AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 60_000L, AlarmManager.INTERVAL_HOUR, pi,
             )
         }
     }
@@ -196,10 +196,15 @@ class SyncReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val app = JarvisApp.from(context)
         if (!app.settings.continuousSync) return
+        // Bateria (pedido de 22/10): com pouca carga ou economia de energia, pula esta leitura.
+        val bm = context.getSystemService(android.os.BatteryManager::class.java)
+        val pm = context.getSystemService(android.os.PowerManager::class.java)
+        val level = bm?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: 100
+        if ((level <= 15 && bm?.isCharging != true) || pm?.isPowerSaveMode == true) return
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                withTimeoutOrNull(25_000) { app.sync.run("a cada 30 min") }
+                withTimeoutOrNull(8_000) { app.sync.run("a cada hora") }
             } catch (e: Exception) {
                 app.events.warn("sync", "sincronização falhou: ${e.message}")
             } finally {

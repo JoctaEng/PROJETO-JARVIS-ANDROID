@@ -704,7 +704,7 @@ class ConversationController(private val app: JarvisApp) {
             mode = settings.personaMode,
             memories = memories,
             context = PromptContext(
-                nowDescription = SimpleDateFormat("EEEE, d 'de' MMMM 'de' yyyy, HH:mm", Locale.forLanguageTag("pt-BR")).format(Date()),
+                nowDescription = SimpleDateFormat("EEEE, d 'de' MMMM 'de' yyyy, HH:mm", Locale.forLanguageTag("pt-BR")).format(Date()) + dayPeriod(),
                 offline = !device.online,
                 privateMode = settings.privateMode,
                 speakingAloud = speak,
@@ -721,7 +721,8 @@ class ConversationController(private val app: JarvisApp) {
                 (activeSkill?.let { "\n" + app.skills.describe(it) }.orEmpty()) +
                 (if (compact || lean) "" else "\nSKILLS (pedidos curtos que viram passos combinados; o usuário ensina novas com \"quando eu disser X, faça Y\" ou skill_ensinar): " + app.skills.catalogLine()) +
                 (if (compact || activeSkill != null || freshSession) "" else app.recipes.find(lastUser)?.let { "\n" + app.recipes.describe(it) }.orEmpty()),
-            userBio = if (compact) settings.userBio.take(LOCAL_BIO_CHARS) else settings.userBio,
+            userBio = if (compact) settings.userBio.take(LOCAL_BIO_CHARS) else if (lean) settings.userBio.take(600) else settings.userBio,
+            maxMemories = if (compact) 5 else if (lean) 10 else null,
             summaries = if (compact) summaries.take(LOCAL_SUMMARY_CHARS) else summaries,
             liveSection = if (compact) live.take(LOCAL_LIVE_CHARS) else live,
             selfSection = SelfKnowledge.section(
@@ -744,7 +745,7 @@ class ConversationController(private val app: JarvisApp) {
 
         // Cérebro do celular: o maior prompt que cabe na janela de 4.096 tokens dele (calculado sob demanda).
         val localPrompt by lazy {
-            listOf(8, 4).asSequence().map { buildPrompt(true, maxTools = it) }.firstOrNull { it.length <= LOCAL_PROMPT_MAX_CHARS }
+            listOf(6, 3).asSequence().map { buildPrompt(true, maxTools = it) }.firstOrNull { it.length <= LOCAL_PROMPT_MAX_CHARS }
                 ?: buildPrompt(true, noTools = true)
         }
         val prompt = if (onlyLocal) localPrompt else buildPrompt(false)
@@ -765,7 +766,7 @@ class ConversationController(private val app: JarvisApp) {
             else ChatMessage(it.role, com.joctaeng.jarvis.mind.models.AttachmentTypes.promptText(it.text, it.attachments, docChars), attachments = it.attachments)
         }
         val history = if (onlyLocal) localHistory(allHistory) else allHistory.takeLast(HISTORY)
-        val maxTokens = if (onlyLocal) 512 else null
+        val maxTokens = if (onlyLocal) 400 else null
 
         OverlayBus.anim.value = AnimState.THINKING
         OverlayBus.emotion.value = Emotion.THINKING
@@ -798,7 +799,9 @@ class ConversationController(private val app: JarvisApp) {
                             edit(replyId) { it.copy(brain = names[event.providerId]) }
                         }
                         is OrchestratorEvent.FellBack -> {
-                            val hint = com.joctaeng.jarvis.system.resources.RetryHint.millis(event.reason)
+                            // Teto mensal de gasto do Gemini (relatório de 19 e 22/10: 70 falhas seguidas): descansa 6 h em vez de tentar a cada resposta.
+                            val hint = if (event.reason.contains("spending cap", true) || event.reason.contains("monthly", true)) 6 * 3_600_000L
+                                else com.joctaeng.jarvis.system.resources.RetryHint.millis(event.reason)
                             cooldown.note(event.fromProviderId, event.reason, System.currentTimeMillis(), hint)
                             // Gemini principal sem cota: visão e pesquisa passam para a reserva automática até a cota voltar.
                             if (event.reason.contains("(429)")) app.brains.noteGeminiLimited(event.fromProviderId, System.currentTimeMillis() + (hint ?: 15 * 60_000L))
@@ -1179,17 +1182,17 @@ class ConversationController(private val app: JarvisApp) {
     private companion object {
         const val HISTORY = 20
         /** Cérebro local: menos histórico e dossiê menor, para o prefill caber num celular comum. */
-        const val LOCAL_HISTORY = 8
+        const val LOCAL_HISTORY = 4
         /** Teto do prompt do cérebro do celular (≈3,5 caracteres por token; sobra espaço para o histórico e a resposta). */
-        const val LOCAL_PROMPT_MAX_CHARS = 9_000
-        const val LEAN_HISTORY = 10
-        const val LOCAL_BIO_CHARS = 800
+        const val LOCAL_PROMPT_MAX_CHARS = 5_500
+        const val LEAN_HISTORY = 6
+        const val LOCAL_BIO_CHARS = 400
         const val LOCAL_SUMMARY_CHARS = 800
         const val STEP_NOTE = "Agindo"
         /** Retrato sincronizado no prompt: nuvem e celular (este cabe na janela de 4.096 tokens). */
         const val LIVE_CHARS = 1_600
         /** Nuvem com prompt enxuto: ferramentas do pedido (no máximo 12) e resumo curto da conversa anterior. */
-        const val LEAN_TOOLS = 12
+        const val LEAN_TOOLS = 6
         const val SUMMARY_CHARS = 600
         const val LOCAL_LIVE_CHARS = 500
         /** Descanso do cérebro que voltou vazio. */
@@ -1199,9 +1202,19 @@ class ConversationController(private val app: JarvisApp) {
     }
 }
 
+/** Período do dia dito por extenso: modelos pequenos erravam o cumprimento ("boa noite" às 17h50, "bom dia" à tarde). */
+private fun dayPeriod(): String {
+    val h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    return when {
+        h < 12 -> " (manhã: cumprimente com \"Bom dia\")"
+        h < 18 -> " (tarde: cumprimente com \"Boa tarde\")"
+        else -> " (noite: cumprimente com \"Boa noite\")"
+    }
+}
+
 /** Histórico do cérebro do celular: por tamanho (≈3.000 caracteres), não só por número de mensagens. */
 private fun localHistory(messages: List<ChatMessage>, keep: Int = 8): List<ChatMessage> =
-    HistoryTrim.keepRecent(messages, { it.text.length }, 3_000, keep)
+    HistoryTrim.keepRecent(messages, { it.text.length }, 1_800, keep)
 
 /** Cérebro com pouca cota por minuto: prompt com menos ferramentas e histórico mais curto (pedido 78). */
 private class LeanProvider(private val inner: LlmProvider, private val leanPrompt: String, private val keep: Int) : LlmProvider by inner {
@@ -1213,7 +1226,7 @@ private class LeanProvider(private val inner: LlmProvider, private val leanPromp
 /** Troca prompt e histórico do pedido por versões enxutas quando o cérebro é o do celular (leitura rápida). */
 private class CompactProvider(private val inner: LlmProvider, private val compactPrompt: String, private val keep: Int) : LlmProvider by inner {
     override fun generate(request: LlmRequest): Flow<LlmChunk> = inner.generate(
-        LlmRequest(compactPrompt, localHistory(request.messages, keep), request.maxOutputTokens ?: 512),
+        LlmRequest(compactPrompt, localHistory(request.messages, keep), request.maxOutputTokens ?: 400),
     )
 }
 

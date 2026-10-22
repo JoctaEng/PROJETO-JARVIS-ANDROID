@@ -70,3 +70,6 @@ controle da tela caindo ("NÃO conectado"); clima sem cidade; memória por senti
 
 ## 0.34.0 (20/10, pedido 88)
 Sobre a 0.33.0. `TaskAnswer(spoken, full)`: a tarefa programada fala o resumo e a notificação (4.000 caracteres) e a nova `SummaryActivity` mostram resumo + lista completa; `humanize(long=true)` para o resumo da manhã (5 a 9 frases, avisa dado faltante como o clima); campo "Cidade do clima" em Ajustes (`weatherCity`). Sem teste no aparelho. Não feito: IA primeiro/motor atuador.
+
+## 0.35.0 (22/10, pedido 90)
+Sobre a 0.34.0. Prompt do Groq/Mistral (`LeanProvider`): 6 ferramentas, 10 memórias, bio 600, histórico 6. Prompt do celular: teto 5.500 caracteres (6, depois 3, depois nenhuma ferramenta), histórico 4 mensagens/1.800 caracteres, resposta até 400 tokens, lista de ferramentas só no `<tools>`. Gemini com "spending cap"/"monthly" descansa 6 h. `CatalogMail`: `choose` não pergunta se o pedido tem "hoje/resumo/novos"; intent `gmail.read_subject`. `dayPeriod()` põe manhã/tarde/noite e o cumprimento certo no prompt. `EunoSync`: 1 h, pula com ≤15% ou economia de energia, 8 s no receptor.

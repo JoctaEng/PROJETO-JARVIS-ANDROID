@@ -65,6 +65,8 @@ object PersonaEngine {
         summaries: String = "",
         /** 0.31: o que o Euno sincronizou sozinho (agenda de hoje/amanhã, clima, e-mails novos), com a hora da leitura. */
         liveSection: String = "",
+        /** Quantas memórias entram (padrão: 10 no compacto, 40 no completo). */
+        maxMemories: Int? = null,
     ): String = buildString {
         val name = characterName.ifBlank { character.defaultName }
         appendLine("Você é ${character.gender.article}$name, o personagem digital pessoal de $userName: um companheiro que vive no celular dele.")
@@ -102,7 +104,7 @@ object PersonaEngine {
         if (toolsSection.isNotBlank()) appendLine(toolsSection)
         if (context.offline) appendLine("Você está offline, usando o cérebro do próprio celular.")
         if (context.privateMode) appendLine("Modo Privado ativo: nada desta conversa será memorizado.")
-        val shown = if (compact) memories.takeLast(10) else memories.takeLast(40)
+        val shown = memories.takeLast(maxMemories ?: if (compact) 10 else 40)
         if (shown.isNotEmpty()) {
             appendLine("O que você sabe sobre $userName (memórias que ele autorizou):")
             shown.forEach { appendLine("- $it") }

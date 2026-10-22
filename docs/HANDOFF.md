@@ -205,3 +205,5 @@ Regras: encerrar **só o que o Euno abriu agora** (a ferramenta `abrir_app` deve
 - 20/10: 0.34.0 sobre a 0.33.0 (ramo do catálogo incorporado por fast-forward). Resumo completo na notificação + tela de leitura, cidade do clima. Pendente: IA primeiro/motor atuador, medir Gemma, modelos mais potentes.
 
 - 22/10: registrada a IDEIA CENTRAL (Euno = corpo/atuador; IAs = cabeças; porta interna + servidor MCP). Só docs: `docs/IDEIA-CENTRAL.md`, ADR 0016. Nada implementado.
+
+- 22/10: 0.35.0 (velocidade, bateria, e-mail, saudação). Relatório: Gemma 28–116 s, Groq 429, Gemini no teto. Pendente: pedidos 88/89, reaproveitar a conversa do LiteRT, clima (cidade em Ajustes).

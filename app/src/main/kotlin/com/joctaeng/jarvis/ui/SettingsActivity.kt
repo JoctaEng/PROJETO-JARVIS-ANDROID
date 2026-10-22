@@ -1347,7 +1347,7 @@ class SettingsActivity : ComponentActivity() {
 
             // 0.31: sincronização contínua e respostas naturais
             Text("Sincronização contínua", style = MaterialTheme.typography.titleSmall)
-            Hint("A cada ~30 minutos o Euno lê sozinho a agenda (inclui a do Google), o clima e os e-mails novos, para responder \"como está meu dia\" sem abrir nada. Fica ligada até você desligar.")
+            Hint("A cada ~1 hora o Euno lê sozinho a agenda (inclui a do Google), o clima e os e-mails novos, para responder \"como está meu dia\" sem abrir nada. Fica ligada até você desligar.")
             var syncOn by remember { mutableStateOf(settings.continuousSync) }
             var syncInfo by remember { mutableStateOf(app.sync.ageMinutes().let { if (it == Long.MAX_VALUE) "Ainda não sincronizou." else "Última leitura: há $it min." }) }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {

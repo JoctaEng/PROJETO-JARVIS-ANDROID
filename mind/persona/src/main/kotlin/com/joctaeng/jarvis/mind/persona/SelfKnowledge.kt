@@ -45,6 +45,9 @@ object SelfKnowledge {
         appendLine("- Autonomia: ${info.autonomyLabel}. Memórias guardadas: ${info.memoryCount}${if (info.privateMode) " (Modo Privado: nada novo é memorizado)" else ""}.")
         if (info.toolNames.isEmpty()) {
             appendLine("- Ferramentas: não vieram nesta resposta. Se pedirem uma ação, não diga que é incapaz: peça para repetir o pedido de forma direta (ex.: \"abra o Gmail\").")
+        } else if (compact && info.toolNames.size > 12) {
+            // Prompt do celular: a lista completa (70+ nomes) custava ~1.000 caracteres; as ferramentas do pedido vêm na seção <tools>.
+            appendLine("- Ferramentas: você tem ${info.toolNames.size}; use as da seção <tools> (se faltar uma, diga qual precisa).")
         } else {
             appendLine("- Ferramentas que você realmente tem: ${info.toolNames.joinToString(", ")}.")
             if ("abrir_app" in info.toolNames) {
