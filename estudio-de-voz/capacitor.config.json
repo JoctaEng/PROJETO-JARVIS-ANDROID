@@ -1,0 +1,6 @@
+{
+  "appId": "br.com.codigomaker.estudiovoz",
+  "appName": "Estúdio de Voz",
+  "webDir": "www",
+  "android": { "allowMixedContent": false }
+}

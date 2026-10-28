@@ -3,6 +3,7 @@ name: Android
 on:
   push:
     branches: [ main, "claude/**" ]
+    paths-ignore: [ "estudio-de-voz/**", ".github/workflows/estudio-de-voz.yml" ]
   pull_request:
   workflow_dispatch:
 

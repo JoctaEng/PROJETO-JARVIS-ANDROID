@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Estúdio de Voz</string>
+    <string name="title_activity_main">Estúdio de Voz</string>
+    <string name="package_name">br.com.codigomaker.estudiovoz</string>
+    <string name="custom_url_scheme">br.com.codigomaker.estudiovoz</string>
+</resources>
